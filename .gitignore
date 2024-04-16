@@ -16,3 +16,4 @@ Cargo.lock
 ##Project files
 alice*
 .fastembed_cache/
+.testdb/
