@@ -3,10 +3,12 @@ mod database;
 mod utils;
 
 use clap::Parser;
+use database::Database;
 use std::path::PathBuf;
 use utils::embeddings::process_embeddings;
 
 #[derive(Parser)]
+#[command(arg_required_else_help(true))]
 struct Args {
     #[arg(short, long, value_name = "PATH")]
     init_database: Option<PathBuf>,
@@ -49,8 +51,7 @@ fn main() -> anyhow::Result<()> {
     if let Some(path) = args.init_database.as_deref() {
         match args.init_database_name {
             Some(name) => {
-                // Initialize the database
-                println!("Database initialized.\nPath: {}/{}", path.display(), name);
+                let database = Database::new(path.to_path_buf(), name)?;
             }
             None => {
                 return Err(ArgsError::MissingInitDatabaseNameFlag.into());
@@ -60,17 +61,17 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let database = match args.database {
-        //TODO Look for config file
-        Some(path) => {
-            // Use the specified database directory
-            database::Database::new(path)
-        }
-        None => {
-            let current_dir = std::env::current_dir()?;
-            database::Database::new(current_dir)
-        }
-    };
+    // let database = match args.database {
+    //     //TODO Look for config file
+    //     Some(path) => {
+    //         // Use the specified database directory
+    //         Database::load(path)
+    //     }
+    //     None => {
+    //         let current_dir = std::env::current_dir()?;
+    //         Database::load(current_dir)
+    //     }
+    // };
 
     Ok(())
 }
