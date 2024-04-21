@@ -1,6 +1,7 @@
 mod command;
 mod database;
 mod utils;
+mod wal;
 
 use clap::Parser;
 use database::Database;
