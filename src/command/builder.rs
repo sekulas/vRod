@@ -14,7 +14,18 @@ enum CommandBuilderError {
     UnrecognizedCommand(String),
 }
 
-impl CommandBuilder {
+trait Builder {
+    fn new(db: Rc<RefCell<Database>>) -> Self;
+
+    fn build(
+        &mut self,
+        collection: Option<String>,
+        command: String,
+        arg: Option<String>,
+    ) -> Result<Box<dyn Command>, CommandBuilderError>;
+}
+
+impl Builder for CommandBuilder {
     fn new(db: Rc<RefCell<Database>>) -> Self {
         Self { db }
     }

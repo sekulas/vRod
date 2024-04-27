@@ -1,4 +1,4 @@
-use bincode::{deserialize_from, serialize_into, serialized_size};
+use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
@@ -15,7 +15,7 @@ struct WALEntry {
 
 #[derive(Serialize, Deserialize)]
 struct WALHeader {
-    most_recent_offset: u64,
+    last_entry_offset: u64,
     lsn: u64,
 }
 
@@ -31,11 +31,12 @@ impl WAL {
             .write(true)
             .create(true)
             .open(path)?;
+
         let header = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
                 let header = WALHeader {
-                    most_recent_offset: HEADER_SIZE,
+                    last_entry_offset: HEADER_SIZE,
                     lsn: 0,
                 }; // TODO Recreate Existing FIle??
                 file.seek(SeekFrom::Start(0))?;
@@ -59,7 +60,7 @@ impl WAL {
         };
 
         self.file.seek(SeekFrom::End(0))?;
-        self.header.most_recent_offset = self.file.stream_position()?;
+        self.header.last_entry_offset = self.file.stream_position()?;
 
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
 
@@ -69,14 +70,14 @@ impl WAL {
 
     fn commit(&mut self, lsn: u64) -> Result<(), bincode::Error> {
         self.file
-            .seek(SeekFrom::Start(self.header.most_recent_offset))?;
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
         let mut entry: WALEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         entry.committed = true;
 
         if entry.lsn == lsn {
             self.file
-                .seek(SeekFrom::Start(self.header.most_recent_offset))?;
+                .seek(SeekFrom::Start(self.header.last_entry_offset))?;
             let mut writer = BufWriter::new(&self.file); // Declare BufWriter
             serialize_into(&mut writer, &entry)?; // Use BufWriter for serialization
             writer.flush()?; // Flush changes to the file
@@ -84,7 +85,7 @@ impl WAL {
         Ok(())
     }
 
-    fn get_most_recent(&mut self) -> Result<Option<WALEntry>, bincode::Error> {
+    fn get_last_entry(&mut self) -> Result<Option<WALEntry>, bincode::Error> {
         let file_size = self.file.metadata()?.len();
 
         if file_size <= HEADER_SIZE {
@@ -92,7 +93,7 @@ impl WAL {
         }
 
         self.file
-            .seek(SeekFrom::Start(self.header.most_recent_offset))?;
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
         let entry: WALEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         Ok(Some(entry))
@@ -108,18 +109,45 @@ impl WAL {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, path::PathBuf};
+
+    struct TestFileGuard {
+        path: PathBuf,
+    }
+
+    impl TestFileGuard {
+        fn new(path: &str) -> std::io::Result<Self> {
+            let path = PathBuf::from(path);
+
+            if path.exists() {
+                fs::remove_file(&path)?;
+            }
+            fs::File::create(&path)?;
+
+            Ok(Self { path })
+        }
+    }
+
+    impl Drop for TestFileGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
 
     #[test]
-    fn test_append_and_commit() -> Result<(), bincode::Error> {
-        let mut wal = WAL::load("test.wal")?;
+    fn append_and_commit_should_commit_last_entry() -> Result<(), bincode::Error> {
+        let wal_file = "test1.wal";
+
+        let _guard = TestFileGuard::new(wal_file)?;
+        let mut wal = WAL::load(wal_file)?;
 
         let data = "Hello, World!".to_string();
         wal.append(data.clone())?;
 
-        let entry = wal.get_most_recent().unwrap().unwrap();
+        let entry = wal.get_last_entry().unwrap().unwrap();
 
         assert_eq!(entry.data, data);
 
@@ -127,25 +155,63 @@ mod tests {
 
         wal.commit(entry.lsn)?;
 
-        let entry = wal.get_most_recent().unwrap().unwrap();
+        let entry = wal.get_last_entry().unwrap().unwrap();
 
         assert!(entry.committed);
-
-        fs::remove_file("test.wal").unwrap();
 
         Ok(())
     }
 
     #[test]
-    fn test_update_header() -> Result<(), bincode::Error> {
-        let mut wal = WAL::load("test.wal")?;
+    fn update_header_changes_lsn_value() -> Result<(), bincode::Error> {
+        let wal_file: &str = "test2.wal";
 
-        wal.header.lsn = 10;
-        wal.update_header()?;
+        let _guard = TestFileGuard::new(wal_file)?;
 
-        let wal = WAL::load("test.wal")?;
+        {
+            let mut wal = WAL::load(wal_file)?;
+            wal.header.lsn = 10;
+            wal.update_header()?;
+        }
+
+        let wal = WAL::load(wal_file)?;
 
         assert_eq!(wal.header.lsn, 10);
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_last_entry_returns_none_if_no_entries() -> Result<(), bincode::Error> {
+        let wal_file: &str = "test3.wal";
+
+        let _guard = TestFileGuard::new(wal_file)?;
+        let mut wal = WAL::load(wal_file)?;
+
+        let entry = wal.get_last_entry().unwrap();
+
+        assert!(entry.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_last_entry_returns_last_entry_after_header_update() -> Result<(), bincode::Error> {
+        let wal_file: &str = "test4.wal";
+
+        let _guard = TestFileGuard::new(wal_file)?;
+        let mut wal = WAL::load(wal_file)?;
+
+        let data1 = "Hello, World!".to_string();
+        wal.append(data1.clone())?;
+
+        let data2 = "2World, Hello!2".to_string();
+        wal.append(data2.clone())?;
+
+        let entry = wal.get_last_entry().unwrap().unwrap();
+
+        assert_eq!(entry.data, data2);
+        assert_eq!(entry.lsn, 2);
 
         Ok(())
     }
