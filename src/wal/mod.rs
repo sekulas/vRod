@@ -19,6 +19,15 @@ struct WALHeader {
     lsn: u64,
 }
 
+impl WALHeader {
+    fn new() -> Self {
+        Self {
+            last_entry_offset: HEADER_SIZE,
+            lsn: 0,
+        }
+    }
+}
+
 pub struct WAL {
     file: File,
     header: WALHeader,
@@ -35,10 +44,7 @@ impl WAL {
         let header = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
-                let header = WALHeader {
-                    last_entry_offset: HEADER_SIZE,
-                    lsn: 0,
-                }; // TODO Recreate Existing FIle??
+                let header = WALHeader::new();
                 file.seek(SeekFrom::Start(0))?;
                 let mut writer = BufWriter::new(&file);
                 serialize_into(&mut writer, &header)?;
@@ -64,7 +70,7 @@ impl WAL {
 
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
 
-        self.update_header()?;
+        self.flush_header()?;
         Ok(())
     }
 
@@ -99,7 +105,7 @@ impl WAL {
         Ok(Some(entry))
     }
 
-    fn update_header(&mut self) -> Result<(), bincode::Error> {
+    fn flush_header(&mut self) -> Result<(), bincode::Error> {
         self.file.seek(SeekFrom::Start(0))?;
         let mut writer = BufWriter::new(&self.file);
         serialize_into(&mut writer, &self.header)?;
@@ -163,16 +169,14 @@ mod tests {
     }
 
     #[test]
-    fn update_header_changes_lsn_value() -> Result<(), bincode::Error> {
+    fn flush_header_changes_lsn_value() -> Result<(), bincode::Error> {
         let wal_file: &str = "test2.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
 
-        {
-            let mut wal = WAL::load(wal_file)?;
-            wal.header.lsn = 10;
-            wal.update_header()?;
-        }
+        let mut wal = WAL::load(wal_file)?;
+        wal.header.lsn = 10;
+        wal.flush_header()?;
 
         let wal = WAL::load(wal_file)?;
 
