@@ -1,10 +1,8 @@
-pub mod types;
-
-use self::types::HEADER_SIZE;
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::mem;
 
 pub struct WAL {
     file: File,
@@ -37,7 +35,7 @@ impl WALHeader {
 impl Default for WALHeader {
     fn default() -> Self {
         Self {
-            last_entry_offset: HEADER_SIZE,
+            last_entry_offset: mem::size_of::<WALHeader>() as u64,
             lsn: 0,
         }
     }
@@ -51,7 +49,7 @@ impl WAL {
             .create(true)
             .open(path)?;
 
-        let header = match deserialize_from(&mut BufReader::new(&file)) {
+        let header: WALHeader = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
                 let wal = WAL::recreate_wal(path)?;
@@ -100,7 +98,7 @@ impl WAL {
     fn get_last_entry(&mut self) -> Result<Option<WALEntry>, bincode::Error> {
         let file_size = self.file.metadata()?.len();
 
-        if file_size <= HEADER_SIZE {
+        if file_size <= mem::size_of::<WALHeader>() as u64 {
             return Ok(None);
         }
 
@@ -113,9 +111,7 @@ impl WAL {
 
     fn flush_header(&mut self) -> Result<(), bincode::Error> {
         self.file.seek(SeekFrom::Start(0))?;
-        let mut writer = BufWriter::new(&self.file);
-        serialize_into(&mut writer, &self.header)?;
-        writer.flush()?;
+        serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
         Ok(())
     }
 
