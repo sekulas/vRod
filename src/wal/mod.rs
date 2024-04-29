@@ -1,9 +1,15 @@
+pub mod types;
+
+use self::types::HEADER_SIZE;
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
 
-const HEADER_SIZE: u64 = 16;
+pub struct WAL {
+    file: File,
+    header: WALHeader,
+}
 
 #[derive(Serialize, Deserialize)]
 struct WALEntry {
@@ -20,17 +26,21 @@ struct WALHeader {
 }
 
 impl WALHeader {
-    fn new() -> Self {
+    fn new(last_entry_offset: u64, lsn: u64) -> Self {
+        Self {
+            last_entry_offset,
+            lsn,
+        }
+    }
+}
+
+impl Default for WALHeader {
+    fn default() -> Self {
         Self {
             last_entry_offset: HEADER_SIZE,
             lsn: 0,
         }
     }
-}
-
-pub struct WAL {
-    file: File,
-    header: WALHeader,
 }
 
 impl WAL {
@@ -44,12 +54,8 @@ impl WAL {
         let header = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
-                let header = WALHeader::new();
-                file.seek(SeekFrom::Start(0))?;
-                let mut writer = BufWriter::new(&file);
-                serialize_into(&mut writer, &header)?;
-                writer.flush()?;
-                header
+                let wal = WAL::recreate_wal(path)?;
+                return Ok(wal);
             }
         };
 
@@ -84,9 +90,9 @@ impl WAL {
         if entry.lsn == lsn {
             self.file
                 .seek(SeekFrom::Start(self.header.last_entry_offset))?;
-            let mut writer = BufWriter::new(&self.file); // Declare BufWriter
-            serialize_into(&mut writer, &entry)?; // Use BufWriter for serialization
-            writer.flush()?; // Flush changes to the file
+            let mut writer = BufWriter::new(&self.file);
+            serialize_into(&mut writer, &entry)?;
+            writer.flush()?;
         }
         Ok(())
     }
@@ -109,9 +115,26 @@ impl WAL {
         self.file.seek(SeekFrom::Start(0))?;
         let mut writer = BufWriter::new(&self.file);
         serialize_into(&mut writer, &self.header)?;
-        writer.write_all(&[0])?;
         writer.flush()?;
         Ok(())
+    }
+
+    fn recreate_wal(path: &str) -> Result<Self, bincode::Error> {
+        fs::remove_file(path)?;
+        fs::File::create(path)?;
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)?;
+
+        let header = WALHeader::default();
+        let mut wal = Self { file, header };
+        wal.flush_header()?;
+        //TODO when other files will exist, we have to check header lsn and create wal with highest lsn
+
+        Ok(wal)
     }
 }
 
@@ -144,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn append_and_commit_should_commit_last_entry() -> Result<(), bincode::Error> {
+    fn append_and_commit_should_commit_last_entry() -> Result<(), Box<dyn std::error::Error>> {
         let wal_file = "test1.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
@@ -153,7 +176,7 @@ mod tests {
         let data = "Hello, World!".to_string();
         wal.append(data.clone())?;
 
-        let entry = wal.get_last_entry().unwrap().unwrap();
+        let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data);
 
@@ -192,7 +215,7 @@ mod tests {
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
 
-        let entry = wal.get_last_entry().unwrap();
+        let entry = wal.get_last_entry()?;
 
         assert!(entry.is_none());
 
@@ -200,7 +223,8 @@ mod tests {
     }
 
     #[test]
-    fn get_last_entry_returns_last_entry_after_header_update() -> Result<(), bincode::Error> {
+    fn get_last_entry_returns_last_entry_after_header_update(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let wal_file: &str = "test4.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
@@ -212,7 +236,7 @@ mod tests {
         let data2 = "2World, Hello!2".to_string();
         wal.append(data2.clone())?;
 
-        let entry = wal.get_last_entry().unwrap().unwrap();
+        let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data2);
         assert_eq!(entry.lsn, 2);
