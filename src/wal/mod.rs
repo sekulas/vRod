@@ -1,7 +1,10 @@
+mod error;
+
 use bincode::{deserialize_from, serialize_into};
+pub use error::Result;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
 
 pub struct WAL {
@@ -42,7 +45,7 @@ impl Default for WALHeader {
 }
 
 impl WAL {
-    fn load(path: &str) -> Result<Self, bincode::Error> {
+    fn load(path: &str) -> Result<Self> {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -60,7 +63,7 @@ impl WAL {
         Ok(Self { file, header })
     }
 
-    fn append(&mut self, data: String) -> Result<(), bincode::Error> {
+    fn append(&mut self, data: String) -> Result<()> {
         self.header.lsn += 1;
         let entry = WALEntry {
             lsn: self.header.lsn,
@@ -78,24 +81,21 @@ impl WAL {
         Ok(())
     }
 
-    fn commit(&mut self, lsn: u64) -> Result<(), bincode::Error> {
+    fn commit(&mut self, lsn: u64) -> Result<()> {
         self.file
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
         let mut entry: WALEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         entry.committed = true;
 
-        if entry.lsn == lsn {
-            self.file
-                .seek(SeekFrom::Start(self.header.last_entry_offset))?;
-            let mut writer = BufWriter::new(&self.file);
-            serialize_into(&mut writer, &entry)?;
-            writer.flush()?;
-        }
+        self.file
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
+        serialize_into(&mut BufWriter::new(&self.file), &entry)?;
+
         Ok(())
     }
 
-    fn get_last_entry(&mut self) -> Result<Option<WALEntry>, bincode::Error> {
+    fn get_last_entry(&mut self) -> Result<Option<WALEntry>> {
         let file_size = self.file.metadata()?.len();
 
         if file_size <= mem::size_of::<WALHeader>() as u64 {
@@ -109,13 +109,13 @@ impl WAL {
         Ok(Some(entry))
     }
 
-    fn flush_header(&mut self) -> Result<(), bincode::Error> {
+    fn flush_header(&mut self) -> Result<()> {
         self.file.seek(SeekFrom::Start(0))?;
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
         Ok(())
     }
 
-    fn recreate_wal(path: &str) -> Result<Self, bincode::Error> {
+    fn recreate_wal(path: &str) -> Result<Self> {
         fs::remove_file(path)?;
         fs::File::create(path)?;
 
@@ -138,6 +138,7 @@ impl WAL {
 mod tests {
     use super::*;
     use std::{fs, path::PathBuf};
+    type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     struct TestFileGuard {
         path: PathBuf,
@@ -163,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn append_and_commit_should_commit_last_entry() -> Result<(), Box<dyn std::error::Error>> {
+    fn append_and_commit_should_commit_last_entry() -> Result<()> {
         let wal_file = "test1.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
@@ -188,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn flush_header_changes_lsn_value() -> Result<(), bincode::Error> {
+    fn flush_header_changes_lsn_value() -> Result<()> {
         let wal_file: &str = "test2.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
@@ -205,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn get_last_entry_returns_none_if_no_entries() -> Result<(), bincode::Error> {
+    fn get_last_entry_returns_none_if_no_entries() -> Result<()> {
         let wal_file: &str = "test3.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;
@@ -219,8 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn get_last_entry_returns_last_entry_after_header_update(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn get_last_entry_returns_last_entry_after_header_update() -> Result<()> {
         let wal_file: &str = "test4.wal";
 
         let _guard = TestFileGuard::new(wal_file)?;

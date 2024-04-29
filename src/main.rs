@@ -1,5 +1,6 @@
 mod command;
 mod database;
+mod error;
 mod utils;
 mod wal;
 
@@ -7,6 +8,8 @@ use clap::Parser;
 use database::Database;
 use std::path::PathBuf;
 use utils::embeddings::process_embeddings;
+
+use crate::error::{Error, Result};
 
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
@@ -34,13 +37,14 @@ struct Args {
     generate_embeddings: Option<usize>,
 }
 
-#[derive(thiserror::Error, Debug)]
-enum ArgsError {
-    #[error("Missing '--init_database_name' flag with argument for '--init_database' flag.")]
-    MissingInitDatabaseNameFlag,
+fn main() {
+    match run() {
+        Ok(_) => {}
+        Err(e) => eprintln!("ERROR: {:?}: {}", e, e),
+    }
 }
 
-fn main() -> anyhow::Result<()> {
+fn run() -> Result<()> {
     let args = Args::parse();
 
     //TODO To remove / for developmnet only
@@ -55,7 +59,7 @@ fn main() -> anyhow::Result<()> {
                 let database = Database::new(path.to_path_buf(), name)?;
             }
             None => {
-                return Err(ArgsError::MissingInitDatabaseNameFlag.into());
+                return Err(Error::MissingInitDatabaseNameFlag);
             }
         }
 
