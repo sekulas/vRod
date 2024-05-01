@@ -1,20 +1,25 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::types::*;
+use crate::command::{Error, Result};
 use crate::database::Database;
-use thiserror::Error;
+
 struct CommandBuilder {
     db: Rc<RefCell<Database>>,
 }
 
-#[derive(Debug, Error)]
-#[allow(dead_code)]
-enum CommandBuilderError {
-    #[error("Unrecognized command: {0}")]
-    UnrecognizedCommand(String),
+trait Builder {
+    fn new(db: Rc<RefCell<Database>>) -> Self;
+
+    fn build(
+        &mut self,
+        collection: Option<String>,
+        command: String,
+        arg: Option<String>,
+    ) -> Result<Box<dyn Command>>;
 }
 
-impl CommandBuilder {
+impl Builder for CommandBuilder {
     fn new(db: Rc<RefCell<Database>>) -> Self {
         Self { db }
     }
@@ -24,7 +29,7 @@ impl CommandBuilder {
         collection: Option<String>,
         command: String,
         arg: Option<String>,
-    ) -> Result<Box<dyn Command>, CommandBuilderError> {
+    ) -> Result<Box<dyn Command>> {
         let db = Rc::clone(&self.db);
         match command.to_uppercase().as_str() {
             "CREATE" => Ok(Box::new(CreateCollectionCommand {
@@ -74,9 +79,7 @@ impl CommandBuilder {
                 db,
                 collection_name: collection,
             })),
-            _ => Err(CommandBuilderError::UnrecognizedCommand(
-                command.to_string(),
-            )),
+            _ => Err(Error::UnrecognizedCommand(command.to_string())),
         }
     }
 }

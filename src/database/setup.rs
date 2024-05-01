@@ -1,6 +1,8 @@
 use std::{fs, io, path::Path};
 
-pub fn create_database_directory(path: &Path, name: &str) -> Result<(), io::Error> {
+use super::types::{CONFIG_FILE, WAL_FILE};
+
+pub fn create_database(path: &Path, name: &str) -> Result<(), io::Error> {
     let database_dir = path.join(name);
 
     if database_dir.exists() {
@@ -16,10 +18,10 @@ pub fn create_database_directory(path: &Path, name: &str) -> Result<(), io::Erro
 
     fs::create_dir(&database_dir)?;
 
-    let config_file = database_dir.join("vr_config");
+    let config_file = database_dir.join(CONFIG_FILE);
     fs::File::create(config_file)?;
 
-    let wal_file = database_dir.join("vr_wal");
+    let wal_file = database_dir.join(WAL_FILE);
     fs::File::create(wal_file)?;
 
     Ok(())

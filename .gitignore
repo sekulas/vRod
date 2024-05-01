@@ -17,3 +17,4 @@ Cargo.lock
 alice*
 .fastembed_cache/
 .testdb/
+.vscode/

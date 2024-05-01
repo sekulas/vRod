@@ -1,9 +1,10 @@
+use crate::utils::{Error, Result};
 use fastembed::TextEmbedding;
 use std::fs;
 use std::io::Write;
 use std::mem::size_of_val;
 
-pub fn process_embeddings(number_of_embeddings: usize) -> anyhow::Result<()> {
+pub fn process_embeddings(number_of_embeddings: usize) -> Result<()> {
     let model = TextEmbedding::try_new(Default::default())?;
     let content = fs::read_to_string("alice_in_wonderland.txt")
         .expect("Something went wrong reading the file");
@@ -26,8 +27,10 @@ fn extract_words(content: &str, number_of_embeddings: usize) -> Vec<&str> {
         .collect::<Vec<&str>>()
 }
 
-fn generate_embeddings(model: &TextEmbedding, words: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
-    model.embed(words.to_vec(), None)
+fn generate_embeddings(model: &TextEmbedding, words: &[&str]) -> Result<Vec<Vec<f32>>> {
+    model
+        .embed(words.to_vec(), None)
+        .map_err(Error::EmbeddingError)
 }
 
 fn print_embeddings_info(words: &[&str], embeddings: &[Vec<f32>]) {

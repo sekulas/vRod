@@ -2,6 +2,9 @@ use crate::database::Database;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+//TODO Make fields private and make "new" function to create the command
+//TODO Provide rollback functionality for the commands
+
 pub trait Command {
     fn execute(&self);
 }
