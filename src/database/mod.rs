@@ -1,24 +1,31 @@
-mod setup;
+mod error;
+mod file_ops;
 mod types;
-use crate::wal::WAL;
 
-use std::io;
+use crate::wal::WAL;
+pub use error::{Error, Result};
 use std::path::PathBuf;
+use types::WAL_FILE;
 
 pub struct Database {
     path: PathBuf,
     wal: WAL,
-    //TODO collections: todo!("Implement collections"),
-    //TODO wal: Wal
+    collections: Vec<String>,
 }
 
 impl Database {
-    pub fn new(path: PathBuf, name: String) -> Result<(), io::Error> {
-        self::setup::create_database(&path, &name)?;
+    pub fn create(path: PathBuf, name: String) -> Result<()> {
+        file_ops::create_database(&path, &name)?;
         Ok(())
     }
 
-    pub fn load(path: PathBuf) -> Database {
-        todo!("Load the database from the path")
+    pub fn load(path: PathBuf) -> Result<Self> {
+        let wal = WAL::load(&path.join(WAL_FILE))?;
+        let collections = file_ops::get_collection_list(&path)?;
+        Ok(Database {
+            path,
+            wal,
+            collections,
+        })
     }
 }
