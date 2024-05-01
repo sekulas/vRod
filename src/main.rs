@@ -56,27 +56,24 @@ fn run() -> Result<()> {
     if let Some(path) = args.init_database.as_deref() {
         match args.init_database_name {
             Some(name) => {
-                let database = Database::new(path.to_path_buf(), name)?;
+                return Ok(Database::create(path.to_path_buf(), name)?);
             }
             None => {
                 return Err(Error::MissingInitDatabaseNameFlag);
             }
         }
-
-        return Ok(());
     }
 
-    // let database = match args.database {
-    //     //TODO Look for config file
-    //     Some(path) => {
-    //         // Use the specified database directory
-    //         Database::load(path)
-    //     }
-    //     None => {
-    //         let current_dir = std::env::current_dir()?;
-    //         Database::load(current_dir)
-    //     }
-    // };
+    let database = match args.database {
+        Some(path) => {
+            // Use the specified database directory
+            Database::load(path)
+        }
+        None => {
+            let current_dir = std::env::current_dir()?;
+            Database::load(current_dir)
+        }
+    };
 
     Ok(())
 }

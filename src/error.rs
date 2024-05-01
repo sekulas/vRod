@@ -1,4 +1,4 @@
-use crate::utils;
+use crate::{database, utils};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -8,8 +8,11 @@ pub enum Error {
     MissingInitDatabaseNameFlag,
 
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("Utils error: {0}")]
-    UtilsError(#[from] utils::error::Error),
+    Utils(#[from] utils::Error),
+
+    #[error("Database error: {0}")]
+    Database(#[from] database::Error),
 }

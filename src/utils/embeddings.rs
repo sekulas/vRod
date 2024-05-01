@@ -28,9 +28,7 @@ fn extract_words(content: &str, number_of_embeddings: usize) -> Vec<&str> {
 }
 
 fn generate_embeddings(model: &TextEmbedding, words: &[&str]) -> Result<Vec<Vec<f32>>> {
-    model
-        .embed(words.to_vec(), None)
-        .map_err(Error::EmbeddingError)
+    model.embed(words.to_vec(), None).map_err(Error::Embedding)
 }
 
 fn print_embeddings_info(words: &[&str], embeddings: &[Vec<f32>]) {

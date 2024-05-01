@@ -1,11 +1,12 @@
 mod error;
 
 use bincode::{deserialize_from, serialize_into};
-pub use error::Result;
+pub use error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
+use std::path::Path;
 
 pub struct WAL {
     file: File,
@@ -45,7 +46,7 @@ impl Default for WALHeader {
 }
 
 impl WAL {
-    fn load(path: &str) -> Result<Self> {
+    pub fn load(path: &Path) -> Result<Self> {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -59,6 +60,8 @@ impl WAL {
                 return Ok(wal);
             }
         };
+
+        //TODO consistency check
 
         Ok(Self { file, header })
     }
@@ -115,7 +118,7 @@ impl WAL {
         Ok(())
     }
 
-    fn recreate_wal(path: &str) -> Result<Self> {
+    fn recreate_wal(path: &Path) -> Result<Self> {
         fs::remove_file(path)?;
         fs::File::create(path)?;
 
@@ -145,8 +148,8 @@ mod tests {
     }
 
     impl TestFileGuard {
-        fn new(path: &str) -> std::io::Result<Self> {
-            let path = PathBuf::from(path);
+        fn new(path: &Path) -> std::io::Result<Self> {
+            let path: PathBuf = PathBuf::from(path);
 
             if path.exists() {
                 fs::remove_file(&path)?;
@@ -165,7 +168,7 @@ mod tests {
 
     #[test]
     fn append_and_commit_should_commit_last_entry() -> Result<()> {
-        let wal_file = "test1.wal";
+        let wal_file: &Path = Path::new("test1.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
@@ -190,7 +193,7 @@ mod tests {
 
     #[test]
     fn flush_header_changes_lsn_value() -> Result<()> {
-        let wal_file: &str = "test2.wal";
+        let wal_file: &Path = Path::new("test2.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
 
@@ -207,7 +210,7 @@ mod tests {
 
     #[test]
     fn get_last_entry_returns_none_if_no_entries() -> Result<()> {
-        let wal_file: &str = "test3.wal";
+        let wal_file: &Path = Path::new("test3.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
@@ -221,7 +224,7 @@ mod tests {
 
     #[test]
     fn get_last_entry_returns_last_entry_after_header_update() -> Result<()> {
-        let wal_file: &str = "test4.wal";
+        let wal_file: &Path = Path::new("test4.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
