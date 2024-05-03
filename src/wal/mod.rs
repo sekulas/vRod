@@ -1,5 +1,4 @@
 mod error;
-
 use bincode::{deserialize_from, serialize_into};
 pub use error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -7,6 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
 use std::path::Path;
+pub mod utils;
 
 pub struct WAL {
     file: File,
@@ -82,7 +82,7 @@ impl WAL {
         Ok(Self { file, header })
     }
 
-    fn append(&mut self, data: String) -> Result<()> {
+    pub fn append(&mut self, data: String) -> Result<()> {
         self.header.lsn += 1;
         let entry = WALEntry {
             lsn: self.header.lsn,
@@ -100,7 +100,7 @@ impl WAL {
         Ok(())
     }
 
-    fn commit(&mut self, lsn: u64) -> Result<()> {
+    pub fn commit(&mut self) -> Result<()> {
         self.file
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
@@ -189,7 +189,7 @@ mod tests {
 
         assert!(!entry.committed);
 
-        wal.commit(entry.lsn)?;
+        wal.commit()?;
 
         let entry = wal.get_last_entry().unwrap().unwrap();
 

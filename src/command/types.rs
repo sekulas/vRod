@@ -2,6 +2,7 @@ use crate::command::Result;
 use crate::database::types::*;
 use crate::database::Database;
 use crate::wal::WAL;
+use core::fmt;
 use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
@@ -30,6 +31,9 @@ impl Command for CreateCollectionCommand {
     fn execute(&self) -> Result<()> {
         let db = self.db.borrow();
         let collection_path = db.get_database_path().join(&self.collection_name);
+        let wal = db.get_wal();
+        let mut wal = wal.borrow_mut();
+        wal.append(self.to_string())?;
 
         fs::create_dir(&collection_path)?;
         WAL::create(&collection_path.join(WAL_FILE))?;
@@ -37,7 +41,15 @@ impl Command for CreateCollectionCommand {
         fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
         fs::File::create(collection_path.join(INDEX_FILE))?;
 
+        wal.commit()?;
+        println!("Success! Collection {} created.", &self.collection_name);
         Ok(())
+    }
+}
+
+impl fmt::Display for CreateCollectionCommand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CREATE {}", self.collection_name)
     }
 }
 
