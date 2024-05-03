@@ -1,2 +1,4 @@
 pub const WAL_FILE: &str = "vr_wal";
-pub const CONFIG_FILE: &str = "vr_config";
+pub const INDEX_FILE: &str = "vr_index";
+pub const ID_OFFSET_STORAGE_FILE: &str = "vr_id_offset_storage";
+pub const STORAGE_FILE: &str = "vr_storage";

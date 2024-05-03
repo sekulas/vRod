@@ -1,15 +1,17 @@
+use std::path::PathBuf;
+
 use crate::wal;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Directory with the name '{0}' already exists in '{1}'")]
-    DirectoryExists(String, String),
+    #[error("Directory '{0}' already exists.")]
+    DirectoryExists(PathBuf),
 
-    #[error("WAL error: {0}")]
+    #[error(transparent)]
     Wal(#[from] wal::Error),
 
-    #[error("IO error: {0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 }
