@@ -5,11 +5,13 @@ mod utils;
 mod wal;
 
 use clap::Parser;
+use command::builder::CommandBuilder;
 use database::Database;
-use std::path::PathBuf;
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 use utils::embeddings::process_embeddings;
 
 use crate::error::{Error, Result};
+use command::builder::Builder;
 
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
@@ -53,27 +55,28 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    if let Some(path) = args.init_database.as_deref() {
+    if let Some(path) = args.init_database {
         match args.init_database_name {
             Some(name) => {
                 return Ok(Database::create(path.to_path_buf(), name)?);
             }
             None => {
-                return Err(Error::MissingInitDatabaseNameFlag);
+                return Err(Error::MissingInitDatabaseName);
             }
         }
     }
 
-    let database = match args.database {
-        Some(path) => {
-            // Use the specified database directory
-            Database::load(path)
-        }
-        None => {
-            let current_dir = std::env::current_dir()?;
-            Database::load(current_dir)
-        }
+    let command_text = args.execute.ok_or(Error::MissingCommand)?;
+    let database_path = match args.database {
+        Some(path) => path,
+        None => std::env::current_dir()?,
     };
+
+    let database = Rc::new(RefCell::new(Database::load(database_path)?));
+    let command_builder: CommandBuilder = CommandBuilder::new(database);
+    let command = command_builder.build(args.collection, command_text, args.command_arg)?;
+
+    command.execute()?;
 
     Ok(())
 }

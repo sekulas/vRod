@@ -1,23 +1,43 @@
+use crate::command::Result;
+use crate::database::types::*;
 use crate::database::Database;
+use crate::wal::WAL;
 use std::cell::RefCell;
+use std::fs;
 use std::rc::Rc;
 
-//TODO Make fields private and make "new" function to create the command
 //TODO Provide rollback functionality for the commands
 
 pub trait Command {
-    fn execute(&self);
+    fn execute(&self) -> Result<()>;
 }
 
 pub struct CreateCollectionCommand {
-    pub db: Rc<RefCell<Database>>,
-    pub collection_name: Option<String>,
+    db: Rc<RefCell<Database>>,
+    collection_name: String,
+}
+
+impl CreateCollectionCommand {
+    pub fn new(db: Rc<RefCell<Database>>, collection_name: String) -> Self {
+        CreateCollectionCommand {
+            db,
+            collection_name,
+        }
+    }
 }
 
 impl Command for CreateCollectionCommand {
-    fn execute(&self) {
-        let mut db = self.db.borrow_mut();
-        // Implementation for CreateCollectionCommand
+    fn execute(&self) -> Result<()> {
+        let db = self.db.borrow();
+        let collection_path = db.get_database_path().join(&self.collection_name);
+
+        fs::create_dir(&collection_path)?;
+        WAL::create(&collection_path.join(WAL_FILE))?;
+        fs::File::create(collection_path.join(STORAGE_FILE))?;
+        fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
+        fs::File::create(collection_path.join(INDEX_FILE))?;
+
+        Ok(())
     }
 }
 
@@ -27,9 +47,10 @@ pub struct DropCollectionCommand {
 }
 
 impl Command for DropCollectionCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for DropCollectionCommand
+        Ok(())
     }
 }
 
@@ -38,9 +59,10 @@ pub struct ListCollectionsCommand {
 }
 
 impl Command for ListCollectionsCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for ListCollectionsCommand
+        Ok(())
     }
 }
 
@@ -50,9 +72,10 @@ pub struct TruncateWalCommand {
 }
 
 impl Command for TruncateWalCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for TruncateWalCommand
+        Ok(())
     }
 }
 
@@ -63,9 +86,10 @@ pub struct InsertCommand {
 }
 
 impl Command for InsertCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for InsertCommand
+        Ok(())
     }
 }
 
@@ -76,9 +100,10 @@ pub struct BulkInsertCommand {
 }
 
 impl Command for BulkInsertCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for BulkInsertCommand
+        Ok(())
     }
 }
 
@@ -89,9 +114,10 @@ pub struct UpdateCommand {
 }
 
 impl Command for UpdateCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for UpdateCommand
+        Ok(())
     }
 }
 
@@ -102,9 +128,10 @@ pub struct DeleteCommand {
 }
 
 impl Command for DeleteCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for DeleteCommand
+        Ok(())
     }
 }
 
@@ -115,9 +142,10 @@ pub struct SearchCommand {
 }
 
 impl Command for SearchCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for SearchCommand
+        Ok(())
     }
 }
 
@@ -128,9 +156,10 @@ pub struct SearchSimilarCommand {
 }
 
 impl Command for SearchSimilarCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for SearchSimilarCommand
+        Ok(())
     }
 }
 
@@ -140,9 +169,10 @@ pub struct ReindexCommand {
 }
 
 impl Command for ReindexCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         let mut db = self.db.borrow_mut();
         // Implementation for ReindexCommand
+        Ok(())
     }
 }
 
@@ -151,7 +181,8 @@ pub struct UnrecognizedCommand {
 }
 
 impl Command for UnrecognizedCommand {
-    fn execute(&self) {
+    fn execute(&self) -> Result<()> {
         // Implementation for UnrecognizedCommand
+        Ok(())
     }
 }

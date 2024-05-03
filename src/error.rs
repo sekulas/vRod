@@ -1,18 +1,24 @@
-use crate::{database, utils};
+use crate::{command, database, utils};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Missing '--init_database_name' flag with argument for '--init_database' flag.")]
-    MissingInitDatabaseNameFlag,
+    MissingInitDatabaseName,
 
-    #[error("IO error: {0}")]
+    #[error("Missing argument '-e' - 'command to execute'.")]
+    MissingCommand,
+
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    #[error("Utils error: {0}")]
+    #[error(transparent)]
     Utils(#[from] utils::Error),
 
-    #[error("Database error: {0}")]
+    #[error(transparent)]
     Database(#[from] database::Error),
+
+    #[error(transparent)]
+    Command(#[from] command::Error),
 }
