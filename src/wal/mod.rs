@@ -46,6 +46,22 @@ impl Default for WALHeader {
 }
 
 impl WAL {
+    pub fn create(path: &Path) -> Result<Self> {
+        fs::File::create(path)?;
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)?;
+
+        let header = WALHeader::default();
+        let mut wal = Self { file, header };
+        wal.flush_header()?;
+
+        Ok(wal)
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         let mut file = OpenOptions::new()
             .read(true)
@@ -120,17 +136,8 @@ impl WAL {
 
     fn recreate_wal(path: &Path) -> Result<Self> {
         fs::remove_file(path)?;
-        fs::File::create(path)?;
 
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
-
-        let header = WALHeader::default();
-        let mut wal = Self { file, header };
-        wal.flush_header()?;
+        let wal = WAL::create(path)?;
         //TODO when other files will exist, we have to check header lsn and create wal with highest lsn
 
         Ok(wal)
