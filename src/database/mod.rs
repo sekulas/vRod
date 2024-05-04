@@ -11,8 +11,6 @@ use std::{
 };
 use types::WAL_FILE;
 
-use crate::wal::utils::wal_to_txt;
-
 pub struct Database {
     path: PathBuf,
     wal: Rc<RefCell<WAL>>,
@@ -74,18 +72,5 @@ impl Database {
         }
 
         Ok(dir_names)
-    }
-}
-
-//TODO To remove / for developmnet only
-impl Drop for Database {
-    fn drop(&mut self) {
-        wal_to_txt(self.path.clone().join(WAL_FILE)).unwrap_or_else(|error| {
-            eprintln!(
-                "Error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
-                self.path.join(WAL_FILE),
-                error
-            );
-        });
     }
 }

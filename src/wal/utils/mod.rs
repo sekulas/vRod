@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{BufReader, Seek, SeekFrom, Write},
     mem,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use bincode::deserialize_from;
@@ -11,15 +11,16 @@ use super::{WALEntry, WALHeader};
 use serde_json;
 use std::io::Error;
 
-pub fn wal_to_txt(mut path: PathBuf) -> Result<(), Error> {
-    let mut wal = File::open(&path)?;
+pub fn wal_to_txt(path: &Path) -> Result<(), Error> {
+    let mut wal = File::open(path)?;
 
-    path.set_extension("json");
-    if path.exists() {
-        fs::remove_file(&path)?;
+    let mut wal_json = path.to_owned();
+    wal_json.set_extension("json");
+    if wal_json.exists() {
+        fs::remove_file(&wal_json)?;
     }
 
-    let mut wal_txt = File::create(path.with_extension("json"))?;
+    let mut wal_txt = File::create(wal_json)?;
 
     let _ = match deserialize_from::<_, WALHeader>(&mut BufReader::new(&wal)) {
         Ok(header) => {

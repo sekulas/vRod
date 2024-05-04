@@ -1,38 +1,26 @@
-use std::{cell::RefCell, rc::Rc};
+use std::path::PathBuf;
 
 use super::types::*;
 use crate::command::{Error, Result};
-use crate::database::Database;
 
-pub struct CommandBuilder {
-    db: Rc<RefCell<Database>>,
-}
+pub struct CommandBuilder;
 
 pub trait Builder {
-    fn new(db: Rc<RefCell<Database>>) -> Self;
-
     fn build(
-        &self,
-        collection: Option<String>,
+        target_path: PathBuf,
         command: String,
         arg: Option<String>,
     ) -> Result<Box<dyn Command>>;
 }
 
 impl Builder for CommandBuilder {
-    fn new(db: Rc<RefCell<Database>>) -> Self {
-        Self { db }
-    }
-
     fn build(
-        &self,
-        collection: Option<String>,
+        target_path: PathBuf,
         command: String,
         arg: Option<String>,
     ) -> Result<Box<dyn Command>> {
-        let db = Rc::clone(&self.db);
         match command.to_uppercase().as_str() {
-            "CREATE" => build_create_collection_command(db, arg),
+            "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => todo!(),
             /* Ok(Box::new(DropCollectionCommand {
                 db,
@@ -92,20 +80,11 @@ impl Builder for CommandBuilder {
 }
 
 fn build_create_collection_command(
-    db: Rc<RefCell<Database>>,
+    database_path: PathBuf,
     collection_name: Option<String>,
 ) -> Result<Box<dyn Command>> {
     match collection_name {
-        Some(name) => {
-            let collection_list = db.borrow().get_collection_list();
-            let exists = collection_list.iter().find(|&x| x == &name);
-
-            match exists {
-                Some(_) => Err(Error::CollectionExists(name)),
-                None => Ok(Box::new(CreateCollectionCommand::new(db, name))),
-            }
-        }
-
+        Some(name) => Ok(Box::new(CreateCollectionCommand::new(database_path, name))),
         None => Err(Error::MissingCollectionName),
     }
 }

@@ -1,4 +1,4 @@
-use crate::{command, database, utils};
+use crate::{command, database, utils, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error(transparent)]
     Utils(#[from] utils::Error),
+
+    #[error(transparent)]
+    Wal(#[from] wal::Error),
 
     #[error(transparent)]
     Database(#[from] database::Error),

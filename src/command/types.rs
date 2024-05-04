@@ -1,27 +1,31 @@
-use crate::command::Result;
+use crate::command::{Error, Result};
 use crate::database::types::*;
 use crate::database::Database;
 use crate::wal::WAL;
 use core::fmt;
 use std::cell::RefCell;
 use std::fs;
+use std::path::PathBuf;
+
 use std::rc::Rc;
 
 //TODO Provide rollback functionality for the commands
 
 pub trait Command {
     fn execute(&self) -> Result<()>;
+    fn rollback(&self) -> Result<()>;
+    fn to_string(&self) -> String;
 }
 
 pub struct CreateCollectionCommand {
-    db: Rc<RefCell<Database>>,
+    path: PathBuf,
     collection_name: String,
 }
 
 impl CreateCollectionCommand {
-    pub fn new(db: Rc<RefCell<Database>>, collection_name: String) -> Self {
+    pub fn new(path: PathBuf, collection_name: String) -> Self {
         CreateCollectionCommand {
-            db,
+            path,
             collection_name,
         }
     }
@@ -29,11 +33,11 @@ impl CreateCollectionCommand {
 
 impl Command for CreateCollectionCommand {
     fn execute(&self) -> Result<()> {
-        let db = self.db.borrow();
-        let collection_path = db.get_database_path().join(&self.collection_name);
-        let wal = db.get_wal();
-        let mut wal = wal.borrow_mut();
-        wal.append(self.to_string())?;
+        let collection_path = self.path.join(&self.collection_name);
+
+        if collection_path.exists() {
+            return Err(Error::CollectionExists(self.collection_name.to_owned()));
+        }
 
         fs::create_dir(&collection_path)?;
         WAL::create(&collection_path.join(WAL_FILE))?;
@@ -41,15 +45,21 @@ impl Command for CreateCollectionCommand {
         fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
         fs::File::create(collection_path.join(INDEX_FILE))?;
 
-        wal.commit()?;
-        println!("Success! Collection {} created.", &self.collection_name);
         Ok(())
     }
-}
 
-impl fmt::Display for CreateCollectionCommand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CREATE {}", self.collection_name)
+    fn rollback(&self) -> Result<()> {
+        let collection_path = self.path.join(&self.collection_name);
+
+        if collection_path.exists() {
+            fs::remove_dir(collection_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn to_string(&self) -> String {
+        format!("CREATE {}", self.collection_name)
     }
 }
 
@@ -60,9 +70,15 @@ pub struct DropCollectionCommand {
 
 impl Command for DropCollectionCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for DropCollectionCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -72,9 +88,15 @@ pub struct ListCollectionsCommand {
 
 impl Command for ListCollectionsCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for ListCollectionsCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -85,9 +107,15 @@ pub struct TruncateWalCommand {
 
 impl Command for TruncateWalCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for TruncateWalCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -99,9 +127,15 @@ pub struct InsertCommand {
 
 impl Command for InsertCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for InsertCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -113,9 +147,15 @@ pub struct BulkInsertCommand {
 
 impl Command for BulkInsertCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for BulkInsertCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -127,9 +167,15 @@ pub struct UpdateCommand {
 
 impl Command for UpdateCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for UpdateCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -141,9 +187,15 @@ pub struct DeleteCommand {
 
 impl Command for DeleteCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for DeleteCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -155,9 +207,15 @@ pub struct SearchCommand {
 
 impl Command for SearchCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for SearchCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -169,9 +227,15 @@ pub struct SearchSimilarCommand {
 
 impl Command for SearchSimilarCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for SearchSimilarCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -182,9 +246,15 @@ pub struct ReindexCommand {
 
 impl Command for ReindexCommand {
     fn execute(&self) -> Result<()> {
-        let mut db = self.db.borrow_mut();
-        // Implementation for ReindexCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
 
@@ -194,7 +264,14 @@ pub struct UnrecognizedCommand {
 
 impl Command for UnrecognizedCommand {
     fn execute(&self) -> Result<()> {
-        // Implementation for UnrecognizedCommand
-        Ok(())
+        todo!("Not implemented.")
+    }
+
+    fn rollback(&self) -> Result<()> {
+        todo!("Not implemented.")
+    }
+
+    fn to_string(&self) -> String {
+        todo!("Not implemented.")
     }
 }
