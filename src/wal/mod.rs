@@ -5,20 +5,32 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
 pub mod utils;
 
 pub struct WAL {
+    path: PathBuf,
     file: File,
     header: WALHeader,
 }
 
 #[derive(Serialize, Deserialize)]
-struct WALEntry {
+pub struct WALEntry {
     lsn: u64,
     committed: bool,
     data_len: u16,
     data: String,
+}
+
+impl WALEntry {
+    pub fn is_committed(&self) -> bool {
+        self.committed
+    }
+
+    pub fn get_data(&self) -> String {
+        self.data.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -56,14 +68,18 @@ impl WAL {
             .open(path)?;
 
         let header = WALHeader::default();
-        let mut wal = Self { file, header };
+        let mut wal = Self {
+            path: path.to_owned(),
+            file,
+            header,
+        };
         wal.flush_header()?;
 
         Ok(wal)
     }
 
-    pub fn load(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new()
+    pub fn load(path: &Path) -> Result<WAL> {
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -77,9 +93,16 @@ impl WAL {
             }
         };
 
-        //TODO consistency check
+        let wal = Self {
+            path: path.to_owned(),
+            file,
+            header,
+        };
 
-        Ok(Self { file, header })
+        match wal.consistency_fix() {
+            Ok(wal) => Ok(wal),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn append(&mut self, data: String) -> Result<()> {
@@ -163,7 +186,10 @@ impl WAL {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     struct TestFileGuard {
@@ -172,14 +198,14 @@ mod tests {
 
     impl TestFileGuard {
         fn new(path: &Path) -> std::io::Result<Self> {
-            let path: PathBuf = PathBuf::from(path);
-
             if path.exists() {
-                fs::remove_file(&path)?;
+                fs::remove_file(path)?;
             }
-            fs::File::create(&path)?;
+            fs::File::create(path)?;
 
-            Ok(Self { path })
+            Ok(Self {
+                path: path.to_owned(),
+            })
         }
     }
 

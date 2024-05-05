@@ -7,7 +7,7 @@ mod wal;
 use clap::Parser;
 use command::{builder::CommandBuilder, types::Command};
 use database::{types::WAL_FILE, Database};
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 use utils::embeddings::process_embeddings;
 use wal::{utils::wal_to_txt, WAL};
 
