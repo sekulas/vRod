@@ -114,6 +114,22 @@ impl WAL {
         Ok(())
     }
 
+    fn consistency_fix(mut self) -> Result<Self> {
+        match self.get_last_entry() {
+            Ok(Some(entry)) => {
+                if !entry.is_committed() {
+                    self.redo_last_command(entry.get_data());
+                }
+                Ok(self)
+            }
+            Ok(None) => Ok(self),
+            Err(_) => Ok(WAL::recreate_wal(&self.path)?),
+        }
+    }
+
+    //executioner should od this
+    fn redo_last_command(&self, data: String) {}
+
     fn get_last_entry(&mut self) -> Result<Option<WALEntry>> {
         let file_size = self.file.metadata()?.len();
 
