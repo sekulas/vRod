@@ -24,12 +24,21 @@ pub struct WALEntry {
 }
 
 impl WALEntry {
+    pub fn new(lsn: u64, data: String) -> Self {
+        Self {
+            lsn,
+            committed: false,
+            data_len: data.len() as u16,
+            data,
+        }
+    }
+
     pub fn is_committed(&self) -> bool {
         self.committed
     }
 
-    pub fn get_data(&self) -> String {
-        self.data.clone()
+    pub fn get_data(&self) -> &str {
+        &self.data
     }
 }
 
@@ -59,8 +68,6 @@ impl Default for WALHeader {
 
 impl WAL {
     pub fn create(path: &Path) -> Result<Self> {
-        fs::File::create(path)?;
-
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -107,12 +114,7 @@ impl WAL {
 
     pub fn append(&mut self, data: String) -> Result<()> {
         self.header.lsn += 1;
-        let entry = WALEntry {
-            lsn: self.header.lsn,
-            committed: false,
-            data_len: data.len() as u16,
-            data,
-        };
+        let entry = WALEntry::new(self.header.lsn, data);
 
         self.file.seek(SeekFrom::End(0))?;
         self.header.last_entry_offset = self.file.stream_position()?;
@@ -151,7 +153,7 @@ impl WAL {
     }
 
     //executioner should od this
-    fn redo_last_command(&self, data: String) {}
+    fn redo_last_command(&self, data: &str) {}
 
     fn get_last_entry(&mut self) -> Result<Option<WALEntry>> {
         let file_size = self.file.metadata()?.len();

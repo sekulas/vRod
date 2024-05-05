@@ -2,7 +2,6 @@ use crate::command::{Error, Result};
 use crate::database::types::*;
 use crate::database::Database;
 use crate::wal::WAL;
-use core::fmt;
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
