@@ -1,18 +1,17 @@
-mod command;
+mod command_builder;
 mod database;
 mod error;
 mod utils;
 mod wal;
 
 use clap::Parser;
-use command::{builder::CommandBuilder, types::Command};
+use command_builder::{commands::Command, Builder, CommandBuilder};
 use database::{types::WAL_FILE, Database};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use utils::embeddings::process_embeddings;
-use wal::{utils::wal_to_txt, WAL};
+use wal::{utils::wal_to_txt, WALType, WAL};
 
 use crate::error::{Error, Result};
-use command::builder::Builder;
 
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
@@ -73,20 +72,20 @@ fn run() -> Result<()> {
 
     //let database = Rc::new(RefCell::new(Database::load(database_path)?)); //TODO is it needed?
 
-    let command = CommandBuilder::build(target_path.clone(), command_text, args.command_arg)?;
+    let command = CommandBuilder::build(&target_path, command_text, args.command_arg)?;
 
-    execute_command(target_path, command)?;
-
-    Ok(())
-}
-
-fn execute_command(target_path: PathBuf, command: Box<dyn Command>) -> Result<()> {
     let wal_path = target_path.join(WAL_FILE);
-    let mut wal = WAL::load(&wal_path)?;
+    let wal_type = WAL::load(&wal_path)?;
 
-    wal.append(command.to_string())?;
-    command.execute()?;
-    wal.commit()?;
+    match wal_type {
+        WALType::Consistent(mut wal) => {
+            execute_command(&mut wal, command)?;
+        }
+        WALType::Uncommited(mut wal, entry) => {
+            redo_last_command(&target_path, &mut wal, entry)?;
+            execute_command(&mut wal, command)?;
+        }
+    }
 
     //TODO To remove / for developmnet only
     wal_to_txt(&wal_path).unwrap_or_else(|error| {
@@ -96,6 +95,21 @@ fn execute_command(target_path: PathBuf, command: Box<dyn Command>) -> Result<()
         );
     });
 
+    Ok(())
+}
+
+fn redo_last_command(target_path: &Path, wal: &mut WAL, entry: String) -> Result<()> {
+    let last_command = CommandBuilder::build_from_string(target_path, entry)?;
+    last_command.rollback()?;
+    last_command.execute()?;
+    wal.commit()?;
+    Ok(())
+}
+
+fn execute_command(mut wal: &mut WAL, command: Box<dyn Command>) -> Result<()> {
+    wal.append(command.to_string())?;
+    command.execute()?;
+    wal.commit()?;
     Ok(())
 }
 
