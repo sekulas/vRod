@@ -1,20 +1,15 @@
-use crate::command::{Error, Result};
+use super::types::Command;
+use super::{Error, Result};
 use crate::database::types::*;
 use crate::database::Database;
 use crate::wal::WAL;
 use std::cell::RefCell;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::rc::Rc;
 
 //TODO Provide rollback functionality for the commands
-
-pub trait Command {
-    fn execute(&self) -> Result<()>;
-    fn rollback(&self) -> Result<()>;
-    fn to_string(&self) -> String;
-}
 
 pub struct CreateCollectionCommand {
     path: PathBuf,
@@ -22,9 +17,9 @@ pub struct CreateCollectionCommand {
 }
 
 impl CreateCollectionCommand {
-    pub fn new(path: PathBuf, collection_name: String) -> Self {
+    pub fn new(path: &Path, collection_name: String) -> Self {
         CreateCollectionCommand {
-            path,
+            path: path.to_owned(),
             collection_name,
         }
     }

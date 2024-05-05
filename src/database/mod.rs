@@ -1,7 +1,7 @@
 mod error;
 pub mod types;
 
-use crate::wal::WAL;
+use crate::wal::{WALType, WAL};
 pub use error::{Error, Result};
 use std::{
     cell::RefCell,
@@ -33,7 +33,14 @@ impl Database {
     }
 
     pub fn load(path: PathBuf) -> Result<Self> {
-        let wal = Rc::new(RefCell::new(WAL::load(&path.join(WAL_FILE))?));
+        let wal = WAL::load(&path.join(WAL_FILE))?;
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => todo!("TODO: Handle uncommited WAL."),
+        };
+
+        let wal = Rc::new(RefCell::new(wal));
         let collections = Rc::new(Database::get_collections(&path)?);
         Ok(Database {
             path,

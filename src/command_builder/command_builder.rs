@@ -1,24 +1,20 @@
-use std::path::PathBuf;
+use std::path::Path;
 
-use super::types::*;
-use crate::command::{Error, Result};
+use crate::command_builder::commands::*;
+use crate::command_builder::{Error, Result};
+
+use super::commands::Command;
 
 pub struct CommandBuilder;
 
 pub trait Builder {
-    fn build(
-        target_path: PathBuf,
-        command: String,
-        arg: Option<String>,
-    ) -> Result<Box<dyn Command>>;
+    fn build(target_path: &Path, command: String, arg: Option<String>) -> Result<Box<dyn Command>>;
+
+    fn build_from_string(target_path: &Path, data: String) -> Result<Box<dyn Command>>;
 }
 
 impl Builder for CommandBuilder {
-    fn build(
-        target_path: PathBuf,
-        command: String,
-        arg: Option<String>,
-    ) -> Result<Box<dyn Command>> {
+    fn build(target_path: &Path, command: String, arg: Option<String>) -> Result<Box<dyn Command>> {
         match command.to_uppercase().as_str() {
             "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => todo!(),
@@ -77,14 +73,25 @@ impl Builder for CommandBuilder {
             _ => Err(Error::UnrecognizedCommand(command.to_string())),
         }
     }
-}
 
+    fn build_from_string(target_path: &Path, entry: String) -> Result<Box<dyn Command>> {
+        let mut parts = entry.split_whitespace();
+
+        let (command, arg) = match (parts.next(), parts.next()) {
+            (Some(command), Some(arg)) => (command.to_string(), Some(arg.to_string())),
+            (Some(command), None) => (command.to_string(), None),
+            _ => return Err(Error::UnrecognizedCommand(entry.to_owned())),
+        };
+
+        CommandBuilder::build(target_path, command, arg)
+    }
+}
 fn build_create_collection_command(
-    database_path: PathBuf,
+    target_path: &Path,
     collection_name: Option<String>,
 ) -> Result<Box<dyn Command>> {
     match collection_name {
-        Some(name) => Ok(Box::new(CreateCollectionCommand::new(database_path, name))),
+        Some(name) => Ok(Box::new(CreateCollectionCommand::new(target_path, name))),
         None => Err(Error::MissingCollectionName),
     }
 }
