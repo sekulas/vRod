@@ -66,6 +66,11 @@ impl Default for WALHeader {
     }
 }
 
+pub enum WALType {
+    Consistent(WAL),
+    Uncommited(WAL, String),
+}
+
 impl WAL {
     pub fn create(path: &Path) -> Result<Self> {
         let file = OpenOptions::new()
@@ -85,7 +90,7 @@ impl WAL {
         Ok(wal)
     }
 
-    pub fn load(path: &Path) -> Result<WAL> {
+    pub fn load(path: &Path) -> Result<WALType> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -96,7 +101,7 @@ impl WAL {
             Ok(header) => header,
             Err(_) => {
                 let wal = WAL::recreate_wal(path)?;
-                return Ok(wal);
+                return Ok(WALType::Consistent(wal));
             }
         };
 
@@ -106,7 +111,7 @@ impl WAL {
             header,
         };
 
-        match wal.consistency_fix() {
+        match wal.define_consistency() {
             Ok(wal) => Ok(wal),
             Err(e) => Err(e),
         }
@@ -139,21 +144,15 @@ impl WAL {
         Ok(())
     }
 
-    fn consistency_fix(mut self) -> Result<Self> {
+    fn define_consistency(mut self) -> Result<WALType> {
         match self.get_last_entry() {
-            Ok(Some(entry)) => {
-                if !entry.is_committed() {
-                    self.redo_last_command(entry.get_data());
-                }
-                Ok(self)
+            Ok(Some(entry)) if !entry.is_committed() => {
+                Ok(WALType::Uncommited(self, entry.get_data().to_owned()))
             }
-            Ok(None) => Ok(self),
-            Err(_) => Ok(WAL::recreate_wal(&self.path)?),
+            Ok(_) => Ok(WALType::Consistent(self)),
+            Err(_) => Ok(WALType::Consistent(WAL::recreate_wal(&self.path)?)),
         }
     }
-
-    //executioner should od this
-    fn redo_last_command(&self, data: &str) {}
 
     fn get_last_entry(&mut self) -> Result<Option<WALEntry>> {
         let file_size = self.file.metadata()?.len();
@@ -225,6 +224,12 @@ mod tests {
         let mut wal = WAL::load(wal_file)?;
 
         let data = "Hello, World!".to_string();
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        };
+
         wal.append(data.clone())?;
 
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
@@ -249,10 +254,21 @@ mod tests {
         let _guard = TestFileGuard::new(wal_file)?;
 
         let mut wal = WAL::load(wal_file)?;
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        };
+
         wal.header.lsn = 10;
         wal.flush_header()?;
 
         let wal = WAL::load(wal_file)?;
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        };
 
         assert_eq!(wal.header.lsn, 10);
 
@@ -265,6 +281,11 @@ mod tests {
 
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        };
 
         let entry = wal.get_last_entry()?;
 
@@ -279,6 +300,11 @@ mod tests {
 
         let _guard = TestFileGuard::new(wal_file)?;
         let mut wal = WAL::load(wal_file)?;
+
+        let mut wal = match wal {
+            WALType::Consistent(wal) => wal,
+            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        };
 
         let data1 = "Hello, World!".to_string();
         wal.append(data1.clone())?;
