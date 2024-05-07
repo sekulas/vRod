@@ -1,4 +1,4 @@
-use super::Result;
+use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};

@@ -1,3 +1,5 @@
+use clap::error;
+
 use crate::{command_builder, database, utils, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -9,6 +11,9 @@ pub enum Error {
 
     #[error("Missing argument '-e' - 'command to execute'.")]
     MissingCommand,
+
+    #[error("Target of the command does not exist. Specified target: '{0}'.")]
+    TargetDoesNotExist(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

@@ -124,5 +124,15 @@ fn specify_target_path(
         (None, None) => std::env::current_dir()?,
     };
 
+    validate_target_path(&target_path)?;
     Ok(target_path)
+}
+
+fn validate_target_path(target_path: &Path) -> Result<()> {
+    if !target_path.join(WAL_FILE).exists() {
+        return Err(Error::TargetDoesNotExist(
+            target_path.to_string_lossy().to_string(),
+        ));
+    }
+    Ok(())
 }
