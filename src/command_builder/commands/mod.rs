@@ -1,5 +1,5 @@
-mod commands;
-pub(super) use commands::*;
+mod command_types;
+pub(super) use command_types::*;
 mod error;
 pub use error::{Error, Result};
 mod types;
