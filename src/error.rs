@@ -1,5 +1,3 @@
-use clap::error;
-
 use crate::{command_builder, database, utils, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;

@@ -1,13 +1,9 @@
 use super::types::Command;
 use super::{Error, Result};
-use crate::database::types::*;
-use crate::database::Database;
-use crate::wal::WAL;
-use std::cell::RefCell;
+use crate::types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE, WAL_FILE};
+use crate::wal::Wal;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use std::rc::Rc;
 
 //TODO Provide rollback functionality for the commands
 
@@ -34,7 +30,7 @@ impl Command for CreateCollectionCommand {
         }
 
         fs::create_dir(&collection_path)?;
-        WAL::create(&collection_path.join(WAL_FILE))?;
+        Wal::create(&collection_path.join(WAL_FILE))?;
         fs::File::create(collection_path.join(STORAGE_FILE))?;
         fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
         fs::File::create(collection_path.join(INDEX_FILE))?;
@@ -58,7 +54,6 @@ impl Command for CreateCollectionCommand {
 }
 
 pub struct DropCollectionCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
 }
 
@@ -76,9 +71,7 @@ impl Command for DropCollectionCommand {
     }
 }
 
-pub struct ListCollectionsCommand {
-    pub db: Rc<RefCell<Database>>,
-}
+pub struct ListCollectionsCommand {}
 
 impl Command for ListCollectionsCommand {
     fn execute(&self) -> Result<()> {
@@ -95,7 +88,6 @@ impl Command for ListCollectionsCommand {
 }
 
 pub struct TruncateWalCommand {
-    pub db: Rc<RefCell<Database>>,
     pub target: Option<String>,
 }
 
@@ -114,7 +106,6 @@ impl Command for TruncateWalCommand {
 }
 
 pub struct InsertCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -134,7 +125,6 @@ impl Command for InsertCommand {
 }
 
 pub struct BulkInsertCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -154,7 +144,6 @@ impl Command for BulkInsertCommand {
 }
 
 pub struct UpdateCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -174,7 +163,6 @@ impl Command for UpdateCommand {
 }
 
 pub struct DeleteCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -194,7 +182,6 @@ impl Command for DeleteCommand {
 }
 
 pub struct SearchCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -214,7 +201,6 @@ impl Command for SearchCommand {
 }
 
 pub struct SearchSimilarCommand {
-    pub db: Rc<RefCell<Database>>,
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
@@ -233,10 +219,7 @@ impl Command for SearchSimilarCommand {
     }
 }
 
-pub struct ReindexCommand {
-    pub db: Rc<RefCell<Database>>,
-    pub collection_name: Option<String>,
-}
+pub struct ReindexCommand {}
 
 impl Command for ReindexCommand {
     fn execute(&self) -> Result<()> {

@@ -1,7 +1,7 @@
 mod error;
-pub mod types;
 
-use crate::wal::{WALType, WAL};
+use crate::wal::{Wal, WalType};
+use crate::WAL_FILE;
 pub use error::{Error, Result};
 use std::{
     cell::RefCell,
@@ -9,11 +9,10 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
-use types::WAL_FILE;
 
 pub struct Database {
     path: PathBuf,
-    wal: Rc<RefCell<WAL>>,
+    wal: Rc<RefCell<Wal>>,
     collections: Rc<Vec<String>>,
 }
 
@@ -27,17 +26,17 @@ impl Database {
 
         fs::create_dir(&database_dir)?;
 
-        WAL::create(&database_dir.join(WAL_FILE));
+        Wal::create(&database_dir.join(WAL_FILE));
 
         Ok(())
     }
 
     pub fn load(path: PathBuf) -> Result<Self> {
-        let wal = WAL::load(&path.join(WAL_FILE))?;
+        let wal = Wal::load(&path.join(WAL_FILE))?;
 
         let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => todo!("TODO: Handle uncommited WAL."),
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => todo!("TODO: Handle uncommited Wal."),
         };
 
         let wal = Rc::new(RefCell::new(wal));
@@ -57,7 +56,7 @@ impl Database {
         self.path.clone()
     }
 
-    pub fn get_wal(&self) -> Rc<RefCell<WAL>> {
+    pub fn get_wal(&self) -> Rc<RefCell<Wal>> {
         Rc::clone(&self.wal)
     }
 

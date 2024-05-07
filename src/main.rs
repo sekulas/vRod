@@ -1,15 +1,16 @@
 mod command_builder;
 mod database;
 mod error;
+mod types;
 mod utils;
 mod wal;
 
+use crate::types::WAL_FILE;
 use clap::Parser;
 use command_builder::{commands::Command, Builder, CommandBuilder};
-use database::{types::WAL_FILE, Database};
 use std::path::{Path, PathBuf};
 use utils::embeddings::process_embeddings;
-use wal::{utils::wal_to_txt, WALType, WAL};
+use wal::{utils::wal_to_txt, Wal, WalType};
 
 use crate::error::{Error, Result};
 
@@ -55,33 +56,24 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    if let Some(path) = args.init_database {
-        match args.init_database_name {
-            Some(name) => {
-                return Ok(Database::create(path.to_path_buf(), name)?);
-            }
-            None => {
-                return Err(Error::MissingInitDatabaseName);
-            }
-        }
+    if let (Some(_), None) = (args.init_database, args.init_database_name) {
+        return Err(Error::MissingInitDatabaseName);
     }
 
     let command_text = args.execute.ok_or(Error::MissingCommand)?;
 
     let target_path = specify_target_path(args.database, args.collection)?;
 
-    //let database = Rc::new(RefCell::new(Database::load(database_path)?)); //TODO is it needed?
-
     let command = CommandBuilder::build(&target_path, command_text, args.command_arg)?;
 
     let wal_path = target_path.join(WAL_FILE);
-    let wal_type = WAL::load(&wal_path)?;
+    let wal_type = Wal::load(&wal_path)?;
 
     match wal_type {
-        WALType::Consistent(mut wal) => {
+        WalType::Consistent(mut wal) => {
             execute_command(&mut wal, command)?;
         }
-        WALType::Uncommited(mut wal, entry) => {
+        WalType::Uncommited(mut wal, entry) => {
             redo_last_command(&target_path, &mut wal, entry)?;
             execute_command(&mut wal, command)?;
         }
@@ -98,7 +90,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn redo_last_command(target_path: &Path, wal: &mut WAL, entry: String) -> Result<()> {
+fn redo_last_command(target_path: &Path, wal: &mut Wal, entry: String) -> Result<()> {
     let last_command = CommandBuilder::build_from_string(target_path, entry)?;
     last_command.rollback()?;
     last_command.execute()?;
@@ -106,7 +98,7 @@ fn redo_last_command(target_path: &Path, wal: &mut WAL, entry: String) -> Result
     Ok(())
 }
 
-fn execute_command(mut wal: &mut WAL, command: Box<dyn Command>) -> Result<()> {
+fn execute_command(wal: &mut Wal, command: Box<dyn Command>) -> Result<()> {
     wal.append(command.to_string())?;
     command.execute()?;
     wal.commit()?;

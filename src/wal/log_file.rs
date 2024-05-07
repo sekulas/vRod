@@ -1,4 +1,4 @@
-use super::{Error, Result};
+use super::Result;
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -6,24 +6,24 @@ use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
 use std::path::{Path, PathBuf};
 
-pub enum WALType {
-    Consistent(WAL),
-    Uncommited(WAL, String),
+pub enum WalType {
+    Consistent(Wal),
+    Uncommited(Wal, String),
 }
 
-pub struct WAL {
+pub struct Wal {
     path: PathBuf,
     file: File,
-    header: WALHeader,
+    header: WalHeader,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct WALHeader {
+pub struct WalHeader {
     last_entry_offset: u64,
     lsn: u64,
 }
 
-impl WALHeader {
+impl WalHeader {
     fn new(last_entry_offset: u64, lsn: u64) -> Self {
         Self {
             last_entry_offset,
@@ -32,24 +32,24 @@ impl WALHeader {
     }
 }
 
-impl Default for WALHeader {
+impl Default for WalHeader {
     fn default() -> Self {
         Self {
-            last_entry_offset: mem::size_of::<WALHeader>() as u64,
+            last_entry_offset: mem::size_of::<WalHeader>() as u64,
             lsn: 0,
         }
     }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct WALEntry {
+pub struct WalEntry {
     lsn: u64,
     committed: bool,
     data_len: u16,
     data: String,
 }
 
-impl WALEntry {
+impl WalEntry {
     pub fn new(lsn: u64, data: String) -> Self {
         Self {
             lsn,
@@ -68,7 +68,7 @@ impl WALEntry {
     }
 }
 
-impl WAL {
+impl Wal {
     pub fn create(path: &Path) -> Result<Self> {
         let file = OpenOptions::new()
             .read(true)
@@ -76,7 +76,7 @@ impl WAL {
             .create(true)
             .open(path)?;
 
-        let header = WALHeader::default();
+        let header = WalHeader::default();
         let mut wal = Self {
             path: path.to_owned(),
             file,
@@ -87,18 +87,18 @@ impl WAL {
         Ok(wal)
     }
 
-    pub fn load(path: &Path) -> Result<WALType> {
+    pub fn load(path: &Path) -> Result<WalType> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path)?;
 
-        let header: WALHeader = match deserialize_from(&mut BufReader::new(&file)) {
+        let header: WalHeader = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
-                let wal = WAL::recreate_wal(path)?;
-                return Ok(WALType::Consistent(wal));
+                let wal = Wal::recreate_wal(path)?;
+                return Ok(WalType::Consistent(wal));
             }
         };
 
@@ -116,7 +116,7 @@ impl WAL {
 
     pub fn append(&mut self, data: String) -> Result<()> {
         self.header.lsn += 1;
-        let entry = WALEntry::new(self.header.lsn, data);
+        let entry = WalEntry::new(self.header.lsn, data);
 
         self.file.seek(SeekFrom::End(0))?;
         self.header.last_entry_offset = self.file.stream_position()?;
@@ -131,7 +131,7 @@ impl WAL {
         self.file
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
-        let mut entry: WALEntry = deserialize_from(&mut BufReader::new(&self.file))?;
+        let mut entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         entry.committed = true;
 
         self.file
@@ -141,27 +141,27 @@ impl WAL {
         Ok(())
     }
 
-    fn define_consistency(mut self) -> Result<WALType> {
+    fn define_consistency(mut self) -> Result<WalType> {
         match self.get_last_entry() {
             Ok(Some(entry)) if !entry.is_committed() => {
-                Ok(WALType::Uncommited(self, entry.get_data().to_owned()))
+                Ok(WalType::Uncommited(self, entry.get_data().to_owned()))
             }
-            Ok(_) => Ok(WALType::Consistent(self)),
-            Err(_) => Ok(WALType::Consistent(WAL::recreate_wal(&self.path)?)),
+            Ok(_) => Ok(WalType::Consistent(self)),
+            Err(_) => Ok(WalType::Consistent(Wal::recreate_wal(&self.path)?)),
         }
     }
 
-    fn get_last_entry(&mut self) -> Result<Option<WALEntry>> {
+    fn get_last_entry(&mut self) -> Result<Option<WalEntry>> {
         let file_size = self.file.metadata()?.len();
 
-        if file_size <= mem::size_of::<WALHeader>() as u64 {
+        if file_size <= mem::size_of::<WalHeader>() as u64 {
             return Ok(None);
         }
 
         self.file
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
-        let entry: WALEntry = deserialize_from(&mut BufReader::new(&self.file))?;
+        let entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         Ok(Some(entry))
     }
 
@@ -174,7 +174,7 @@ impl WAL {
     fn recreate_wal(path: &Path) -> Result<Self> {
         fs::remove_file(path)?;
 
-        let wal = WAL::create(path)?;
+        let wal = Wal::create(path)?;
         //TODO when other files will exist, we have to check header lsn and create wal with highest lsn
 
         Ok(wal)
@@ -217,7 +217,7 @@ mod tests {
     fn load_should_return_error_if_file_does_not_exist() {
         let wal_file: &Path = Path::new("test.wal");
 
-        let result = WAL::load(wal_file);
+        let result = Wal::load(wal_file);
 
         assert!(result.is_err());
     }
@@ -227,13 +227,13 @@ mod tests {
         let wal_file: &Path = Path::new("test1.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
-        let mut wal = WAL::load(wal_file)?;
+        let wal = Wal::load(wal_file)?;
 
         let data = "Hello, World!".to_string();
 
         let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
         wal.append(data.clone())?;
@@ -259,21 +259,21 @@ mod tests {
 
         let _guard = TestFileGuard::new(wal_file)?;
 
-        let mut wal = WAL::load(wal_file)?;
+        let wal = Wal::load(wal_file)?;
 
         let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
         wal.header.lsn = 10;
         wal.flush_header()?;
 
-        let wal = WAL::load(wal_file)?;
+        let wal = Wal::load(wal_file)?;
 
-        let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+        let wal = match wal {
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
         assert_eq!(wal.header.lsn, 10);
@@ -286,11 +286,11 @@ mod tests {
         let wal_file: &Path = Path::new("test3.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
-        let mut wal = WAL::load(wal_file)?;
+        let wal = Wal::load(wal_file)?;
 
         let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
         let entry = wal.get_last_entry()?;
@@ -305,11 +305,11 @@ mod tests {
         let wal_file: &Path = Path::new("test4.wal");
 
         let _guard = TestFileGuard::new(wal_file)?;
-        let mut wal = WAL::load(wal_file)?;
+        let wal = Wal::load(wal_file)?;
 
         let mut wal = match wal {
-            WALType::Consistent(wal) => wal,
-            WALType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
         let data1 = "Hello, World!".to_string();
