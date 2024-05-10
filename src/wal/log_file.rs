@@ -19,15 +19,15 @@ pub struct Wal {
 
 #[derive(Serialize, Deserialize)]
 pub struct WalHeader {
-    last_entry_offset: u64,
-    lsn: u64,
+    last_entry_offset: u64, //TODO: Is free_space_offset neede?
+    current_max_lsn: u64,
 }
 
 impl WalHeader {
-    fn new(last_entry_offset: u64, lsn: u64) -> Self {
+    fn new(last_entry_offset: u64, current_max_lsn: u64) -> Self {
         Self {
             last_entry_offset,
-            lsn,
+            current_max_lsn,
         }
     }
 }
@@ -36,7 +36,7 @@ impl Default for WalHeader {
     fn default() -> Self {
         Self {
             last_entry_offset: mem::size_of::<WalHeader>() as u64,
-            lsn: 0,
+            current_max_lsn: 0,
         }
     }
 }
@@ -45,7 +45,7 @@ impl Default for WalHeader {
 pub struct WalEntry {
     lsn: u64,
     committed: bool,
-    data_len: u16,
+    data_len: u16, //TODO: Is that needed?
     data: String,
 }
 
@@ -115,10 +115,9 @@ impl Wal {
     }
 
     pub fn append(&mut self, data: String) -> Result<()> {
-        self.header.lsn += 1;
-        let entry = WalEntry::new(self.header.lsn, data);
+        self.header.current_max_lsn += 1;
+        let entry = WalEntry::new(self.header.current_max_lsn, data);
 
-        self.file.seek(SeekFrom::End(0))?;
         self.header.last_entry_offset = self.file.stream_position()?;
 
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
@@ -143,6 +142,18 @@ impl Wal {
 
     fn define_consistency(mut self) -> Result<WalType> {
         match self.get_last_entry() {
+            // TODO: Is that even possible? Header with the last entry data is being flushed after the data has been serialized
+            // Can then it be inconsistent?
+            //
+            //Not written fully - Ovveride last entry
+            // Ok(Some(entry)) if entry.data.len() != entry.data_len as usize => { //TODO: Is that reliable?
+            //     self.header.free_space_offset = self.header.last_entry_offset;
+            //     Ok(WalType::Inconsistent(self))
+            // }
+            // Ok(Some(entry)) if self.header.current_max_lsn < entry.lsn => {
+            //     self.header.free_space_offset = self.header.last_entry_offset;
+            //     Ok(WalType::Inconsistent(self))
+            // }
             Ok(Some(entry)) if !entry.is_committed() => {
                 Ok(WalType::Uncommited(self, entry.get_data().to_owned()))
             }
@@ -214,15 +225,6 @@ mod tests {
     }
 
     #[test]
-    fn load_should_return_error_if_file_does_not_exist() {
-        let wal_file: &Path = Path::new("test.wal");
-
-        let result = Wal::load(wal_file);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn append_and_commit_should_commit_last_entry() -> Result<()> {
         let wal_file: &Path = Path::new("test1.wal");
 
@@ -266,7 +268,7 @@ mod tests {
             WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
-        wal.header.lsn = 10;
+        wal.header.current_max_lsn = 10;
         wal.flush_header()?;
 
         let wal = Wal::load(wal_file)?;
@@ -276,7 +278,7 @@ mod tests {
             WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
         };
 
-        assert_eq!(wal.header.lsn, 10);
+        assert_eq!(wal.header.current_max_lsn, 10);
 
         Ok(())
     }

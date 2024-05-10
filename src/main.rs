@@ -120,6 +120,7 @@ fn specify_target_path(
     Ok(target_path)
 }
 
+// TODO: Is that single responsibility? Where should be the logic of file checking?
 fn validate_target_path(target_path: &Path) -> Result<()> {
     if !target_path.join(WAL_FILE).exists() {
         return Err(Error::TargetDoesNotExist(
