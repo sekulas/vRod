@@ -1,4 +1,4 @@
-use super::Result;
+use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -8,7 +8,11 @@ use std::path::{Path, PathBuf};
 
 pub enum WalType {
     Consistent(Wal),
-    Uncommited(Wal, String),
+    Uncommited {
+        wal: Wal,
+        uncommited_command: String,
+        arg: Option<String>,
+    },
 }
 
 pub struct Wal {
@@ -63,8 +67,14 @@ impl WalEntry {
         self.committed
     }
 
-    pub fn get_data(&self) -> &str {
-        &self.data
+    pub fn get_command_and_arg(&self) -> Result<(String, Option<String>)> {
+        let mut parts = self.data.split_whitespace();
+
+        match (parts.next(), parts.next()) {
+            (Some(command), Some(arg)) => Ok((command.to_string(), Some(arg.to_string()))),
+            (Some(command), None) => Ok((command.to_string(), None)),
+            _ => Err(Error::ParsingEntry(self.data.to_owned())),
+        }
     }
 }
 
@@ -155,7 +165,12 @@ impl Wal {
             //     Ok(WalType::Inconsistent(self))
             // }
             Ok(Some(entry)) if !entry.is_committed() => {
-                Ok(WalType::Uncommited(self, entry.get_data().to_owned()))
+                let (uncommited_command, arg) = entry.get_command_and_arg()?;
+                Ok(WalType::Uncommited {
+                    wal: self,
+                    uncommited_command,
+                    arg,
+                })
             }
             Ok(_) => Ok(WalType::Consistent(self)),
             Err(_) => Ok(WalType::Consistent(Wal::recreate_wal(&self.path)?)),
@@ -235,7 +250,7 @@ mod tests {
 
         let mut wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
         };
 
         wal.append(data.clone())?;
@@ -265,7 +280,7 @@ mod tests {
 
         let mut wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
         };
 
         wal.header.current_max_lsn = 10;
@@ -275,7 +290,7 @@ mod tests {
 
         let wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
         };
 
         assert_eq!(wal.header.current_max_lsn, 10);
@@ -292,7 +307,7 @@ mod tests {
 
         let mut wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
         };
 
         let entry = wal.get_last_entry()?;
@@ -311,7 +326,7 @@ mod tests {
 
         let mut wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => return Err("WAL is inconsistent.".into()),
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
         };
 
         let data1 = "Hello, World!".to_string();

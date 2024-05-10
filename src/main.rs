@@ -73,8 +73,12 @@ fn run() -> Result<()> {
         WalType::Consistent(mut wal) => {
             execute_command(&mut wal, command)?;
         }
-        WalType::Uncommited(mut wal, entry) => {
-            redo_last_command(&target_path, &mut wal, entry)?;
+        WalType::Uncommited {
+            mut wal,
+            uncommited_command,
+            arg,
+        } => {
+            redo_last_command(&target_path, &mut wal, uncommited_command, arg)?;
             execute_command(&mut wal, command)?;
         }
     }
@@ -90,8 +94,14 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn redo_last_command(target_path: &Path, wal: &mut Wal, entry: String) -> Result<()> {
-    let last_command = CommandBuilder::build_from_string(target_path, entry)?;
+fn redo_last_command(
+    target_path: &Path,
+    wal: &mut Wal,
+    command: String,
+    arg: Option<String>,
+) -> Result<()> {
+    let last_command = CommandBuilder::build(target_path, command, arg)?;
+    println!("Redoing last command: {:?}", last_command.to_string());
     last_command.rollback()?;
     last_command.execute()?;
     wal.commit()?;
@@ -99,6 +109,7 @@ fn redo_last_command(target_path: &Path, wal: &mut Wal, entry: String) -> Result
 }
 
 fn execute_command(wal: &mut Wal, command: Box<dyn Command>) -> Result<()> {
+    println!("Executing command: {:?}", command.to_string());
     wal.append(command.to_string())?;
     command.execute()?;
     wal.commit()?;

@@ -36,7 +36,7 @@ impl Database {
 
         let mut wal = match wal {
             WalType::Consistent(wal) => wal,
-            WalType::Uncommited(_, _) => todo!("TODO: Handle uncommited Wal."),
+            WalType::Uncommited { .. } => todo!("TODO: Handle uncommited Wal."),
         };
 
         let wal = Rc::new(RefCell::new(wal));

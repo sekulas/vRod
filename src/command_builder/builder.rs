@@ -9,8 +9,6 @@ pub struct CommandBuilder;
 
 pub trait Builder {
     fn build(target_path: &Path, command: String, arg: Option<String>) -> Result<Box<dyn Command>>;
-
-    fn build_from_string(target_path: &Path, data: String) -> Result<Box<dyn Command>>;
 }
 
 impl Builder for CommandBuilder {
@@ -72,18 +70,6 @@ impl Builder for CommandBuilder {
             })) */
             _ => Err(Error::UnrecognizedCommand(command.to_string())),
         }
-    }
-
-    fn build_from_string(target_path: &Path, entry: String) -> Result<Box<dyn Command>> {
-        let mut parts = entry.split_whitespace();
-
-        let (command, arg) = match (parts.next(), parts.next()) {
-            (Some(command), Some(arg)) => (command.to_string(), Some(arg.to_string())),
-            (Some(command), None) => (command.to_string(), None),
-            _ => return Err(Error::UnrecognizedCommand(entry.to_owned())),
-        };
-
-        CommandBuilder::build(target_path, command, arg)
     }
 }
 fn build_create_collection_command(
