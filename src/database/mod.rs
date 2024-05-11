@@ -26,7 +26,9 @@ impl Database {
 
         fs::create_dir(&database_dir)?;
 
-        Wal::create(&database_dir.join(WAL_FILE));
+        Wal::create(&database_dir.join(WAL_FILE))?;
+
+        println!("Database created at: {:?}", database_dir);
 
         Ok(())
     }
