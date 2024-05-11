@@ -128,6 +128,7 @@ impl Wal {
         self.header.current_max_lsn += 1;
         let entry = WalEntry::new(self.header.current_max_lsn, data);
 
+        self.file.seek(SeekFrom::End(0))?;
         self.header.last_entry_offset = self.file.stream_position()?;
 
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
