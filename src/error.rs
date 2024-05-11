@@ -1,4 +1,4 @@
-use crate::{command_builder, database, utils, wal};
+use crate::{command_query_builder, database, utils, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -26,8 +26,11 @@ pub enum Error {
     Database(#[from] database::Error),
 
     #[error(transparent)]
-    CommandBuilder(#[from] command_builder::Error),
+    CommandBuilder(#[from] command_query_builder::Error),
 
     #[error(transparent)]
-    Command(#[from] command_builder::commands::Error),
+    Command(#[from] command_query_builder::CommandError),
+
+    #[error(transparent)]
+    Query(#[from] command_query_builder::QueryError),
 }

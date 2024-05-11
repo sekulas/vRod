@@ -1,5 +1,5 @@
-use super::types::Command;
-use super::{Error, Result};
+use super::Result;
+use crate::command_query_builder::{CQAction, Command};
 use crate::types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE, WAL_FILE};
 use crate::wal::Wal;
 use std::fs;
@@ -49,7 +49,9 @@ impl Command for CreateCollectionCommand {
 
         Ok(())
     }
+}
 
+impl CQAction for CreateCollectionCommand {
     fn to_string(&self) -> String {
         format!("CREATE {}", self.collection_name)
     }
@@ -69,6 +71,7 @@ impl DropCollectionCommand {
     }
 }
 
+//TODO: Rollback for DROP/REMOVE etc?
 impl Command for DropCollectionCommand {
     fn execute(&self) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
@@ -86,57 +89,11 @@ impl Command for DropCollectionCommand {
     fn rollback(&self) -> Result<()> {
         Ok(())
     }
+}
 
+impl CQAction for DropCollectionCommand {
     fn to_string(&self) -> String {
         format!("DROP {}", self.collection_name)
-    }
-}
-
-pub struct ListCollectionsCommand {
-    pub db_path: PathBuf,
-}
-
-impl ListCollectionsCommand {
-    pub fn new(db_path: &Path) -> Self {
-        ListCollectionsCommand {
-            db_path: db_path.to_owned(),
-        }
-    }
-}
-
-impl Command for ListCollectionsCommand {
-    fn execute(&self) -> Result<()> {
-        let entries = fs::read_dir(&self.db_path)?;
-        let mut any_collections: bool = false;
-
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                println!(
-                    "{}",
-                    path.file_name()
-                        .ok_or(Error::CollectionPathProblem(path.to_owned()))?
-                        .to_str()
-                        .ok_or(Error::CollectionNameToStrProblem(path.to_owned()))?
-                );
-                any_collections = true;
-            }
-        }
-
-        if !any_collections {
-            println!("No collections.");
-        }
-
-        Ok(())
-    }
-
-    fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn to_string(&self) -> String {
-        "LISTCOLLECTIONS".to_string()
     }
 }
 
@@ -152,9 +109,11 @@ impl Command for TruncateWalCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
+}
 
+impl CQAction for TruncateWalCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }
 
@@ -171,9 +130,11 @@ impl Command for InsertCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
+}
 
+impl CQAction for InsertCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }
 
@@ -190,9 +151,11 @@ impl Command for BulkInsertCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
+}
 
+impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }
 
@@ -209,9 +172,11 @@ impl Command for UpdateCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
+}
 
+impl CQAction for UpdateCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }
 
@@ -228,47 +193,11 @@ impl Command for DeleteCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
+}
 
+impl CQAction for DeleteCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
-    }
-}
-
-pub struct SearchCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for SearchCommand {
-    fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn to_string(&self) -> String {
-        todo!("Not implemented.")
-    }
-}
-
-pub struct SearchSimilarCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for SearchSimilarCommand {
-    fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }
 
@@ -282,26 +211,10 @@ impl Command for ReindexCommand {
     fn rollback(&self) -> Result<()> {
         todo!("Not implemented.")
     }
-
-    fn to_string(&self) -> String {
-        todo!("Not implemented.")
-    }
 }
 
-pub struct UnrecognizedCommand {
-    pub command: String,
-}
-
-impl Command for UnrecognizedCommand {
-    fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
+impl CQAction for ReindexCommand {
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        todo!();
     }
 }

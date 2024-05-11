@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use crate::wal;
+use std::{io, path::PathBuf};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -13,8 +11,5 @@ pub enum Error {
     CollectionNameToStrProblem(PathBuf),
 
     #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Wal(#[from] wal::Error),
+    Io(#[from] io::Error),
 }

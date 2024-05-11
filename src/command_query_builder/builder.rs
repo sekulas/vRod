@@ -1,19 +1,18 @@
 use std::path::Path;
 
-use crate::command_builder::commands::*;
-use crate::command_builder::{Error, Result};
-
-use super::commands::Command;
-
-pub struct CommandBuilder;
+use super::commands::*;
+use super::queries::*;
+use super::CQType;
+use crate::command_query_builder::{Error, Result};
+pub struct CQBuilder;
 
 pub trait Builder {
-    fn build(target_path: &Path, command: String, arg: Option<String>) -> Result<Box<dyn Command>>;
+    fn build(target_path: &Path, cq_action: String, arg: Option<String>) -> Result<CQType>;
 }
 
-impl Builder for CommandBuilder {
-    fn build(target_path: &Path, command: String, arg: Option<String>) -> Result<Box<dyn Command>> {
-        match command.to_uppercase().as_str() {
+impl Builder for CQBuilder {
+    fn build(target_path: &Path, cq_action: String, arg: Option<String>) -> Result<CQType> {
+        match cq_action.to_uppercase().as_str() {
             "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => build_drop_collection_command(target_path, arg),
             "LISTCOLLECTIONS" => build_list_collections_query(target_path),
@@ -64,7 +63,7 @@ impl Builder for CommandBuilder {
                 db,
                 collection_name: collection,
             })) */
-            _ => Err(Error::UnrecognizedCommand(command.to_string())),
+            _ => Err(Error::UnrecognizedCommand(cq_action.to_string())),
         }
     }
 }
@@ -72,9 +71,12 @@ impl Builder for CommandBuilder {
 fn build_create_collection_command(
     target_path: &Path,
     collection_name: Option<String>,
-) -> Result<Box<dyn Command>> {
+) -> Result<CQType> {
     match collection_name {
-        Some(name) => Ok(Box::new(CreateCollectionCommand::new(target_path, name))),
+        Some(name) => Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
+            target_path,
+            name,
+        )))),
         None => Err(Error::MissingCollectionName),
     }
 }
@@ -82,13 +84,18 @@ fn build_create_collection_command(
 fn build_drop_collection_command(
     target_path: &Path,
     collection_name: Option<String>,
-) -> Result<Box<dyn Command>> {
+) -> Result<CQType> {
     match collection_name {
-        Some(name) => Ok(Box::new(DropCollectionCommand::new(target_path, name))),
+        Some(name) => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
+            target_path,
+            name,
+        )))),
         None => Err(Error::MissingCollectionName),
     }
 }
 
-fn build_list_collections_query(target_path: &Path) -> Result<Box<dyn Command>> {
-    Ok(Box::new(ListCollectionsCommand::new(target_path)))
+fn build_list_collections_query(target_path: &Path) -> Result<CQType> {
+    Ok(CQType::Query(Box::new(ListCollectionsQuery::new(
+        target_path,
+    ))))
 }

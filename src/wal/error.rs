@@ -1,4 +1,4 @@
-use crate::command_builder;
+use crate::command_query_builder;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -8,7 +8,7 @@ pub enum Error {
     ParsingEntry(String),
 
     #[error(transparent)]
-    CommandBuilder(#[from] command_builder::Error),
+    CommandBuilder(#[from] command_query_builder::Error),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] bincode::Error),

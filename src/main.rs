@@ -1,4 +1,4 @@
-mod command_builder;
+mod command_query_builder;
 mod database;
 mod error;
 mod types;
@@ -7,7 +7,7 @@ mod wal;
 
 use crate::types::WAL_FILE;
 use clap::Parser;
-use command_builder::{commands::Command, Builder, CommandBuilder};
+use command_query_builder::{Builder, CQBuilder, CQType, Command};
 use database::Database;
 use std::path::{Path, PathBuf};
 use utils::embeddings::process_embeddings;
@@ -83,14 +83,14 @@ fn run() -> Result<()> {
 
     let target_path = specify_target_path(args.database, args.collection)?;
 
-    let command = CommandBuilder::build(&target_path, command_text, args.command_arg)?;
+    let cq_action = CQBuilder::build(&target_path, command_text, args.command_arg)?;
 
     let wal_path = target_path.join(WAL_FILE);
     let wal_type = Wal::load(&wal_path)?;
 
     match wal_type {
-        WalType::Consistent(mut wal) => {
-            execute_command(&mut wal, command)?;
+        WalType::Consistent(wal) => {
+            execute_cq_action(cq_action, wal)?;
         }
         WalType::Uncommited {
             mut wal,
@@ -98,10 +98,24 @@ fn run() -> Result<()> {
             arg,
         } => {
             redo_last_command(&target_path, &mut wal, uncommited_command, arg)?;
-            execute_command(&mut wal, command)?;
+            execute_cq_action(cq_action, wal)?;
         }
     }
 
+    Ok(())
+}
+
+fn execute_cq_action(cq_action: CQType, mut wal: Wal) -> Result<()> {
+    match cq_action {
+        CQType::Command(command) => {
+            println!("Executing command: {:?}", command.to_string());
+            execute_command(&mut wal, command)?
+        }
+        CQType::Query(query) => {
+            println!("Executing query: {:?}", query.to_string());
+            query.execute()?
+        }
+    };
     Ok(())
 }
 
@@ -111,16 +125,16 @@ fn redo_last_command(
     command: String,
     arg: Option<String>,
 ) -> Result<()> {
-    let last_command = CommandBuilder::build(target_path, command, arg)?;
-    println!("Redoing last command: {:?}", last_command.to_string());
-    last_command.rollback()?;
-    last_command.execute()?;
-    wal.commit()?;
+    if let CQType::Command(last_command) = CQBuilder::build(target_path, command, arg)? {
+        println!("Redoing last command: {:?}", last_command.to_string());
+        last_command.rollback()?;
+        last_command.execute()?;
+        wal.commit()?;
+    }
     Ok(())
 }
 
 fn execute_command(wal: &mut Wal, command: Box<dyn Command>) -> Result<()> {
-    println!("Executing command: {:?}", command.to_string());
     wal.append(command.to_string())?;
     command.execute()?;
     wal.commit()?;
