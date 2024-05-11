@@ -92,11 +92,43 @@ impl Command for DropCollectionCommand {
     }
 }
 
-pub struct ListCollectionsCommand {}
+pub struct ListCollectionsCommand {
+    pub db_path: PathBuf,
+}
+
+impl ListCollectionsCommand {
+    pub fn new(db_path: &Path) -> Self {
+        ListCollectionsCommand {
+            db_path: db_path.to_owned(),
+        }
+    }
+}
 
 impl Command for ListCollectionsCommand {
     fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
+        let entries = fs::read_dir(&self.db_path)?;
+        let mut any_collections: bool = false;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                println!(
+                    "{}",
+                    path.file_name()
+                        .ok_or(Error::CollectionPathProblem(path.to_owned()))?
+                        .to_str()
+                        .ok_or(Error::CollectionNameToStrProblem(path.to_owned()))?
+                );
+                any_collections = true;
+            }
+        }
+
+        if !any_collections {
+            println!("No collections.");
+        }
+
+        Ok(())
     }
 
     fn rollback(&self) -> Result<()> {
@@ -104,7 +136,7 @@ impl Command for ListCollectionsCommand {
     }
 
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        "LISTCOLLECTIONS".to_string()
     }
 }
 

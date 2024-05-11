@@ -16,7 +16,7 @@ impl Builder for CommandBuilder {
         match command.to_uppercase().as_str() {
             "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => build_drop_collection_command(target_path, arg),
-            "LISTCOLLECTIONS" => todo!(),
+            "LISTCOLLECTIONS" => build_list_collections_query(target_path),
             /* Ok(Box::new(ListCollectionsCommand { db })) */
             "TRUNCATEWAL" => todo!(),
             /* Ok(Box::new(TruncateWalCommand {
@@ -87,4 +87,8 @@ fn build_drop_collection_command(
         Some(name) => Ok(Box::new(DropCollectionCommand::new(target_path, name))),
         None => Err(Error::MissingCollectionName),
     }
+}
+
+fn build_list_collections_query(target_path: &Path) -> Result<Box<dyn Command>> {
+    Ok(Box::new(ListCollectionsCommand::new(target_path)))
 }
