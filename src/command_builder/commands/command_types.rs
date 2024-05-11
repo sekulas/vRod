@@ -25,8 +25,10 @@ impl Command for CreateCollectionCommand {
     fn execute(&self) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
 
+        //TODO: Should i validate before writing to WAL if the collection already exists?
         if collection_path.exists() {
-            return Err(Error::CollectionExists(self.collection_name.to_owned()));
+            println!("Collection {:?} exists.", collection_path);
+            return Ok(());
         }
 
         fs::create_dir(&collection_path)?;
@@ -42,7 +44,7 @@ impl Command for CreateCollectionCommand {
         let collection_path = self.path.join(&self.collection_name);
 
         if collection_path.exists() {
-            fs::remove_dir(collection_path)?;
+            fs::remove_dir_all(collection_path)?;
         }
 
         Ok(())
@@ -54,20 +56,39 @@ impl Command for CreateCollectionCommand {
 }
 
 pub struct DropCollectionCommand {
-    pub collection_name: Option<String>,
+    pub path: PathBuf,
+    pub collection_name: String,
+}
+
+impl DropCollectionCommand {
+    pub fn new(path: &Path, collection_name: String) -> Self {
+        DropCollectionCommand {
+            path: path.to_owned(),
+            collection_name,
+        }
+    }
 }
 
 impl Command for DropCollectionCommand {
     fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
+        let collection_path = self.path.join(&self.collection_name);
+
+        if !collection_path.exists() {
+            println!("Collection {:?} has not been found.", collection_path);
+            return Ok(());
+        }
+
+        fs::remove_dir_all(collection_path)?;
+
+        Ok(())
     }
 
     fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
+        Ok(())
     }
 
     fn to_string(&self) -> String {
-        todo!("Not implemented.")
+        format!("DROP {}", self.collection_name)
     }
 }
 
