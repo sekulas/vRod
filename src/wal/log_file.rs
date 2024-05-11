@@ -48,23 +48,23 @@ impl Default for WalHeader {
 #[derive(Serialize, Deserialize)]
 pub struct WalEntry {
     lsn: u64,
-    committed: bool,
+    commited: bool,
     data_len: u16, //TODO: Is that needed?
     data: String,
 }
 
 impl WalEntry {
-    pub fn new(lsn: u64, data: String) -> Self {
+    pub fn new(lsn: u64, commited: bool, data: String) -> Self {
         Self {
             lsn,
-            committed: false,
+            commited,
             data_len: data.len() as u16,
             data,
         }
     }
 
     pub fn is_committed(&self) -> bool {
-        self.committed
+        self.commited
     }
 
     pub fn get_command_and_arg(&self) -> Result<(String, Option<String>)> {
@@ -126,7 +126,7 @@ impl Wal {
 
     pub fn append(&mut self, data: String) -> Result<()> {
         self.header.current_max_lsn += 1;
-        let entry = WalEntry::new(self.header.current_max_lsn, data);
+        let entry = WalEntry::new(self.header.current_max_lsn, false, data);
 
         self.file.seek(SeekFrom::End(0))?;
         self.header.last_entry_offset = self.file.stream_position()?;
@@ -142,7 +142,7 @@ impl Wal {
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
         let mut entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
-        entry.committed = true;
+        entry.commited = true;
 
         self.file
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
@@ -260,13 +260,13 @@ mod tests {
 
         assert_eq!(entry.data, data);
 
-        assert!(!entry.committed);
+        assert!(!entry.commited);
 
         wal.commit()?;
 
         let entry = wal.get_last_entry().unwrap().unwrap();
 
-        assert!(entry.committed);
+        assert!(entry.commited);
 
         Ok(())
     }
