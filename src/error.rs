@@ -1,15 +1,36 @@
-use crate::utils;
+use crate::{command_query_builder, database, utils, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Missing '--init_database_name' flag with argument for '--init_database' flag.")]
-    MissingInitDatabaseNameFlag,
+    MissingInitDatabaseName,
 
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("Missing argument '-e' - 'command to execute'.")]
+    MissingCommand,
 
-    #[error("Utils error: {0}")]
-    UtilsError(#[from] utils::error::Error),
+    #[error("Target of the command does not exist. Specified target: '{0}'.")]
+    TargetDoesNotExist(String),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Utils(#[from] utils::Error),
+
+    #[error(transparent)]
+    Wal(#[from] wal::Error),
+
+    #[error(transparent)]
+    Database(#[from] database::Error),
+
+    #[error(transparent)]
+    CommandBuilder(#[from] command_query_builder::Error),
+
+    #[error(transparent)]
+    Command(#[from] command_query_builder::CommandError),
+
+    #[error(transparent)]
+    Query(#[from] command_query_builder::QueryError),
 }

@@ -1,24 +1,26 @@
-mod setup;
-mod types;
-use crate::wal::WAL;
+mod error;
 
-use std::io;
-use std::path::PathBuf;
+use crate::wal::Wal;
+use crate::WAL_FILE;
+pub use error::{Error, Result};
+use std::{fs, path::Path};
 
-pub struct Database {
-    path: PathBuf,
-    wal: WAL,
-    //TODO collections: todo!("Implement collections"),
-    //TODO wal: Wal
-}
+pub struct Database;
 
 impl Database {
-    pub fn new(path: PathBuf, name: String) -> Result<(), io::Error> {
-        self::setup::create_database(&path, &name)?;
-        Ok(())
-    }
+    pub fn create(path: &Path, name: String) -> Result<()> {
+        let database_dir = path.join(name);
 
-    pub fn load(path: PathBuf) -> Database {
-        todo!("Load the database from the path")
+        if database_dir.exists() {
+            return Err(Error::DirectoryExists(database_dir));
+        }
+
+        fs::create_dir(&database_dir)?;
+
+        Wal::create(&database_dir.join(WAL_FILE))?;
+
+        println!("Database created at: {:?}", database_dir);
+
+        Ok(())
     }
 }
