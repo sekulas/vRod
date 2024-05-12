@@ -73,7 +73,7 @@ fn run() -> Result<()> {
 
     match (args.init_database, args.init_database_name) {
         (Some(database_path), Some(database_name)) => {
-            return Ok(Database::create(database_path, database_name)?);
+            return Ok(Database::create(&database_path, database_name)?);
         }
         (Some(_), None) => return Err(Error::MissingInitDatabaseName),
         _ => {}

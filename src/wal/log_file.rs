@@ -27,15 +27,6 @@ pub struct WalHeader {
     current_max_lsn: u64,
 }
 
-impl WalHeader {
-    fn new(last_entry_offset: u64, current_max_lsn: u64) -> Self {
-        Self {
-            last_entry_offset,
-            current_max_lsn,
-        }
-    }
-}
-
 impl Default for WalHeader {
     fn default() -> Self {
         Self {
