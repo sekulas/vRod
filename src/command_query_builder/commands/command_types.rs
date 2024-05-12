@@ -98,22 +98,36 @@ impl CQAction for DropCollectionCommand {
 }
 
 pub struct TruncateWalCommand {
-    pub target: Option<String>,
+    pub target_path: PathBuf,
+}
+
+impl TruncateWalCommand {
+    pub fn new(target_path: &Path) -> Self {
+        TruncateWalCommand {
+            target_path: target_path.to_owned(),
+        }
+    }
 }
 
 impl Command for TruncateWalCommand {
     fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
+        let wal_path = self.target_path.join(WAL_FILE);
+
+        fs::remove_file(&wal_path)?;
+
+        Wal::create(&wal_path)?;
+
+        Ok(())
     }
 
     fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
+        Ok(())
     }
 }
 
 impl CQAction for TruncateWalCommand {
     fn to_string(&self) -> String {
-        todo!();
+        "TRUNCATEWAL".to_string()
     }
 }
 

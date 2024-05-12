@@ -16,8 +16,7 @@ impl Builder for CQBuilder {
             "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => build_drop_collection_command(target_path, arg),
             "LISTCOLLECTIONS" => build_list_collections_query(target_path),
-            /* Ok(Box::new(ListCollectionsCommand { db })) */
-            "TRUNCATEWAL" => todo!(),
+            "TRUNCATEWAL" => build_truncate_wal_command(target_path),
             /* Ok(Box::new(TruncateWalCommand {
                 db,
                 target: collection, // If the target is not provided, truncate the databases WAL
@@ -96,6 +95,12 @@ fn build_drop_collection_command(
 
 fn build_list_collections_query(target_path: &Path) -> Result<CQType> {
     Ok(CQType::Query(Box::new(ListCollectionsQuery::new(
+        target_path,
+    ))))
+}
+
+fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
+    Ok(CQType::Command(Box::new(TruncateWalCommand::new(
         target_path,
     ))))
 }
