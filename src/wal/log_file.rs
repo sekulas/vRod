@@ -1,5 +1,5 @@
 use super::{Error, Result};
-use bincode::{deserialize_from, serialize_into};
+use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
@@ -129,15 +129,11 @@ impl Wal {
     }
 
     pub fn commit(&mut self) -> Result<()> {
-        self.file
-            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
+        self.file.seek(SeekFrom::Start(
+            self.header.last_entry_offset + mem::size_of::<u64>() as u64,
+        ))?;
 
-        let mut entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
-        entry.commited = true;
-
-        self.file
-            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
-        serialize_into(&mut BufWriter::new(&self.file), &entry)?;
+        serialize_into(&mut BufWriter::new(&self.file), &true)?;
 
         Ok(())
     }
