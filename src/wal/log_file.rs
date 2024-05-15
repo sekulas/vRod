@@ -40,7 +40,7 @@ impl Default for WalHeader {
 pub struct WalEntry {
     lsn: u64,
     commited: bool,
-    data_len: u16,
+    data_len: u16, //TODO: Is that needed? Maybe hash.
     data: String,
 }
 
