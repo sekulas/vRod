@@ -23,7 +23,7 @@ pub struct Wal {
 
 #[derive(Serialize, Deserialize)]
 pub struct WalHeader {
-    last_entry_offset: u64, //TODO: Is free_space_offset neede?
+    last_entry_offset: u64,
     current_max_lsn: u64,
 }
 
@@ -40,7 +40,7 @@ impl Default for WalHeader {
 pub struct WalEntry {
     lsn: u64,
     commited: bool,
-    data_len: u16, //TODO: Is that needed?
+    data_len: u16,
     data: String,
 }
 

@@ -5,8 +5,6 @@ use crate::wal::Wal;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-//TODO Provide rollback functionality for the commands
-
 pub struct CreateCollectionCommand {
     path: PathBuf,
     collection_name: String,
@@ -24,12 +22,6 @@ impl CreateCollectionCommand {
 impl Command for CreateCollectionCommand {
     fn execute(&self) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
-
-        //TODO: Should i validate before writing to WAL if the collection already exists?
-        if collection_path.exists() {
-            println!("Collection {:?} exists.", collection_path);
-            return Ok(());
-        }
 
         fs::create_dir(&collection_path)?;
         Wal::create(&collection_path.join(WAL_FILE))?;
@@ -71,7 +63,6 @@ impl DropCollectionCommand {
     }
 }
 
-//TODO: Rollback for DROP/REMOVE etc?
 impl Command for DropCollectionCommand {
     fn execute(&self) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
