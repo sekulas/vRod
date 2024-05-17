@@ -10,8 +10,11 @@ pub enum Error {
     #[error("Missing argument '-e' - 'command to execute'.")]
     MissingCommand,
 
-    #[error("Target of the command does not exist. Specified target: '{0}'.")]
-    TargetDoesNotExist(String),
+    #[error("Database does not exist in path: {0}.")]
+    DatabaseDoesNotExist(String),
+
+    #[error("Collection does not exist in database: {0}.")]
+    CollectionDoesNotExist(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

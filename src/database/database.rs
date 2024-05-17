@@ -1,6 +1,6 @@
 use super::{Error, Result};
+use crate::database::DbConfig;
 use crate::wal::Wal;
-use crate::WAL_FILE;
 use std::{fs, path::Path};
 
 pub struct Database;
@@ -15,7 +15,8 @@ impl Database {
 
         fs::create_dir(&database_dir)?;
 
-        Wal::create(&database_dir.join(WAL_FILE))?;
+        DbConfig::create(&database_dir)?;
+        Wal::create(&database_dir)?;
 
         println!("Database created at: {:?}", database_dir);
 

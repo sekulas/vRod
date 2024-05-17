@@ -27,6 +27,7 @@ impl CreateCollectionCommand {
 impl Command for CreateCollectionCommand {
     fn execute(&self) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
+        let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
 
         fs::create_dir(&collection_path)?;
         Wal::create(&collection_path)?;
@@ -34,7 +35,6 @@ impl Command for CreateCollectionCommand {
         fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
         fs::File::create(collection_path.join(INDEX_FILE))?;
 
-        let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
         db_config.add_collection(&self.collection_name)?;
 
         Ok(())

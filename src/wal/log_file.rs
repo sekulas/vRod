@@ -1,3 +1,5 @@
+use crate::types::WAL_FILE;
+
 use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
@@ -71,15 +73,17 @@ impl WalEntry {
 
 impl Wal {
     pub fn create(path: &Path) -> Result<Self> {
+        let file_path = path.join(WAL_FILE);
+
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(path)?;
+            .open(&file_path)?;
 
         let header = WalHeader::default();
         let mut wal = Self {
-            path: path.to_owned(),
+            path: file_path,
             file,
             header,
         };

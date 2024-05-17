@@ -8,8 +8,9 @@ mod wal;
 use crate::types::WAL_FILE;
 use clap::Parser;
 use command_query_builder::{Builder, CQBuilder, CQType, Command};
-use database::Database;
+use database::{CollectionsGuard, Database, DbConfig};
 use std::path::{Path, PathBuf};
+use types::{CommandTarget, DB_CONFIG};
 use utils::embeddings::process_embeddings;
 use wal::{utils::wal_to_txt, Wal, WalType};
 
@@ -145,22 +146,39 @@ fn specify_target_path(
     database_path: Option<PathBuf>,
     collection_name: Option<String>,
 ) -> Result<PathBuf> {
-    let target_path = match (database_path, collection_name) {
-        (Some(database_path), Some(collection_name)) => database_path.join(collection_name),
-        (Some(database_path), None) => database_path,
-        (None, Some(collection_name)) => std::env::current_dir()?.join(collection_name),
-        (None, None) => std::env::current_dir()?,
+    let database_path = get_database_path(database_path)?;
+
+    let target_path = match collection_name {
+        Some(collection_name) => {
+            validate_collection(&database_path, &collection_name)?;
+            database_path.join(collection_name)
+        }
+
+        None => database_path,
     };
 
-    validate_target_path(&target_path)?;
     Ok(target_path)
 }
 
-fn validate_target_path(target_path: &Path) -> Result<()> {
-    if !target_path.join(WAL_FILE).exists() {
-        return Err(Error::TargetDoesNotExist(
-            target_path.to_string_lossy().to_string(),
-        ));
+fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
+    let path = match path {
+        Some(path) => path,
+        None => std::env::current_dir()?,
+    };
+
+    match path.join(DB_CONFIG).exists() {
+        true => Ok(path),
+        false => Err(Error::DatabaseDoesNotExist(
+            path.to_string_lossy().to_string(),
+        )),
     }
-    Ok(())
+}
+
+fn validate_collection(database_path: &Path, collection_name: &str) -> Result<()> {
+    let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+
+    match db_config.collection_exists(collection_name) {
+        true => Ok(()),
+        false => Err(Error::CollectionDoesNotExist(collection_name.to_string())),
+    }
 }
