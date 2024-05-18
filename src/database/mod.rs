@@ -1,6 +1,6 @@
-mod config;
-mod database;
+mod db;
+mod db_config;
 mod error;
-pub use config::*;
-pub use database::Database;
+pub use db::Database;
+pub use db_config::*;
 pub use error::{Error, Result};

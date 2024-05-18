@@ -2,7 +2,7 @@ use super::Result;
 use crate::{
     command_query_builder::{CQAction, Command},
     database::DbConfig,
-    types::{DB_CONFIG, ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE, WAL_FILE},
+    types::{DB_CONFIG, ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE},
     wal::Wal,
 };
 use std::{
