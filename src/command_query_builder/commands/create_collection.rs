@@ -29,11 +29,11 @@ impl Command for CreateCollectionCommand {
         let collection_path = self.path.join(&self.collection_name);
         let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
 
-        fs::create_dir(&collection_path)?;
-        Wal::create(&collection_path)?;
-        fs::File::create(collection_path.join(STORAGE_FILE))?;
-        fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
-        fs::File::create(collection_path.join(INDEX_FILE))?;
+        if collection_path.exists() {
+            fs::remove_dir_all(&collection_path)?;
+        }
+
+        setup_collection(&collection_path)?;
 
         db_config.add_collection(&self.collection_name)?;
 
@@ -49,6 +49,16 @@ impl Command for CreateCollectionCommand {
 
         Ok(())
     }
+}
+
+fn setup_collection(collection_path: &Path) -> Result<()> {
+    fs::create_dir(collection_path)?;
+    Wal::create(collection_path)?;
+    fs::File::create(collection_path.join(STORAGE_FILE))?;
+    fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
+    fs::File::create(collection_path.join(INDEX_FILE))?;
+
+    Ok(())
 }
 
 impl CQAction for CreateCollectionCommand {

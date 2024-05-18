@@ -29,7 +29,10 @@ impl Command for DropCollectionCommand {
         db_config.remove_collection(&self.collection_name)?;
 
         let collection_path = self.path.join(&self.collection_name);
-        fs::remove_dir_all(collection_path)?;
+
+        if collection_path.exists() {
+            fs::remove_dir_all(&collection_path)?;
+        }
 
         Ok(())
     }

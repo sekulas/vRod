@@ -14,15 +14,6 @@ pub struct DbConfig {
     path: PathBuf,
     collections: Vec<String>,
 }
-pub trait CollectionsGuard {
-    fn get_collections(&self) -> &[String];
-}
-
-impl CollectionsGuard for DbConfig {
-    fn get_collections(&self) -> &[String] {
-        &self.collections
-    }
-}
 
 impl DbConfig {
     pub fn new(path: PathBuf) -> Self {
@@ -55,6 +46,13 @@ impl DbConfig {
     }
 
     pub fn add_collection(&mut self, collection_name: &str) -> Result<(), io::Error> {
+        if self.collections.contains(&collection_name.to_owned()) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Collection '{collection_name}' already exists in vr_config.json - cannot add it again"),
+            ));
+        }
+
         self.collections.push(collection_name.to_owned());
 
         let temp_path = self.path.with_extension("tmp");
@@ -74,6 +72,13 @@ impl DbConfig {
     }
 
     pub fn remove_collection(&mut self, collection_name: &str) -> Result<(), io::Error> {
+        if !self.collections.contains(&collection_name.to_owned()) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Collection '{collection_name}' does not exist in vr_config.json - cannot remove it"),
+            ));
+        }
+
         self.collections.retain(|c| c != collection_name);
 
         let temp_path = self.path.with_extension("tmp");
