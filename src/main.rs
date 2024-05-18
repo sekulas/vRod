@@ -1,3 +1,4 @@
+mod collection;
 mod command_query_builder;
 mod database;
 mod error;
