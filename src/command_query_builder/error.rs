@@ -13,4 +13,7 @@ pub enum Error {
 
     #[error("No name for the collection has been provided.")]
     MissingCollectionName,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }

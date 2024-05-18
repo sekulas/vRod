@@ -2,7 +2,7 @@ use crate::utils::{Error, Result};
 use fastembed::TextEmbedding;
 use std::fs;
 use std::io::Write;
-use std::mem::size_of_val;
+use std::mem::size_of;
 
 pub fn process_embeddings(number_of_embeddings: usize) -> Result<()> {
     let model = TextEmbedding::try_new(Default::default())?;
@@ -35,18 +35,18 @@ fn print_embeddings_info(words: &[&str], embeddings: &[Vec<f32>]) {
     println!("Embeddings length: {}", embeddings.len());
     println!("Embedding dimension: {}", embeddings[0].len());
 
-    let string_data_size: usize = words.iter().map(|s| s.len()).sum();
+    let string_data_size: usize = words.iter().map(|s| s.len() * size_of::<char>()).sum();
+
+    let embeddings_data_size: usize = embeddings.iter().map(|e| e.len() * size_of::<f32>()).sum();
 
     println!(
         "Size of the vector of strings: {:.2} MB",
-        (size_of_val(&words) + string_data_size) as f64 / 1024.0 / 1024.0
+        string_data_size as f64 / 1024.0 / 1024.0
     );
 
     println!(
         "Size of the vector of embeddings: {:.2} MB",
-        (size_of_val(&embeddings) + size_of_val(&embeddings[0]) * embeddings.len()) as f64
-            / 1024.0
-            / 1024.0
+        embeddings_data_size as f64 / 1024.0 / 1024.0
     );
 }
 

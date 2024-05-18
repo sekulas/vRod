@@ -4,6 +4,8 @@ use super::commands::*;
 use super::queries::*;
 use super::CQType;
 use crate::command_query_builder::{Error, Result};
+use crate::database::DbConfig;
+use crate::types::DB_CONFIG;
 pub struct CQBuilder;
 
 pub trait Builder {
@@ -67,17 +69,22 @@ impl Builder for CQBuilder {
     }
 }
 
+fn collection_exists(database_path: &Path, collection_name: &str) -> Result<bool> {
+    let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+    Ok(db_config.collection_exists(collection_name))
+}
+
 fn build_create_collection_command(
-    target_path: &Path,
+    database_path: &Path,
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => match collection_exists(target_path, &name) {
+        Some(name) => match collection_exists(database_path, &name)? {
             true => Err(Error::CollectionAlreadyExists {
                 collection_name: name,
             }),
             false => Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
-                target_path,
+                database_path,
                 name,
             )))),
         },
@@ -86,13 +93,13 @@ fn build_create_collection_command(
 }
 
 fn build_drop_collection_command(
-    target_path: &Path,
+    database_path: &Path,
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => match collection_exists(target_path, &name) {
+        Some(name) => match collection_exists(database_path, &name)? {
             true => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
-                target_path,
+                database_path,
                 name,
             )))),
             false => Err(Error::CollectionDoesNotExist {
@@ -101,12 +108,6 @@ fn build_drop_collection_command(
         },
         None => Err(Error::MissingCollectionName),
     }
-}
-
-fn collection_exists(target_path: &Path, collection_name: &str) -> bool {
-    let collection_path = target_path.join(collection_name);
-
-    collection_path.exists()
 }
 
 fn build_list_collections_query(target_path: &Path) -> Result<CQType> {

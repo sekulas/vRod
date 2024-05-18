@@ -1,3 +1,5 @@
+use crate::types::WAL_FILE;
+
 use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
@@ -40,7 +42,7 @@ impl Default for WalHeader {
 pub struct WalEntry {
     lsn: u64,
     commited: bool,
-    data_len: u16,
+    data_len: u16, //TODO: Is that needed? Maybe hash.
     data: String,
 }
 
@@ -71,15 +73,17 @@ impl WalEntry {
 
 impl Wal {
     pub fn create(path: &Path) -> Result<Self> {
+        let file_path = path.join(WAL_FILE);
+
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(path)?;
+            .open(&file_path)?;
 
         let header = WalHeader::default();
         let mut wal = Self {
-            path: path.to_owned(),
+            path: file_path,
             file,
             header,
         };
@@ -140,18 +144,6 @@ impl Wal {
 
     fn define_consistency(mut self) -> Result<WalType> {
         match self.get_last_entry() {
-            // TODO: Is that even possible? Header with the last entry data is being flushed after the data has been serialized
-            // Can then it be inconsistent?
-            //
-            //Not written fully - Ovveride last entry
-            // Ok(Some(entry)) if entry.data.len() != entry.data_len as usize => { //TODO: Is that reliable?
-            //     self.header.free_space_offset = self.header.last_entry_offset;
-            //     Ok(WalType::Inconsistent(self))
-            // }
-            // Ok(Some(entry)) if self.header.current_max_lsn < entry.lsn => {
-            //     self.header.free_space_offset = self.header.last_entry_offset;
-            //     Ok(WalType::Inconsistent(self))
-            // }
             Ok(Some(entry)) if !entry.is_committed() => {
                 let (uncommited_command, arg) = entry.get_command_and_arg()?;
                 Ok(WalType::Uncommited {
@@ -198,48 +190,14 @@ impl Wal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-    };
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
-
-    struct TestFileGuard {
-        path: PathBuf,
-    }
-
-    impl TestFileGuard {
-        fn new(path: &Path) -> std::io::Result<Self> {
-            if path.exists() {
-                fs::remove_file(path)?;
-            }
-            fs::File::create(path)?;
-
-            Ok(Self {
-                path: path.to_owned(),
-            })
-        }
-    }
-
-    impl Drop for TestFileGuard {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
 
     #[test]
     fn append_and_commit_should_commit_last_entry() -> Result<()> {
-        let wal_file: &Path = Path::new("test1.wal");
-
-        let _guard = TestFileGuard::new(wal_file)?;
-        let wal = Wal::load(wal_file)?;
+        let temp_dir = tempfile::tempdir()?;
+        let mut wal = Wal::create(temp_dir.path())?;
 
         let data = "Hello, World!".to_string();
-
-        let mut wal = match wal {
-            WalType::Consistent(wal) => wal,
-            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
-        };
 
         wal.append(data.clone())?;
 
@@ -260,21 +218,13 @@ mod tests {
 
     #[test]
     fn flush_header_changes_lsn_value() -> Result<()> {
-        let wal_file: &Path = Path::new("test2.wal");
-
-        let _guard = TestFileGuard::new(wal_file)?;
-
-        let wal = Wal::load(wal_file)?;
-
-        let mut wal = match wal {
-            WalType::Consistent(wal) => wal,
-            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
-        };
+        let temp_dir = tempfile::tempdir()?;
+        let mut wal = Wal::create(temp_dir.path())?;
 
         wal.header.current_max_lsn = 10;
         wal.flush_header()?;
 
-        let wal = Wal::load(wal_file)?;
+        let wal = Wal::load(&temp_dir.path().join(WAL_FILE))?;
 
         let wal = match wal {
             WalType::Consistent(wal) => wal,
@@ -288,15 +238,8 @@ mod tests {
 
     #[test]
     fn get_last_entry_returns_none_if_no_entries() -> Result<()> {
-        let wal_file: &Path = Path::new("test3.wal");
-
-        let _guard = TestFileGuard::new(wal_file)?;
-        let wal = Wal::load(wal_file)?;
-
-        let mut wal = match wal {
-            WalType::Consistent(wal) => wal,
-            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
-        };
+        let temp_dir = tempfile::tempdir()?;
+        let mut wal = Wal::create(temp_dir.path())?;
 
         let entry = wal.get_last_entry()?;
 
@@ -307,15 +250,8 @@ mod tests {
 
     #[test]
     fn get_last_entry_returns_last_entry_after_header_update() -> Result<()> {
-        let wal_file: &Path = Path::new("test4.wal");
-
-        let _guard = TestFileGuard::new(wal_file)?;
-        let wal = Wal::load(wal_file)?;
-
-        let mut wal = match wal {
-            WalType::Consistent(wal) => wal,
-            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
-        };
+        let temp_dir = tempfile::tempdir()?;
+        let mut wal = Wal::create(temp_dir.path())?;
 
         let data1 = "Hello, World!".to_string();
         wal.append(data1.clone())?;
