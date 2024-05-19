@@ -1,11 +1,20 @@
-use super::Result;
+use super::{id_offset_storage::IdOffsetStorage, index::Index, storage::Storage, Result};
 use crate::{
     types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE},
     wal::Wal,
 };
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-pub struct Collection;
+pub struct Collection {
+    path: PathBuf,
+    storage: Storage,
+    wal: Wal,
+    id_offset_storage: IdOffsetStorage,
+    index: Index,
+}
 
 impl Collection {
     pub fn create(path: &Path, name: &str) -> Result<()> {
