@@ -66,6 +66,7 @@ impl Record {
     fn calculate_checksum(&self) -> u64 {
         let mut temp_record = self.clone();
         temp_record.record_header.checksum = 0;
+        temp_record.record_header.deleted = false;
 
         let mut hasher = DefaultHasher::new();
         let mut temp_buffer = Vec::new();
@@ -78,8 +79,8 @@ impl Record {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RecordHeader {
     lsn: u64,
-    deleted: bool,
     id: u64,
+    deleted: bool,
     checksum: u64,
     payload_offset: u64,
 }
@@ -88,8 +89,8 @@ impl RecordHeader {
     pub fn new(lsn: u64, id: u64, payload_offset: u64) -> Self {
         Self {
             lsn,
-            deleted: false,
             id,
+            deleted: false,
             checksum: 0,
             payload_offset,
         }
@@ -160,6 +161,16 @@ impl Storage {
             Ok(record) => Ok(record),
             Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
         }
+    }
+
+    pub fn delete(&mut self, offset: u64) -> Result<()> {
+        let mut record_header = self.search(offset)?.record_header;
+        record_header.deleted = true;
+        
+        self.file.seek(SeekFrom::Start(offset))?;
+        serialize_into(&mut BufWriter::new(&self.file), &record_header)?;
+
+        Ok(())
     }
 
     fn flush_header(&mut self) -> Result<()> {
@@ -297,7 +308,29 @@ mod tests {
 
     #[test]
     fn delete_record_should_delete_record() -> Result<()> {
-        todo!()
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let lsn = 1;
+        let next_id = 1;
+        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+
+        //Act
+        storage.delete(offset)?;
+
+        //Assert
+        let record = storage.search(offset)?;
+
+        assert_eq!(record.record_header.lsn, lsn);
+        assert_eq!(record.record_header.id, next_id);
+        assert!(record.record_header.deleted);
+        assert_eq!(record.record_header.checksum, record.calculate_checksum());
+        assert_eq!(record.vector, vector);
+        assert_eq!(record.payload, payload);
+        Ok(())
     }
 
     #[test]
