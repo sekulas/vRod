@@ -30,4 +30,10 @@ impl Collection {
 
         Ok(())
     }
+
+    pub fn load(path: &Path) -> Result<Self> {
+        todo!();
+    }
+
+    //TODO: HERE VECTOR VALIDATION
 }
