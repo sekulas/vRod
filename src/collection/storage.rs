@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::STORAGE_FILE;
 
-use super::Result;
+use super::{Error, Result};
 
 pub struct Storage {
     path: PathBuf,
@@ -154,6 +154,14 @@ impl Storage {
         Ok(record_offset)
     }
 
+    pub fn search(&mut self, offset: u64) -> Result<Record> {
+        self.file.seek(SeekFrom::Start(offset))?;
+        match deserialize_from(&mut BufReader::new(&self.file)) {
+            Ok(record) => Ok(record),
+            Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
+        }
+    }
+
     fn flush_header(&mut self) -> Result<()> {
         self.file.seek(SeekFrom::Start(0))?;
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
@@ -240,12 +248,51 @@ mod tests {
 
     #[test]
     fn search_record_should_return_record() -> Result<()> {
-        todo!()
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let lsn = 1;
+        let next_id = 1;
+        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+
+        //Act
+        let record = storage.search(offset)?;
+
+        //Assert
+        assert_eq!(record.record_header.lsn, lsn);
+        assert_eq!(record.record_header.id, next_id);
+        assert!(!record.record_header.deleted);
+        assert_eq!(record.record_header.checksum, record.calculate_checksum());
+        assert_eq!(record.vector, vector);
+        assert_eq!(record.payload, payload);
+
+        Ok(())
     }
 
     #[test]
     fn search_record_should_return_error_when_offset_does_not_exist() -> Result<()> {
-        todo!()
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let lsn = 1;
+        let next_id = 1;
+        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let _ = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let record = storage.search(offset)?;
+        let invalid_offset = offset - serialized_size(&record)? - 1;
+
+        //Act
+        let result = storage.search(invalid_offset);
+
+        //Assert
+        assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
