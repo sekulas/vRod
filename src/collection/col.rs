@@ -32,7 +32,7 @@ impl Collection {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        todo!();
+        todo!("Not implemented.");
     }
 
     //TODO: HERE VECTOR VALIDATION

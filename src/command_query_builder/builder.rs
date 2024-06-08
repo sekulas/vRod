@@ -1,8 +1,11 @@
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 
 use super::commands::*;
 use super::queries::*;
 use super::CQType;
+use crate::collection::*;
 use crate::command_query_builder::{Error, Result};
 use crate::database::DbConfig;
 use crate::types::DB_CONFIG;
@@ -23,12 +26,7 @@ impl Builder for CQBuilder {
                 db,
                 target: collection, // If the target is not provided, truncate the databases WAL
             })) */
-            "INSERT" => todo!(),
-            /* Ok(Box::new(InsertCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
+            "INSERT" => build_insert_command(target_path, arg),
             "BULKINSERT" => todo!(),
             /* Ok(Box::new(BulkInsertCommand {
                 db,
@@ -120,4 +118,38 @@ fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
     Ok(CQType::Command(Box::new(TruncateWalCommand::new(
         target_path,
     ))))
+}
+
+fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Result<CQType> {
+    let collection_name = target_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let database_path = target_path.parent().map(|path| path.to_path_buf());
+
+    if database_path.is_none() || collection_name.is_none() {
+        return Err(Error::CannotDetermineCollectionPath {
+            database_path,
+            collection_name,
+        });
+    }
+
+    let database_path = database_path.unwrap();
+    let collection_name = collection_name.unwrap();
+
+    if !collection_exists(&database_path, &collection_name)? {
+        return Err(Error::CollectionDoesNotExist { collection_name });
+    }
+
+    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
+        description: e.to_string(),
+    })?;
+
+    if vec_n_payload.is_none() {
+        return Err(Error::MissingArgument);
+    }
+
+    let insert_command =
+        InsertCommand::new(Rc::new(RefCell::new(collection)), vec_n_payload.unwrap());
+
+    Ok(CQType::Command(Box::new(insert_command)))
 }

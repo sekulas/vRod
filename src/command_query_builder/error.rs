@@ -1,4 +1,3 @@
-use crate::collection::Error as CollectionError;
 use std::path::PathBuf;
 
 pub type Result<T> = core::result::Result<T, Error>;
