@@ -39,27 +39,6 @@ impl CQAction for TruncateWalCommand {
     }
 }
 
-pub struct InsertCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for InsertCommand {
-    fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for InsertCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
 pub struct BulkInsertCommand {
     pub collection_name: Option<String>,
     pub arg: Option<String>,
