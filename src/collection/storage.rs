@@ -379,6 +379,11 @@ mod tests {
             storage.update(new_lsn, offset, Some(new_vector.clone()), Some(new_payload))?;
 
         //Assert
+        let old_record = storage.search(offset)?;
+
+        assert_eq!(old_record.record_header.lsn, new_lsn);
+        assert!(old_record.record_header.deleted);
+
         let record = storage.search(new_offset)?;
 
         assert_eq!(record.record_header.lsn, new_lsn);
