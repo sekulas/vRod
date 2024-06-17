@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::STORAGE_FILE;
 
-use super::{types::OperationMode, Error, Result};
+use super::{
+    types::{Dim, Offset, OperationMode},
+    Error, Result,
+};
 
 pub struct Storage {
     path: PathBuf,
@@ -47,12 +50,12 @@ impl StorageHeader {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
     record_header: RecordHeader,
-    vector: Vec<f32>,
+    vector: Vec<Dim>,
     payload: String,
 }
 
 impl Record {
-    pub fn new(lsn: u64, payload_offset: u64, vector: &[f32], payload: &str) -> Self {
+    pub fn new(lsn: u64, payload_offset: Offset, vector: &[Dim], payload: &str) -> Self {
         let mut record = Self {
             record_header: RecordHeader::new(lsn, payload_offset),
             vector: vector.to_owned(),
@@ -80,11 +83,11 @@ pub struct RecordHeader {
     lsn: u64,
     deleted: bool,
     checksum: u64,
-    payload_offset: u64,
+    payload_offset: Offset,
 }
 
 impl RecordHeader {
-    pub fn new(lsn: u64, payload_offset: u64) -> Self {
+    pub fn new(lsn: u64, payload_offset: Offset) -> Self {
         Self {
             lsn,
             deleted: false,
@@ -136,7 +139,12 @@ impl Storage {
         Ok(storage)
     }
 
-    pub fn insert(&mut self, vector: &[f32], payload: &str, mode: &OperationMode) -> Result<u64> {
+    pub fn insert(
+        &mut self,
+        vector: &[Dim],
+        payload: &str,
+        mode: &OperationMode,
+    ) -> Result<Offset> {
         if let OperationMode::RawOperation = mode {
             self.header.current_max_lsn += 1;
         }
@@ -156,7 +164,7 @@ impl Storage {
         Ok(record_offset)
     }
 
-    pub fn search(&mut self, offset: u64) -> Result<Record> {
+    pub fn search(&mut self, offset: Offset) -> Result<Record> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from(&mut BufReader::new(&self.file)) {
             Ok(record) => Ok(record),
@@ -164,7 +172,7 @@ impl Storage {
         }
     }
 
-    pub fn delete(&mut self, offset: u64, mode: &OperationMode) -> Result<()> {
+    pub fn delete(&mut self, offset: Offset, mode: &OperationMode) -> Result<()> {
         let mut record = self.search(offset)?;
 
         if let OperationMode::RawOperation = mode {
@@ -187,8 +195,8 @@ impl Storage {
 
     pub fn update(
         &mut self,
-        offset: u64,
-        vector: Option<&[f32]>,
+        offset: Offset,
+        vector: Option<&[Dim]>,
         payload: Option<&str>,
     ) -> Result<u64> {
         let mut record = self.search(offset)?;
@@ -229,7 +237,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
         //Act
@@ -253,10 +261,10 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
+        let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
 
         //Act
@@ -290,7 +298,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
         let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
@@ -313,7 +321,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
         let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
@@ -335,7 +343,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
         let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
@@ -360,9 +368,9 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let new_vector: Vec<f32> = vec![2.0, 3.0, 4.0];
+        let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let new_payload = "test2";
 
         let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;

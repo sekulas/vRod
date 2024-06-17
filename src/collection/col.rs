@@ -1,3 +1,4 @@
+use super::types::Dim;
 use super::{
     id_offset_storage::IdOffsetStorage, index::Index, storage::Storage, types::OperationMode,
     Result,
@@ -9,7 +10,6 @@ use crate::{
 use std::{
     fs,
     path::{Path, PathBuf},
-    vec,
 };
 
 pub struct Collection {
@@ -39,7 +39,7 @@ impl Collection {
         todo!("Not implemented.");
     }
 
-    pub fn insert(&mut self, vector: &[f32], payload: &str) -> Result<()> {
+    pub fn insert(&mut self, vector: &[Dim], payload: &str) -> Result<()> {
         self.storage
             .insert(vector, payload, &OperationMode::RawOperation)?;
 
