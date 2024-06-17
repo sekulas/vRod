@@ -5,6 +5,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("Cannot parse: {data}\nVector must be in the format: vector;payload\\n.")]
+    InvalidDataFormat { data: String },
+
+    #[error(transparent)]
+    ParseFloat(#[from] std::num::ParseFloatError),
+
     #[error(transparent)]
     Collection(#[from] collection::Error),
 

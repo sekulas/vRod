@@ -1,4 +1,7 @@
-use super::{id_offset_storage::IdOffsetStorage, index::Index, storage::Storage, Result};
+use super::{
+    id_offset_storage::IdOffsetStorage, index::Index, storage::Storage, types::OperationMode,
+    Result,
+};
 use crate::{
     types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE},
     wal::Wal,
@@ -6,6 +9,7 @@ use crate::{
 use std::{
     fs,
     path::{Path, PathBuf},
+    vec,
 };
 
 pub struct Collection {
@@ -35,5 +39,10 @@ impl Collection {
         todo!("Not implemented.");
     }
 
-    //TODO: HERE VECTOR VALIDATION
+    pub fn insert(&mut self, vector: &[f32], payload: &str) -> Result<()> {
+        self.storage
+            .insert(vector, payload, &OperationMode::RawOperation)?;
+
+        Ok(())
+    }
 }

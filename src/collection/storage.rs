@@ -52,10 +52,10 @@ pub struct Record {
 }
 
 impl Record {
-    pub fn new(lsn: u64, payload_offset: u64, vector: Vec<f32>, payload: &str) -> Self {
+    pub fn new(lsn: u64, payload_offset: u64, vector: &[f32], payload: &str) -> Self {
         let mut record = Self {
             record_header: RecordHeader::new(lsn, payload_offset),
-            vector,
+            vector: vector.to_owned(),
             payload: payload.to_owned(),
         };
 
@@ -136,7 +136,7 @@ impl Storage {
         Ok(storage)
     }
 
-    pub fn insert(&mut self, vector: Vec<f32>, payload: &str, mode: &OperationMode) -> Result<u64> {
+    pub fn insert(&mut self, vector: &[f32], payload: &str, mode: &OperationMode) -> Result<u64> {
         if let OperationMode::RawOperation = mode {
             self.header.current_max_lsn += 1;
         }
@@ -188,13 +188,13 @@ impl Storage {
     pub fn update(
         &mut self,
         offset: u64,
-        vector: Option<Vec<f32>>,
+        vector: Option<&[f32]>,
         payload: Option<&str>,
     ) -> Result<u64> {
         let mut record = self.search(offset)?;
 
         if let Some(vector) = vector {
-            record.vector = vector;
+            record.vector = vector.to_owned();
         }
         if let Some(payload) = payload {
             record.payload = payload.to_owned();
@@ -205,7 +205,7 @@ impl Storage {
 
         self.delete(offset, &mode)?;
 
-        let new_offset = self.insert(record.vector, &record.payload, &mode)?;
+        let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
 
         self.flush_header()?;
 
@@ -233,7 +233,7 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         //Assert
         let mut file = File::open(storage.path)?;
@@ -253,17 +253,15 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let next_id2 = 2;
         let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
 
         //Act
-        let offset1 = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
-        let offset2 = storage.insert(vector2.clone(), payload2, &OperationMode::RawOperation)?;
+        let offset1 = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation)?;
 
         //Assert
         let mut file = File::open(storage.path)?;
@@ -292,11 +290,10 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let offset = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         //Act
         let record = storage.search(offset)?;
@@ -316,12 +313,11 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let _ = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
-        let offset = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
+        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         let record = storage.search(offset)?;
         let invalid_offset = offset - serialized_size(&record)? - 1;
@@ -339,11 +335,10 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let offset = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         //Act
         storage.delete(offset, &OperationMode::RawOperation)?;
@@ -365,16 +360,15 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let new_vector: Vec<f32> = vec![2.0, 3.0, 4.0];
         let new_payload = "test2";
 
-        let offset = storage.insert(vector.clone(), payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         //Act
-        let new_offset = storage.update(offset, Some(new_vector.clone()), Some(new_payload))?;
+        let new_offset = storage.update(offset, Some(&new_vector), Some(new_payload))?;
 
         //Assert
         let old_record = storage.search(offset)?;
