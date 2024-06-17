@@ -16,8 +16,8 @@ pub enum Error {
     Vector: '{vector:?}'"
     )]
     InvalidVectorDim {
-        expected: u64,
-        actual: u64,
+        expected: u16,
+        actual: u16,
         vector: Vec<Dim>,
     },
 

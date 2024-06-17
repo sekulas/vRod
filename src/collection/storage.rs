@@ -21,7 +21,7 @@ pub struct Storage {
 #[derive(Serialize, Deserialize, Default)]
 pub struct StorageHeader {
     current_max_lsn: u64,
-    vector_dim_amount: Option<u64>,
+    vector_dim_amount: u16,
 }
 
 impl StorageHeader {
@@ -228,17 +228,17 @@ impl Storage {
 
     fn validate_vector(&mut self, vector: &[Dim]) -> Result<()> {
         match self.header.vector_dim_amount {
-            Some(dim) => {
-                if vector.len() as u64 != dim {
+            0 => {
+                self.header.vector_dim_amount = vector.len() as u16;
+            }
+            expected => {
+                if vector.len() as u16 != expected {
                     return Err(Error::InvalidVectorDim {
-                        expected: dim,
-                        actual: vector.len() as u64,
+                        expected,
+                        actual: vector.len() as u16,
                         vector: vector.to_owned(),
                     });
                 }
-            }
-            None => {
-                self.header.vector_dim_amount = Some(vector.len() as u64);
             }
         }
 

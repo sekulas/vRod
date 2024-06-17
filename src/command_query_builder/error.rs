@@ -25,6 +25,18 @@ pub enum Error {
     #[error("Missing argument for the given command.")]
     MissingArgument,
 
+    #[error("Cannot parse: {data}\nVector must be in the format: vector;payload\\n.")]
+    InvalidDataFormat { data: String },
+
+    #[error("No vector provided in: {data}\nVector must be in the format: vector;payload\\n.")]
+    NoVector { data: String },
+
+    #[error("No payload provided in: {data}\nVector must be in the format: vector;payload\\n.")]
+    NoPayload { data: String },
+
+    #[error(transparent)]
+    ParseFloat(#[from] std::num::ParseFloatError),
+
     #[error("{description}")]
     Collection { description: String },
 
