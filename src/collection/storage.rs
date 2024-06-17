@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::STORAGE_FILE;
 
-use super::{Error, Result};
+use super::{types::OperationMode, Error, Result};
 
 pub struct Storage {
     path: PathBuf,
@@ -138,18 +138,34 @@ impl Storage {
         Ok(storage)
     }
 
-    pub fn insert(&mut self, lsn: u64, id: u64, vector: Vec<f32>, payload: &str) -> Result<u64> {
+    pub fn insert(
+        &mut self,
+        id: u64,
+        vector: Vec<f32>,
+        payload: &str,
+        mode: &OperationMode,
+    ) -> Result<u64> {
+        if let OperationMode::RawOperation = mode {
+            self.header.current_max_lsn += 1;
+        }
+
         let record_offset = self.file.seek(SeekFrom::End(0))?;
 
         let payload_offset =
             record_offset + mem::size_of::<RecordHeader>() as u64 + serialized_size(&vector)?;
 
-        let record = Record::new(lsn, id, payload_offset, vector, payload);
+        let record = Record::new(
+            self.header.current_max_lsn,
+            id,
+            payload_offset,
+            vector,
+            payload,
+        );
 
         serialize_into(&mut BufWriter::new(&self.file), &record)?;
-
-        self.header.current_max_lsn += 1;
-        self.flush_header()?;
+        if let OperationMode::RawOperation = mode {
+            self.flush_header()?;
+        }
 
         Ok(record_offset)
     }
@@ -162,21 +178,29 @@ impl Storage {
         }
     }
 
-    pub fn delete(&mut self, lsn: u64, offset: u64) -> Result<()> {
+    pub fn delete(&mut self, offset: u64, mode: &OperationMode) -> Result<()> {
         let mut record = self.search(offset)?;
-        record.record_header.lsn = lsn;
+
+        if let OperationMode::RawOperation = mode {
+            self.header.current_max_lsn += 1;
+        }
+
+        record.record_header.lsn = self.header.current_max_lsn;
         record.record_header.deleted = true;
         record.record_header.checksum = record.calculate_checksum();
 
         self.file.seek(SeekFrom::Start(offset))?;
         serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
 
+        if let OperationMode::RawOperation = mode {
+            self.flush_header()?;
+        }
+
         Ok(())
     }
 
     pub fn update(
         &mut self,
-        lsn: u64,
         offset: u64,
         vector: Option<Vec<f32>>,
         payload: Option<&str>,
@@ -190,10 +214,19 @@ impl Storage {
             record.payload = payload.to_owned();
         }
 
-        self.delete(lsn, offset)?;
+        self.header.current_max_lsn += 1;
+        let mode = OperationMode::InUpdateOperation;
 
-        let new_offset =
-            self.insert(lsn, record.record_header.id, record.vector, &record.payload)?;
+        self.delete(offset, &mode)?;
+
+        let new_offset = self.insert(
+            record.record_header.id,
+            record.vector,
+            &record.payload,
+            &mode,
+        )?;
+
+        self.flush_header()?;
 
         Ok(new_offset)
     }
@@ -215,26 +248,29 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
         //Act
-        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let offset = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
 
         //Assert
         let mut file = File::open(storage.path)?;
         file.seek(SeekFrom::Start(offset))?;
         let record: Record = deserialize_from(&mut BufReader::new(&file))?;
 
-        assert_eq!(record.record_header.lsn, lsn);
+        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
         assert_eq!(record.record_header.id, next_id);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, vector);
         assert_eq!(record.payload, payload);
-
         Ok(())
     }
 
@@ -243,26 +279,33 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let lsn2 = 2;
         let next_id2 = 2;
         let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
 
         //Act
-        let offset1 = storage.insert(lsn, next_id, vector.clone(), payload)?;
-        let offset2 = storage.insert(lsn2, next_id2, vector2.clone(), payload2)?;
+        let offset1 = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
+        let offset2 = storage.insert(
+            next_id2,
+            vector2.clone(),
+            payload2,
+            &OperationMode::RawOperation,
+        )?;
 
         //Assert
         let mut file = File::open(storage.path)?;
         file.seek(SeekFrom::Start(offset1))?;
         let record1: Record = deserialize_from(&mut BufReader::new(&file))?;
 
-        assert_eq!(record1.record_header.lsn, lsn);
         assert_eq!(record1.record_header.id, next_id);
         assert!(!record1.record_header.deleted);
         assert_eq!(record1.record_header.checksum, record1.calculate_checksum());
@@ -272,13 +315,13 @@ mod tests {
         file.seek(SeekFrom::Start(offset2))?;
         let record2: Record = deserialize_from(&mut BufReader::new(&file))?;
 
-        assert_eq!(record2.record_header.lsn, lsn2);
         assert_eq!(record2.record_header.id, next_id2);
         assert!(!record2.record_header.deleted);
         assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
         assert_eq!(record2.vector, vector2);
         assert_eq!(record2.payload, payload2);
 
+        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
         Ok(())
     }
 
@@ -287,18 +330,22 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let offset = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
 
         //Act
         let record = storage.search(offset)?;
 
         //Assert
-        assert_eq!(record.record_header.lsn, lsn);
+        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
         assert_eq!(record.record_header.id, next_id);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
@@ -313,13 +360,23 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let _ = storage.insert(lsn, next_id, vector.clone(), payload)?;
-        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let _ = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
+        let offset = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
+
         let record = storage.search(offset)?;
         let invalid_offset = offset - serialized_size(&record)? - 1;
 
@@ -336,26 +393,30 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let new_lsn = lsn + 1;
 
-        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let offset = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
 
         //Act
-        storage.delete(new_lsn, offset)?;
+        storage.delete(offset, &OperationMode::RawOperation)?;
 
         //Assert
         let record = storage.search(offset)?;
 
-        assert_eq!(record.record_header.lsn, new_lsn);
         assert_eq!(record.record_header.id, next_id);
         assert!(record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, vector);
         assert_eq!(record.payload, payload);
+
+        assert_eq!(storage.header.current_max_lsn, record.record_header.lsn);
         Ok(())
     }
 
@@ -364,29 +425,31 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
-        let lsn = 1;
         let next_id = 1;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let new_lsn = lsn + 1;
         let new_vector: Vec<f32> = vec![2.0, 3.0, 4.0];
         let new_payload = "test2";
 
-        let offset = storage.insert(lsn, next_id, vector.clone(), payload)?;
+        let offset = storage.insert(
+            next_id,
+            vector.clone(),
+            payload,
+            &OperationMode::RawOperation,
+        )?;
 
         //Act
-        let new_offset =
-            storage.update(new_lsn, offset, Some(new_vector.clone()), Some(new_payload))?;
+        let new_offset = storage.update(offset, Some(new_vector.clone()), Some(new_payload))?;
 
         //Assert
         let old_record = storage.search(offset)?;
 
-        assert_eq!(old_record.record_header.lsn, new_lsn);
+        assert_eq!(old_record.record_header.lsn, storage.header.current_max_lsn);
         assert!(old_record.record_header.deleted);
 
         let record = storage.search(new_offset)?;
 
-        assert_eq!(record.record_header.lsn, new_lsn);
+        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
         assert_eq!(record.record_header.id, next_id);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
