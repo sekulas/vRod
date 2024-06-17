@@ -21,6 +21,7 @@ pub struct Storage {
 #[derive(Serialize, Deserialize, Default)]
 pub struct StorageHeader {
     current_max_lsn: u64,
+    vector_dim_amount: Option<u64>,
 }
 
 impl StorageHeader {
@@ -141,6 +142,8 @@ impl Storage {
         payload: &str,
         mode: &OperationMode,
     ) -> Result<Offset> {
+        self.validate_vector(vector)?;
+
         if let OperationMode::RawOperation = mode {
             self.header.current_max_lsn += 1;
         }
@@ -198,6 +201,7 @@ impl Storage {
         let mut record = self.search(offset)?;
 
         if let Some(vector) = vector {
+            self.validate_vector(vector)?;
             record.vector = vector.to_owned();
         }
         if let Some(payload) = payload {
@@ -219,6 +223,25 @@ impl Storage {
     fn flush_header(&mut self) -> Result<()> {
         self.file.seek(SeekFrom::Start(0))?;
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
+        Ok(())
+    }
+
+    fn validate_vector(&mut self, vector: &[Dim]) -> Result<()> {
+        match self.header.vector_dim_amount {
+            Some(dim) => {
+                if vector.len() as u64 != dim {
+                    return Err(Error::InvalidVectorDim {
+                        expected: dim,
+                        actual: vector.len() as u64,
+                        vector: vector.to_owned(),
+                    });
+                }
+            }
+            None => {
+                self.header.vector_dim_amount = Some(vector.len() as u64);
+            }
+        }
+
         Ok(())
     }
 }
@@ -387,6 +410,44 @@ mod tests {
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, new_vector);
         assert_eq!(record.payload, new_payload);
+        Ok(())
+    }
+
+    #[test]
+    fn inserting_vecs_with_different_dim_amounts_should_return_error() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
+        let payload2 = "test2";
+
+        //Act
+        let result = storage.insert(&vector, payload, &OperationMode::RawOperation);
+        let result2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation);
+
+        //Assert
+        assert!(result.is_ok());
+        assert!(result2.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn updating_vec_to_different_dim_amount_should_return_error() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
+
+        //Act
+        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let result = storage.update(offset, Some(&vector2), None);
+
+        //Assert
+        assert!(result.is_err());
         Ok(())
     }
 }

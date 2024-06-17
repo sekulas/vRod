@@ -1,14 +1,24 @@
-use crate::wal;
+use crate::{types::Dim, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Cannot deserialize record with the given offset '{offset}'. Source: '{source}")]
+    #[error("Cannot deserialize record with the given offset: '{offset}'. Source: '{source}")]
     CannotDeserializeRecord {
         offset: u64,
         #[source]
         source: bincode::Error,
+    },
+
+    #[error(
+        "Provided vector has incorrect dimension. Expected: '{expected}', Actural: '{actual}'.\
+    Vector: '{vector:?}'"
+    )]
+    InvalidVectorDim {
+        expected: u64,
+        actual: u64,
+        vector: Vec<Dim>,
     },
 
     #[error(transparent)]
