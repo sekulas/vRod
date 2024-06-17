@@ -6,15 +6,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::{types::OperationMode, Error, Result};
 use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
-use crate::types::STORAGE_FILE;
-
-use super::{
-    types::{Dim, Offset, OperationMode},
-    Error, Result,
-};
+use crate::types::{Dim, Offset, STORAGE_FILE};
 
 pub struct Storage {
     path: PathBuf,
