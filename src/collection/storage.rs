@@ -6,7 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{types::OperationMode, Error, Result};
+use super::{
+    types::{OperationMode, NONE, NOT_SET},
+    Error, Result,
+};
 use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +68,7 @@ impl Record {
 
     pub fn calculate_checksum(&self) -> u64 {
         let mut temp_record = self.clone();
-        temp_record.record_header.checksum = 0;
+        temp_record.record_header.checksum = NONE;
 
         let mut hasher = DefaultHasher::new();
         let mut temp_buffer = Vec::new();
@@ -88,7 +91,7 @@ impl RecordHeader {
         Self {
             lsn,
             deleted: false,
-            checksum: 0,
+            checksum: NONE,
             payload_offset,
         }
     }
@@ -228,7 +231,7 @@ impl Storage {
 
     fn validate_vector(&mut self, vector: &[Dim]) -> Result<()> {
         match self.header.vector_dim_amount {
-            0 => {
+            NOT_SET => {
                 self.header.vector_dim_amount = vector.len() as u16;
             }
             expected => {
