@@ -21,34 +21,71 @@ pub struct Storage {
     header: StorageHeader,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 struct StorageHeader {
     current_max_lsn: u64,
     vector_dim_amount: u16,
+    checksum: u64,
 }
 
 impl StorageHeader {
-    fn define_header(storage_path: &Path) -> Result<StorageHeader> {
-        let header = StorageHeader::default();
-        let mut storage = Storage {
-            path: storage_path.to_owned(),
-            file: OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .open(storage_path)?,
-            header,
+    fn new(current_max_lsn: u64, vector_dim_amount: u16) -> Self {
+        let mut header = Self {
+            current_max_lsn,
+            vector_dim_amount,
+            checksum: NONE,
         };
 
-        //TODO: modify header basing on the latest record.
+        header.checksum = header.calculate_checksum();
+        header
+    }
 
-        storage.flush_header()?;
-        Ok(storage.header)
+    fn define_header(file: &mut File) -> Result<StorageHeader> {
+        file.seek(SeekFrom::Start(mem::size_of::<StorageHeader>() as u64))?;
+        let mut reader = BufReader::new(file);
+
+        let mut max_lsn = NONE;
+        let mut vec_dim_amount = NOT_SET;
+
+        match deserialize_from::<_, Record>(&mut reader) {
+            Ok(record) => {
+                max_lsn = record.record_header.lsn;
+                vec_dim_amount = record.vector.len() as u16;
+
+                while let Ok(record) = deserialize_from::<_, Record>(&mut reader) {
+                    if record.record_header.lsn > max_lsn {
+                        max_lsn = record.record_header.lsn;
+                    }
+                }
+            }
+            Err(_) => {
+                println!(
+                    "Cannot deserialize first record in storage file - leaving default values."
+                );
+            }
+        }
+        println!(
+            "Header defined: max_lsn: {}, vec_dim_amount: {}",
+            max_lsn, vec_dim_amount
+        );
+
+        Ok(StorageHeader::new(max_lsn, vec_dim_amount))
+    }
+
+    fn calculate_checksum(&self) -> u64 {
+        let mut temp_header = self.clone();
+        temp_header.checksum = NONE;
+
+        let mut hasher = DefaultHasher::new();
+        let mut temp_buffer = Vec::new();
+        serialize_into(&mut temp_buffer, &temp_header).unwrap();
+        temp_buffer.hash(&mut hasher);
+        hasher.finish()
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Record {
+pub struct Record {
     record_header: RecordHeader,
     vector: Vec<Dim>,
     payload: String,
@@ -119,16 +156,27 @@ impl Storage {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path)?;
 
-        let header: StorageHeader = match deserialize_from(&mut BufReader::new(&file)) {
-            Ok(header) => header,
-            Err(_) => StorageHeader::define_header(path)?,
-        };
+        let header: StorageHeader =
+            match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
+                Ok(header) => {
+                    if header.checksum != header.calculate_checksum() {
+                        println!("Checksum incorrect for 'Storage' header - defining header.");
+                        StorageHeader::define_header(&mut file)?;
+                    }
+
+                    header
+                }
+                Err(_) => {
+                    println!("Cannot deserialize header for the 'Storage' - defining header.");
+                    StorageHeader::define_header(&mut file)?
+                }
+            };
 
         let storage = Self {
             path: path.to_owned(),
@@ -251,6 +299,8 @@ impl Storage {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -451,6 +501,54 @@ mod tests {
 
         //Assert
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let checksum = storage.header.checksum;
+
+        let mut file = File::open(&storage.path)?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut writer = BufWriter::new(&file);
+        writer.write_all(b"corrupted data")?;
+
+        //Act
+        let storage = Storage::load(&storage.path)?;
+
+        //Assert
+        assert_eq!(storage.header.current_max_lsn, 1);
+        assert_eq!(storage.header.vector_dim_amount, 3);
+        assert_eq!(storage.header.checksum, checksum);
+        Ok(())
+    }
+
+    #[test]
+    fn load_should_define_header_with_default_values_when_no_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let storage = Storage::create(temp_dir.path())?;
+        let checksum = storage.header.checksum;
+
+        let mut file = File::open(&storage.path)?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut writer = BufWriter::new(&file);
+        writer.write_all(b"corrupted data")?;
+
+        //Act
+        let storage = Storage::load(&storage.path)?;
+
+        //Assert
+        assert_eq!(storage.header.current_max_lsn, 0);
+        assert_eq!(storage.header.vector_dim_amount, 0);
+        assert_eq!(storage.header.checksum, checksum);
         Ok(())
     }
 }
