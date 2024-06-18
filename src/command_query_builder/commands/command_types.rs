@@ -1,7 +1,7 @@
 use super::Result;
 use crate::command_query_builder::{CQAction, Command};
+use crate::components::wal::Wal;
 use crate::types::WAL_FILE;
-use crate::wal::Wal;
 use std::fs;
 use std::path::{Path, PathBuf};
 

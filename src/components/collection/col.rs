@@ -4,8 +4,8 @@ use super::{
 };
 use crate::types::Dim;
 use crate::{
+    components::wal::Wal,
     types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE},
-    wal::Wal,
 };
 use std::{
     fs,

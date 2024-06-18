@@ -1,8 +1,8 @@
 use super::Result;
 use crate::command_query_builder::parsing_ops::parse_vec_n_payload;
 use crate::{
-    collection::Collection,
     command_query_builder::{CQAction, Command},
+    components::collection::Collection,
 };
 use std::{cell::RefCell, rc::Rc};
 

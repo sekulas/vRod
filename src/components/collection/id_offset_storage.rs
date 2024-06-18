@@ -7,5 +7,6 @@ pub struct IdOffsetStorage {
 }
 
 pub struct IdOffsetStorageHeader {
-    pub id_offset: u64,
+    id_offset: u64,
+    checksum: u64,
 }

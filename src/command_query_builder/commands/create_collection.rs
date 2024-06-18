@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
-    collection::Collection,
     command_query_builder::{CQAction, Command},
+    components::collection::Collection,
     database::DbConfig,
     types::DB_CONFIG,
 };

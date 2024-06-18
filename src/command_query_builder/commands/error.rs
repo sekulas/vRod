@@ -1,6 +1,5 @@
-use crate::collection;
 use crate::command_query_builder;
-use crate::wal;
+use crate::components::{collection, wal};
 
 pub type Result<T> = core::result::Result<T, Error>;
 

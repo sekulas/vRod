@@ -1,4 +1,4 @@
-use crate::{command_query_builder, database, utils, wal};
+use crate::{command_query_builder, components::wal, database, utils};
 
 pub type Result<T> = core::result::Result<T, Error>;
 

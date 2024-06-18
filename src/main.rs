@@ -1,19 +1,18 @@
-mod collection;
 mod command_query_builder;
+mod components;
 mod database;
 mod error;
 mod types;
 mod utils;
-mod wal;
 
 use crate::types::WAL_FILE;
 use clap::Parser;
 use command_query_builder::{Builder, CQBuilder, CQType, Command};
+use components::wal::{utils::wal_to_txt, Wal, WalType};
 use database::{Database, DbConfig};
 use std::path::{Path, PathBuf};
 use types::DB_CONFIG;
 use utils::embeddings::process_embeddings;
-use wal::{utils::wal_to_txt, Wal, WalType};
 
 use crate::error::{Error, Result};
 

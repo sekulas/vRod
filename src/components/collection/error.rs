@@ -1,4 +1,4 @@
-use crate::{types::Dim, wal};
+use crate::{components::wal, types::Dim};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
