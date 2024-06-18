@@ -22,7 +22,7 @@ pub struct Storage {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct StorageHeader {
+struct StorageHeader {
     current_max_lsn: u64,
     vector_dim_amount: u16,
 }
@@ -48,14 +48,14 @@ impl StorageHeader {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Record {
+struct Record {
     record_header: RecordHeader,
     vector: Vec<Dim>,
     payload: String,
 }
 
 impl Record {
-    pub fn new(lsn: u64, payload_offset: Offset, vector: &[Dim], payload: &str) -> Self {
+    fn new(lsn: u64, payload_offset: Offset, vector: &[Dim], payload: &str) -> Self {
         let mut record = Self {
             record_header: RecordHeader::new(lsn, payload_offset),
             vector: vector.to_owned(),
@@ -66,7 +66,7 @@ impl Record {
         record
     }
 
-    pub fn calculate_checksum(&self) -> u64 {
+    fn calculate_checksum(&self) -> u64 {
         let mut temp_record = self.clone();
         temp_record.record_header.checksum = NONE;
 
@@ -79,7 +79,7 @@ impl Record {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct RecordHeader {
+struct RecordHeader {
     lsn: u64,
     deleted: bool,
     checksum: u64,
@@ -87,7 +87,7 @@ pub struct RecordHeader {
 }
 
 impl RecordHeader {
-    pub fn new(lsn: u64, payload_offset: Offset) -> Self {
+    fn new(lsn: u64, payload_offset: Offset) -> Self {
         Self {
             lsn,
             deleted: false,
