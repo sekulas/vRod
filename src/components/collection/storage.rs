@@ -62,6 +62,14 @@ impl StorageHeader {
                 println!(
                     "Cannot deserialize first record in storage file - leaving default values."
                 );
+                // TODO: isn't this a problem in the future?
+                // Rollbacks are going to be working basing on the LSN's
+                // But if this will be default accidently then
+                // maybe let's do WAL truncating - and begin from 0?
+                // But will be always during truncate go to 0 in WAL?
+                // Won't that cause problems in the future?
+                // If it's cannot be deserialized then whatever
+                // Collection has nothing then maybe mark it as unused?
             }
         }
         println!(
@@ -73,14 +81,16 @@ impl StorageHeader {
     }
 
     fn calculate_checksum(&self) -> u64 {
-        let mut temp_header = self.clone();
-        temp_header.checksum = NONE;
-
         let mut hasher = DefaultHasher::new();
-        let mut temp_buffer = Vec::new();
-        serialize_into(&mut temp_buffer, &temp_header).unwrap();
-        temp_buffer.hash(&mut hasher);
+        self.hash(&mut hasher);
         hasher.finish()
+    }
+}
+
+impl Hash for StorageHeader {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.current_max_lsn.hash(state);
+        self.vector_dim_amount.hash(state);
     }
 }
 
@@ -104,14 +114,25 @@ impl Record {
     }
 
     fn calculate_checksum(&self) -> u64 {
-        let mut temp_record = self.clone();
-        temp_record.record_header.checksum = NONE;
-
         let mut hasher = DefaultHasher::new();
-        let mut temp_buffer = Vec::new();
-        serialize_into(&mut temp_buffer, &temp_record).unwrap();
-        temp_buffer.hash(&mut hasher);
+        self.hash(&mut hasher);
         hasher.finish()
+    }
+}
+
+impl Hash for Record {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.record_header.lsn.hash(state);
+        self.record_header.deleted.hash(state);
+        self.record_header.payload_offset.hash(state);
+
+        //TODO: checksum based on the whole vector?
+        for dim in &self.vector {
+            // Hash each f32 value individually
+            dim.to_bits().hash(state);
+        }
+
+        self.payload.hash(state);
     }
 }
 
