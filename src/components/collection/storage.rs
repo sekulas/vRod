@@ -21,6 +21,7 @@ pub struct Storage {
     header: StorageHeader,
 }
 
+//TODO: Offset backup for storing recently deleted record?
 #[derive(Serialize, Deserialize, Default, Clone)]
 struct StorageHeader {
     current_max_lsn: u64,
@@ -231,7 +232,7 @@ impl Storage {
         if let OperationMode::RawOperation = mode {
             self.flush_header()?;
         }
-
+        //TODO: SYNC TUTAJ??
         Ok(record_offset)
     }
 
@@ -295,6 +296,7 @@ impl Storage {
     fn flush_header(&mut self) -> Result<()> {
         self.file.seek(SeekFrom::Start(0))?;
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
+        //TODO: SYNC TUTAJ POTENCJALNIE?
         Ok(())
     }
 
@@ -317,6 +319,16 @@ impl Storage {
         Ok(())
     }
 }
+
+// TODO: needed?
+// Implementing the Drop trait for the Storage struct to ensure cleanup
+// impl Drop for Storage {
+//     fn drop(&mut self) {
+//         if let Err(e) = self.file.sync_all() {
+//             eprintln!("Failed to sync file on drop: {:?}", e);
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
