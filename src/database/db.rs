@@ -1,6 +1,6 @@
 use super::{Error, Result};
+use crate::components::wal::Wal;
 use crate::database::DbConfig;
-use crate::wal::Wal;
 use std::{fs, path::Path};
 
 pub struct Database;

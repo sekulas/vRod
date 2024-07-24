@@ -6,3 +6,5 @@ mod create_collection;
 pub(super) use create_collection::*;
 mod drop_collection;
 pub(super) use drop_collection::*;
+mod insert;
+pub(super) use insert::*;

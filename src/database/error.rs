@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::wal;
+use crate::components::wal;
 
 pub type Result<T> = core::result::Result<T, Error>;
 

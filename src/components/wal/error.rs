@@ -10,9 +10,9 @@ pub enum Error {
     #[error(transparent)]
     CommandBuilder(#[from] command_query_builder::Error),
 
-    #[error("Serialization error: {0}")]
+    #[error(transparent)]
     Serialization(#[from] bincode::Error),
 
-    #[error("IO error: {0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 }

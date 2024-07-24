@@ -8,5 +8,6 @@ pub use types::{CQAction, CQType, Command, Query};
 mod builder;
 mod commands;
 mod error;
+pub mod parsing_ops;
 mod queries;
 mod types;

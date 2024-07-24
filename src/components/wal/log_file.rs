@@ -23,6 +23,7 @@ pub struct Wal {
     header: WalHeader,
 }
 
+//TODO:: Checksum?
 #[derive(Serialize, Deserialize)]
 pub struct WalHeader {
     last_entry_offset: u64,
