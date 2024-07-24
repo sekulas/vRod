@@ -63,14 +63,7 @@ impl StorageHeader {
                 println!(
                     "Cannot deserialize first record in storage file - leaving default values."
                 );
-                // TODO: isn't this a problem in the future?
-                // Rollbacks are going to be working basing on the LSN's
-                // But if this will be default accidently then
-                // maybe let's do WAL truncating - and begin from 0?
-                // But will be always during truncate go to 0 in WAL?
-                // Won't that cause problems in the future?
-                // If it's cannot be deserialized then whatever
-                // Collection has nothing then maybe mark it as unused?
+                // TODO: mark collection as read-only
             }
         }
         println!(
@@ -127,9 +120,7 @@ impl Hash for Record {
         self.record_header.deleted.hash(state);
         self.record_header.payload_offset.hash(state);
 
-        //TODO: checksum based on the whole vector?
         for dim in &self.vector {
-            // Hash each f32 value individually
             dim.to_bits().hash(state);
         }
 
