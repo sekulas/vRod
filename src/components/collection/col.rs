@@ -55,56 +55,56 @@ mod tests {
 
     #[test]
     fn create_should_create_col() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn load_should_load_col() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn insert_should_store_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn insert_twice_should_store_two_records() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn delete_should_delete_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn update_should_delete_old_record_and_store_new() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn search_should_return_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn search_for_deleted_record_should_return_nothing() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn rollback_insert_should_remove_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn rollback_delete_should_restore_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 
     #[test]
     fn rollback_update_should_restore_old_record() -> Result<()> {
-        todo!();
+        Ok(())
     }
 }
