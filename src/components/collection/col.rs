@@ -1,12 +1,6 @@
-use super::{
-    id_offset_storage::IdOffsetStorage, index::Index, storage::Storage, types::OperationMode,
-    Result,
-};
-use crate::types::Dim;
-use crate::{
-    components::wal::Wal,
-    types::{ID_OFFSET_STORAGE_FILE, INDEX_FILE, STORAGE_FILE},
-};
+use super::{index::tree::BPTree, storage::Storage, types::OperationMode, Result};
+use crate::components::wal::Wal;
+use crate::types::{Dim, Offset};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -16,8 +10,7 @@ pub struct Collection {
     path: PathBuf,
     storage: Storage,
     wal: Wal,
-    id_offset_storage: IdOffsetStorage,
-    index: Index,
+    index: BPTree,
 }
 
 impl Collection {
@@ -26,9 +19,8 @@ impl Collection {
 
         fs::create_dir(&collection_path)?;
         Wal::create(&collection_path)?;
-        fs::File::create(collection_path.join(STORAGE_FILE))?;
-        fs::File::create(collection_path.join(ID_OFFSET_STORAGE_FILE))?;
-        fs::File::create(collection_path.join(INDEX_FILE))?;
+        Storage::create(&collection_path)?;
+        BPTree::create(&collection_path)?;
 
         println!("Collection created at: {:?}", collection_path);
 
@@ -39,18 +31,17 @@ impl Collection {
         todo!("Not implemented.");
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str) -> Result<()> {
+    pub fn insert(&mut self, vector: &[Dim], payload: &str) -> Result<Offset> {
         let offset = self
             .storage
             .insert(vector, payload, &OperationMode::RawOperation)?;
 
-        Ok(())
+        Ok(offset)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
