@@ -1,8 +1,14 @@
-use super::{Error, Result};
+use super::{
+    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M},
+    Error, Result,
+};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Offset, RecordId, INDEX_FILE};
+use crate::{
+    components::collection::types::NONE,
+    types::{Offset, RecordId, INDEX_FILE},
+};
 
 use std::{
     fs::{File, OpenOptions},
@@ -27,6 +33,7 @@ impl BPTreeHeader {
     }
 
     fn define_header(file: &mut File) -> Result<Self> {
+        //TODO: Find MAX_ID in tree
         let mut header = BPTreeHeader::default();
         let checksum = header.calculate_checksum();
         header.checksum = checksum;
@@ -68,18 +75,52 @@ pub struct BPTree {
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum Node {
-    Internal {
-        parent: Option<Offset>,
-        keys: Vec<RecordId>,
-        children: Vec<Offset>,
-    },
-    Leaf {
-        parent: Option<Offset>,
-        keys: Vec<RecordId>,
-        values: Vec<Offset>,
-        next_leaf: Option<Offset>,
-    },
+pub struct Node {
+    checksum: u64,
+    is_leaf: bool,
+    parent: Offset,
+    keys: Vec<RecordId>,
+    values: Vec<Offset>,
+    next_leaf: Option<Offset>,
+}
+
+impl Node {
+    fn new_internal(parent: Offset) -> Self {
+        Self {
+            checksum: 0,
+            is_leaf: false,
+            parent,
+            keys: vec![EMPTY_KEY_SLOT; M + 1],
+            values: vec![EMPTY_CHILD_SLOT; M],
+            next_leaf: None,
+        }
+    }
+    fn new_leaf(parent: Offset) -> Self {
+        Self {
+            checksum: 0,
+            is_leaf: true,
+            parent,
+            keys: vec![EMPTY_KEY_SLOT; M],
+            values: vec![EMPTY_CHILD_SLOT; M],
+            next_leaf: None,
+        }
+    }
+
+    fn calculate_checksum(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Hash for Node {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.is_leaf.hash(state);
+        self.parent.hash(state);
+        self.keys.hash(state);
+        self.values.hash(state);
+        self.next_leaf.hash(state);
+    }
 }
 
 impl BPTree {
@@ -96,6 +137,8 @@ impl BPTree {
         let header = BPTreeHeader::default();
 
         let mut tree = Self { header, file };
+
+        tree.create_root()?;
         tree.update_header()?;
 
         Ok(tree)
@@ -136,6 +179,22 @@ impl BPTree {
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
 
         self.file.sync_all()?;
+        Ok(())
+    }
+
+    fn write_node(&mut self, node: &Node, offset: Offset) -> Result<()> {
+        self.file.seek(SeekFrom::Start(offset))?;
+        serialize_into(&mut BufWriter::new(&self.file), node)?;
+
+        Ok(())
+    }
+
+    fn create_root(&mut self) -> Result<()> {
+        let mut root = Node::new_internal(NONE);
+        root.checksum = root.calculate_checksum();
+
+        self.write_node(&root, self.header.root_offset)?;
+
         Ok(())
     }
 }

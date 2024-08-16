@@ -236,7 +236,7 @@ impl Storage {
         if let OperationMode::RawOperation = mode {
             self.update_header()?;
         }
-        //TODO: SYNC TUTAJ??
+
         Ok(record_offset)
     }
 
@@ -326,16 +326,6 @@ impl Storage {
         Ok(())
     }
 }
-
-// TODO: needed?
-// Implementing the Drop trait for the Storage struct to ensure cleanup
-// impl Drop for Storage {
-//     fn drop(&mut self) {
-//         if let Err(e) = self.file.sync_all() {
-//             eprintln!("Failed to sync file on drop: {:?}", e);
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
