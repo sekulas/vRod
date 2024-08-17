@@ -186,7 +186,19 @@ impl BPTree {
         self.file.seek(SeekFrom::Start(offset))?;
         serialize_into(&mut BufWriter::new(&self.file), node)?;
 
+        //TODO: file.sync_all()?
         Ok(())
+    }
+
+    fn read_node(&mut self, offset: Offset) -> Result<Node> {
+        self.file.seek(SeekFrom::Start(offset))?;
+        //TODO: BufReader with specified size
+        let node: Node = deserialize_from(&mut BufReader::new(&self.file))?;
+
+        match node.checksum == node.calculate_checksum() {
+            true => Ok(node),
+            false => Err(Error::IncorrectChecksum { offset }),
+        }
     }
 
     fn create_root(&mut self) -> Result<()> {
