@@ -78,7 +78,6 @@ pub struct BPTree {
 pub struct Node {
     checksum: u64,
     is_leaf: bool,
-    parent: Offset,
     keys: Vec<RecordId>,
     values: Vec<Offset>,
     next_leaf: Option<Offset>,
@@ -89,7 +88,6 @@ impl Node {
         Self {
             checksum: 0,
             is_leaf: false,
-            parent,
             keys: vec![EMPTY_KEY_SLOT; M + 1],
             values: vec![EMPTY_CHILD_SLOT; M],
             next_leaf: None,
@@ -99,7 +97,6 @@ impl Node {
         Self {
             checksum: 0,
             is_leaf: true,
-            parent,
             keys: vec![EMPTY_KEY_SLOT; M],
             values: vec![EMPTY_CHILD_SLOT; M],
             next_leaf: None,
@@ -116,7 +113,6 @@ impl Node {
 impl Hash for Node {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.is_leaf.hash(state);
-        self.parent.hash(state);
         self.keys.hash(state);
         self.values.hash(state);
         self.next_leaf.hash(state);
@@ -233,7 +229,6 @@ mod tests {
             mem::size_of::<BPTreeHeader>() as Offset
         );
         assert!(!root.is_leaf);
-        assert_eq!(root.parent, NONE);
         assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; M + 1]);
         assert_eq!(root.values, vec![EMPTY_CHILD_SLOT; M]);
         assert_eq!(root.next_leaf, None);
