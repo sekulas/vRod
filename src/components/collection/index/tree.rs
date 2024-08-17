@@ -210,3 +210,34 @@ impl BPTree {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
+
+    #[test]
+    fn bptree_create_should_create_root() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+
+        //Act
+        let mut tree = BPTree::create(path)?;
+        let root = tree.read_node(tree.header.root_offset)?;
+
+        //Assert
+        assert_eq!(tree.header.current_max_id, 0);
+        assert_eq!(
+            tree.header.root_offset,
+            mem::size_of::<BPTreeHeader>() as Offset
+        );
+        assert!(!root.is_leaf);
+        assert_eq!(root.parent, NONE);
+        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; M + 1]);
+        assert_eq!(root.values, vec![EMPTY_CHILD_SLOT; M]);
+        assert_eq!(root.next_leaf, None);
+
+        Ok(())
+    }
+}
