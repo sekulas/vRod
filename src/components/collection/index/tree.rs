@@ -74,7 +74,7 @@ impl Default for BPTreeHeader {
 
 pub struct BPTree {
     header: BPTreeHeader,
-    pager: Pager,
+    file: BTreeFile,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -124,12 +124,12 @@ impl Hash for Node {
     }
 }
 
-struct Pager {
+struct BTreeFile {
     file: File,
     next_node_offset: Offset,
 }
 
-impl Pager {
+impl BTreeFile {
     fn new(mut file: File) -> Result<Self> {
         let next_node_offset = file.seek(SeekFrom::End(0))?;
         Ok(Self {
@@ -184,11 +184,11 @@ impl BPTree {
             .create(true)
             .open(file_path)?;
 
-        let pager = Pager::new(file)?;
+        let file = BTreeFile::new(file)?;
 
         let mut header = BPTreeHeader::default();
 
-        let mut tree = Self { header, pager };
+        let mut tree = Self { header, file };
 
         tree.create_root()?;
         tree.update_header()?;
@@ -219,15 +219,15 @@ impl BPTree {
                 }
             };
 
-        let pager = Pager::new(file)?;
-        let tree = Self { header, pager };
+        let file = BTreeFile::new(file)?;
+        let tree = Self { header, file };
 
         Ok(tree)
     }
 
     fn update_header(&mut self) -> Result<()> {
         self.header.checksum = self.header.calculate_checksum();
-        self.pager.update_header(&self.header)
+        self.file.update_header(&self.header)
     }
 
     fn create_root(&mut self) -> Result<()> {
@@ -235,14 +235,14 @@ impl BPTree {
         root.checksum = root.calculate_checksum();
 
         let root_offset = self.header.root_offset;
-        self.pager.write_node(&root, &root_offset)?;
+        self.file.write_node(&root, &root_offset)?;
 
         Ok(())
     }
 
     pub fn insert(&mut self, value: Offset) -> Result<()> {
         let root_offset = self.header.root_offset;
-        let mut root: Node = self.pager.read_node(&root_offset)?;
+        let mut root: Node = self.file.read_node(&root_offset)?;
 
         let new_root_offset: Offset;
         let mut new_root: Node;
@@ -252,7 +252,7 @@ impl BPTree {
         match root.is_full() {
             true => {
                 new_root = Node::new(false);
-                new_root_offset = self.pager.get_next_offset();
+                new_root_offset = self.file.get_next_offset();
                 offset_node_map.insert(new_root_offset, &mut new_root);
                 root.parent_offset = new_root_offset;
             }
@@ -279,7 +279,7 @@ mod tests {
 
         //Assert
         let root_offset = tree.header.root_offset;
-        let root = tree.pager.read_node(&root_offset)?;
+        let root = tree.file.read_node(&root_offset)?;
 
         assert_eq!(tree.header.current_max_id, 0);
         assert_eq!(
@@ -306,7 +306,7 @@ mod tests {
         tree.insert(value)?;
 
         //Assert
-        let root = tree.pager.read_node(&root_offset)?;
+        let root = tree.file.read_node(&root_offset)?;
 
         Ok(())
     }
