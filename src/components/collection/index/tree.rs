@@ -1,5 +1,5 @@
 use super::{
-    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M},
+    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M, SERIALIZED_NODE_SIZE},
     Error, Result,
 };
 use bincode::{deserialize_from, serialize_into};
@@ -11,6 +11,7 @@ use crate::{
 };
 
 use std::{
+    collections::HashMap,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
@@ -23,6 +24,7 @@ struct BPTreeHeader {
     current_max_id: RecordId,
     checksum: u64,
     root_offset: Offset,
+    last_root_offset: Offset,
 }
 
 impl BPTreeHeader {
@@ -61,6 +63,7 @@ impl Default for BPTreeHeader {
             current_max_id: 0,
             checksum: 0,
             root_offset,
+            last_root_offset: root_offset,
         };
 
         tree_header.checksum = tree_header.calculate_checksum();
@@ -71,7 +74,7 @@ impl Default for BPTreeHeader {
 
 pub struct BPTree {
     header: BPTreeHeader,
-    file: File,
+    pager: Pager,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,33 +83,35 @@ pub struct Node {
     is_leaf: bool,
     keys: Vec<RecordId>,
     values: Vec<Offset>,
-    next_leaf: Option<Offset>,
+    parent_offset: Offset,
 }
 
 impl Node {
-    fn new_internal(parent: Offset) -> Self {
-        Self {
+    fn new(is_leaf: bool) -> Self {
+        let mut node = Self {
             checksum: 0,
-            is_leaf: false,
-            keys: vec![EMPTY_KEY_SLOT; M + 1],
-            values: vec![EMPTY_CHILD_SLOT; M],
-            next_leaf: None,
-        }
-    }
-    fn new_leaf(parent: Offset) -> Self {
-        Self {
-            checksum: 0,
-            is_leaf: true,
+            is_leaf,
             keys: vec![EMPTY_KEY_SLOT; M],
             values: vec![EMPTY_CHILD_SLOT; M],
-            next_leaf: None,
-        }
+            parent_offset: NONE,
+        };
+
+        node.checksum = node.calculate_checksum();
+
+        node
     }
 
     fn calculate_checksum(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()
+    }
+
+    fn is_full(&self) -> bool {
+        match self.is_leaf {
+            true => self.keys.len() == M,
+            false => self.keys.len() == M - 1,
+        }
     }
 }
 
@@ -115,7 +120,56 @@ impl Hash for Node {
         self.is_leaf.hash(state);
         self.keys.hash(state);
         self.values.hash(state);
-        self.next_leaf.hash(state);
+        self.parent_offset.hash(state);
+    }
+}
+
+struct Pager {
+    file: File,
+    next_node_offset: Offset,
+}
+
+impl Pager {
+    fn new(mut file: File) -> Result<Self> {
+        let next_node_offset = file.seek(SeekFrom::End(0))?;
+        Ok(Self {
+            file,
+            next_node_offset,
+        })
+    }
+
+    fn get_next_offset(&mut self) -> Offset {
+        let result: Offset = self.next_node_offset;
+        self.next_node_offset += SERIALIZED_NODE_SIZE as u64;
+        result
+    }
+
+    fn write_node(&mut self, node: &Node, offset: &Offset) -> Result<()> {
+        self.file.seek(SeekFrom::Start(*offset))?;
+        serialize_into(&mut BufWriter::new(&self.file), node)?;
+
+        //TODO: file.sync_all()?
+        Ok(())
+    }
+
+    fn read_node(&mut self, offset: &Offset) -> Result<Node> {
+        self.file.seek(SeekFrom::Start(*offset))?;
+        //TODO: BufReader with specified size
+        let node: Node = deserialize_from(&mut BufReader::new(&self.file))?;
+
+        match node.checksum == node.calculate_checksum() {
+            true => Ok(node),
+            false => Err(Error::IncorrectChecksum { offset: *offset }),
+        }
+    }
+
+    fn update_header(&mut self, header: &BPTreeHeader) -> Result<()> {
+        self.file.seek(SeekFrom::Start(0))?;
+
+        serialize_into(&mut BufWriter::new(&self.file), header)?;
+
+        self.file.sync_all()?;
+        Ok(())
     }
 }
 
@@ -130,9 +184,11 @@ impl BPTree {
             .create(true)
             .open(file_path)?;
 
-        let header = BPTreeHeader::default();
+        let pager = Pager::new(file)?;
 
-        let mut tree = Self { header, file };
+        let mut header = BPTreeHeader::default();
+
+        let mut tree = Self { header, pager };
 
         tree.create_root()?;
         tree.update_header()?;
@@ -163,45 +219,45 @@ impl BPTree {
                 }
             };
 
-        let tree = Self { header, file };
+        let pager = Pager::new(file)?;
+        let tree = Self { header, pager };
 
         Ok(tree)
     }
 
     fn update_header(&mut self) -> Result<()> {
-        self.file.seek(SeekFrom::Start(0))?;
-
         self.header.checksum = self.header.calculate_checksum();
-        serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
-
-        self.file.sync_all()?;
-        Ok(())
-    }
-
-    fn write_node(&mut self, node: &Node, offset: Offset) -> Result<()> {
-        self.file.seek(SeekFrom::Start(offset))?;
-        serialize_into(&mut BufWriter::new(&self.file), node)?;
-
-        //TODO: file.sync_all()?
-        Ok(())
-    }
-
-    fn read_node(&mut self, offset: Offset) -> Result<Node> {
-        self.file.seek(SeekFrom::Start(offset))?;
-        //TODO: BufReader with specified size
-        let node: Node = deserialize_from(&mut BufReader::new(&self.file))?;
-
-        match node.checksum == node.calculate_checksum() {
-            true => Ok(node),
-            false => Err(Error::IncorrectChecksum { offset }),
-        }
+        self.pager.update_header(&self.header)
     }
 
     fn create_root(&mut self) -> Result<()> {
-        let mut root = Node::new_internal(NONE);
+        let mut root = Node::new(true);
         root.checksum = root.calculate_checksum();
 
-        self.write_node(&root, self.header.root_offset)?;
+        let root_offset = self.header.root_offset;
+        self.pager.write_node(&root, &root_offset)?;
+
+        Ok(())
+    }
+
+    pub fn insert(&mut self, value: Offset) -> Result<()> {
+        let root_offset = self.header.root_offset;
+        let mut root: Node = self.pager.read_node(&root_offset)?;
+
+        let new_root_offset: Offset;
+        let mut new_root: Node;
+
+        let mut offset_node_map: HashMap<Offset, &mut Node> = HashMap::new();
+
+        match root.is_full() {
+            true => {
+                new_root = Node::new(false);
+                new_root_offset = self.pager.get_next_offset();
+                offset_node_map.insert(new_root_offset, &mut new_root);
+                root.parent_offset = new_root_offset;
+            }
+            false => {}
+        }
 
         Ok(())
     }
@@ -220,9 +276,11 @@ mod tests {
 
         //Act
         let mut tree = BPTree::create(path)?;
-        let root = tree.read_node(tree.header.root_offset)?;
 
         //Assert
+        let root_offset = tree.header.root_offset;
+        let root = tree.pager.read_node(&root_offset)?;
+
         assert_eq!(tree.header.current_max_id, 0);
         assert_eq!(
             tree.header.root_offset,
@@ -231,7 +289,42 @@ mod tests {
         assert!(!root.is_leaf);
         assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; M + 1]);
         assert_eq!(root.values, vec![EMPTY_CHILD_SLOT; M]);
-        assert_eq!(root.next_leaf, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_into_empty_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let mut tree = BPTree::create(path)?;
+        let root_offset = tree.header.root_offset;
+        let value = 1;
+
+        //Act
+        tree.insert(value)?;
+
+        //Assert
+        let root = tree.pager.read_node(&root_offset)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn serialized_size_vs_mem_test() -> Result<()> {
+        //Arrange
+        let mut node = Node::new(true);
+        let serialized_size = bincode::serialized_size(&node)?;
+        let serialized_keys_size = bincode::serialized_size(&node.keys)?;
+        let serialized_values_size = bincode::serialized_size(&node.values)?;
+        let serialized_parent_offset_size = bincode::serialized_size(&node.parent_offset)?;
+        node.parent_offset = 12121212;
+        let serialized_parent_offset_size_sec = bincode::serialized_size(&node.parent_offset)?;
+        let mem_size = mem::size_of::<Node>();
+
+        //Assert
+        assert_eq!(serialized_size, mem_size as u64);
 
         Ok(())
     }
