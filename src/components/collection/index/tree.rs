@@ -1,5 +1,5 @@
 use super::{
-    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M, SERIALIZED_NODE_SIZE},
+    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M, MAX_KEYS, SERIALIZED_NODE_SIZE},
     Error, Result,
 };
 use bincode::{deserialize_from, serialize_into};
@@ -17,6 +17,7 @@ use std::{
     io::{BufReader, BufWriter, Seek, SeekFrom},
     mem,
     path::Path,
+    vec,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -75,6 +76,7 @@ impl Default for BPTreeHeader {
 pub struct BPTree {
     header: BPTreeHeader,
     file: BTreeFile,
+    modified_nodes: HashMap<Offset, Node>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -84,6 +86,8 @@ pub struct Node {
     keys: Vec<RecordId>,
     values: Vec<Offset>,
     parent_offset: Offset,
+    next_leaf_offset: Offset,
+    free_slots: u16,
 }
 
 impl Node {
@@ -91,9 +95,11 @@ impl Node {
         let mut node = Self {
             checksum: 0,
             is_leaf,
-            keys: vec![EMPTY_KEY_SLOT; M],
+            keys: vec![EMPTY_KEY_SLOT; MAX_KEYS],
             values: vec![EMPTY_CHILD_SLOT; M],
             parent_offset: NONE,
+            next_leaf_offset: NONE,
+            free_slots: MAX_KEYS as u16,
         };
 
         node.checksum = node.calculate_checksum();
@@ -107,11 +113,48 @@ impl Node {
         hasher.finish()
     }
 
-    fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         match self.is_leaf {
-            true => self.keys.len() == M,
-            false => self.keys.len() == M - 1,
+            true => self.free_slots == 0,
+            false => self.free_slots == 1,
         }
+    }
+
+    pub fn insert(&mut self, key: RecordId, value: Offset) -> Result<()> {
+        match self.is_leaf {
+            true => self.insert_into_leaf(key, value),
+            false => self.insert_into_internal(key, value),
+        }
+    }
+
+    pub fn insert_into_leaf(&mut self, key: RecordId, value: Offset) -> Result<()> {
+        let insert_pos = self.free_slots as usize - 1;
+
+        self.keys.insert(insert_pos, key);
+        self.values.insert(insert_pos, value);
+
+        self.free_slots -= 1;
+
+        Ok(())
+    }
+
+    fn insert_into_internal(&mut self, key: RecordId, value: Offset) -> Result<()> {
+        let insert_pos = self.free_slots as usize - 1;
+
+        self.keys.insert(insert_pos, key);
+        self.values.insert(insert_pos + 1, value);
+
+        self.free_slots -= 1;
+
+        Ok(())
+    }
+
+    pub fn get_highest_subtree_offset(&self) -> Option<Offset> {
+        if self.is_leaf {
+            return None;
+        }
+
+        Some(self.values[self.free_slots as usize])
     }
 }
 
@@ -121,6 +164,8 @@ impl Hash for Node {
         self.keys.hash(state);
         self.values.hash(state);
         self.parent_offset.hash(state);
+        self.next_leaf_offset.hash(state);
+        self.free_slots.hash(state);
     }
 }
 
