@@ -53,6 +53,7 @@ impl Hash for BPTreeHeader {
         self.current_max_id.hash(state);
         self.checksum.hash(state);
         self.root_offset.hash(state);
+        self.last_root_offset.hash(state);
     }
 }
 
