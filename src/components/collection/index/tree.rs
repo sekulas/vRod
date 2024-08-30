@@ -243,11 +243,9 @@ impl BPTree {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
+        let file_path = path.join(INDEX_FILE);
+
+        let mut file = OpenOptions::new().read(true).write(true).open(file_path)?;
 
         let header: BPTreeHeader =
             match deserialize_from::<_, BPTreeHeader>(&mut BufReader::new(&file)) {
