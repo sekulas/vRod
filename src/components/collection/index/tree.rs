@@ -1,8 +1,11 @@
 use super::{
-    types::{EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, M, MAX_KEYS, SERIALIZED_NODE_SIZE},
+    types::{
+        InsertionResult, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, M,
+        MAX_KEYS, SERIALIZED_NODE_SIZE,
+    },
     Error, Result,
 };
-use bincode::{deserialize_from, serialize_into};
+use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -10,6 +13,7 @@ use crate::{
     types::{Offset, RecordId, INDEX_FILE},
 };
 
+use core::alloc;
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
@@ -51,7 +55,6 @@ impl BPTreeHeader {
 impl Hash for BPTreeHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.current_max_id.hash(state);
-        self.checksum.hash(state);
         self.root_offset.hash(state);
         self.last_root_offset.hash(state);
     }
@@ -86,9 +89,8 @@ pub struct Node {
     is_leaf: bool,
     keys: Vec<RecordId>,
     values: Vec<Offset>,
-    parent_offset: Offset,
     next_leaf_offset: Offset,
-    free_slots: u16,
+    free_key_slot_idx: u16,
 }
 
 impl Node {
@@ -98,9 +100,8 @@ impl Node {
             is_leaf,
             keys: vec![EMPTY_KEY_SLOT; MAX_KEYS],
             values: vec![EMPTY_CHILD_SLOT; M],
-            parent_offset: NONE,
             next_leaf_offset: NONE,
-            free_slots: MAX_KEYS as u16,
+            free_key_slot_idx: MAX_KEYS as u16,
         };
 
         node.checksum = node.calculate_checksum();
@@ -116,46 +117,52 @@ impl Node {
 
     pub fn is_full(&self) -> bool {
         match self.is_leaf {
-            true => self.free_slots == 0,
-            false => self.free_slots == 1,
+            true => self.free_key_slot_idx == 0,
+            false => self.free_key_slot_idx == 0,
         }
     }
 
     pub fn insert(&mut self, key: RecordId, value: Offset) -> Result<()> {
-        match self.is_leaf {
-            true => self.insert_into_leaf(key, value),
-            false => self.insert_into_internal(key, value),
+        if self.is_full() {
+            return Err(Error::NodeIsFull);
         }
-    }
 
-    pub fn insert_into_leaf(&mut self, key: RecordId, value: Offset) -> Result<()> {
-        let insert_pos = self.free_slots as usize - 1;
+        let insert_pos = self.free_key_slot_idx as usize;
 
         self.keys.insert(insert_pos, key);
         self.values.insert(insert_pos, value);
 
-        self.free_slots -= 1;
+        self.free_key_slot_idx -= 1;
 
         Ok(())
     }
 
-    fn insert_into_internal(&mut self, key: RecordId, value: Offset) -> Result<()> {
-        let insert_pos = self.free_slots as usize - 1;
-
-        self.keys.insert(insert_pos, key);
-        self.values.insert(insert_pos + 1, value);
-
-        self.free_slots -= 1;
-
-        Ok(())
-    }
-
-    pub fn get_highest_subtree_offset(&self) -> Option<Offset> {
+    pub fn get_highest_subtree_index(&self) -> Option<usize> {
         if self.is_leaf {
             return None;
         }
 
-        Some(self.values[self.free_slots as usize])
+        Some(match self.free_key_slot_idx == MAX_KEYS as u16 {
+            true => FIRST_VALUE_SLOT,
+            false => (self.free_key_slot_idx - 1) as usize,
+        })
+    }
+
+    pub fn get_highest_subtree_offset(&self) -> Option<Offset> {
+        self.get_highest_subtree_index()
+            .map(|index| self.values[index])
+    }
+
+    pub fn update_highest_subtree_offset(&mut self, value: Offset) -> Result<()> {
+        match self.get_highest_subtree_index() {
+            Some(index) => {
+                self.values[index] = value;
+                Ok(())
+            }
+            None => Err(Error::UnexpectedError(
+                "BTree: Cannot find highest subtree index.",
+            )),
+        }
     }
 }
 
@@ -164,30 +171,28 @@ impl Hash for Node {
         self.is_leaf.hash(state);
         self.keys.hash(state);
         self.values.hash(state);
-        self.parent_offset.hash(state);
         self.next_leaf_offset.hash(state);
-        self.free_slots.hash(state);
+        self.free_key_slot_idx.hash(state);
     }
 }
 
 struct BTreeFile {
     file: File,
-    next_node_offset: Offset,
+    last_node_offset: Offset,
 }
 
 impl BTreeFile {
     fn new(mut file: File) -> Result<Self> {
-        let next_node_offset = file.seek(SeekFrom::End(0))?;
+        let last_node_offset = file.seek(SeekFrom::End(0))?;
         Ok(Self {
             file,
-            next_node_offset,
+            last_node_offset,
         })
     }
 
     fn get_next_offset(&mut self) -> Offset {
-        let result: Offset = self.next_node_offset;
-        self.next_node_offset += SERIALIZED_NODE_SIZE as u64;
-        result
+        self.last_node_offset += SERIALIZED_NODE_SIZE as u64;
+        self.last_node_offset
     }
 
     fn write_node(&mut self, node: &Node, offset: &Offset) -> Result<()> {
@@ -195,6 +200,23 @@ impl BTreeFile {
         serialize_into(&mut BufWriter::new(&self.file), node)?;
 
         //TODO: file.sync_all()?
+        Ok(())
+    }
+
+    pub fn write_nodes(&mut self, nodes: &HashMap<Offset, Node>) -> Result<()> {
+        self.alloc_space_for_nodes()?;
+
+        //TODO: Good to iterate over in desc order? Or sort by offset?
+        let mut offsets: Vec<&Offset> = nodes.keys().collect();
+        offsets.sort();
+
+        for offset in offsets {
+            let node = nodes
+                .get(offset)
+                .ok_or(Error::UnexpectedError("BTree: Cannot get node."))?;
+            self.write_node(node, offset)?;
+        }
+
         Ok(())
     }
 
@@ -217,6 +239,12 @@ impl BTreeFile {
         self.file.sync_all()?;
         Ok(())
     }
+
+    fn alloc_space_for_nodes(&mut self) -> Result<()> {
+        let new_file_len = self.last_node_offset + SERIALIZED_NODE_SIZE as u64;
+        self.file.set_len(new_file_len)?;
+        Ok(())
+    }
 }
 
 impl BPTree {
@@ -224,17 +252,22 @@ impl BPTree {
     pub fn create(path: &Path) -> Result<Self> {
         let file_path = path.join(INDEX_FILE);
 
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(file_path)?;
 
+        let header = BPTreeHeader::default();
+        file.seek(SeekFrom::Start(serialized_size(&header)? as u64))?;
         let file = BTreeFile::new(file)?;
+        let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
-        let mut header = BPTreeHeader::default();
-
-        let mut tree = Self { header, file };
+        let mut tree = Self {
+            header,
+            file,
+            modified_nodes,
+        };
 
         tree.create_root()?;
         tree.update_header()?;
@@ -264,7 +297,13 @@ impl BPTree {
             };
 
         let file = BTreeFile::new(file)?;
-        let tree = Self { header, file };
+        let modified_nodes: HashMap<Offset, Node> = HashMap::new();
+
+        let tree = Self {
+            header,
+            file,
+            modified_nodes,
+        };
 
         Ok(tree)
     }
@@ -284,25 +323,169 @@ impl BPTree {
         Ok(())
     }
 
-    pub fn insert(&mut self, value: Offset) -> Result<()> {
-        let root_offset = self.header.root_offset;
-        let mut root: Node = self.file.read_node(&root_offset)?;
+    fn find_leftmost_leaf_path(&mut self) -> Result<Vec<(Offset, Node)>> {
+        let mut path = Vec::new();
 
-        let new_root_offset: Offset;
-        let mut new_root: Node;
+        let mut offset = self.header.root_offset;
+        let mut node = self.file.read_node(&offset)?;
 
-        let mut offset_node_map: HashMap<Offset, &mut Node> = HashMap::new();
-
-        match root.is_full() {
-            true => {
-                new_root = Node::new(false);
-                new_root_offset = self.file.get_next_offset();
-                offset_node_map.insert(new_root_offset, &mut new_root);
-                root.parent_offset = new_root_offset;
-            }
-            false => {}
+        while let Some(next_offset) = node.get_highest_subtree_offset() {
+            path.push((offset, node));
+            node = self.file.read_node(&offset)?;
+            offset = next_offset;
         }
 
+        path.push((offset, node));
+
+        Ok(path)
+    }
+
+    pub fn insert(&mut self, value: Offset) -> Result<()> {
+        self.header.current_max_id += 1;
+        let next_key = self.header.current_max_id;
+
+        match self.recursive_insert(self.header.root_offset, next_key, value) {
+            Ok(InsertionResult::Inserted {
+                existing_child_new_offset,
+            }) => {
+                self.header.last_root_offset = self.header.root_offset;
+                self.header.root_offset = existing_child_new_offset;
+            }
+            Ok(InsertionResult::InsertedAndPromoted {
+                promoted_key,
+                existing_child_new_offset: old_root_offset,
+                new_child_offset,
+            }) => {
+                let new_root_offset: u64 = self.file.get_next_offset();
+                let mut new_root = Node::new(false);
+
+                new_root.values[FIRST_VALUE_SLOT] = old_root_offset;
+                new_root.insert(promoted_key, new_child_offset)?;
+
+                self.modified_nodes.insert(new_root_offset, new_root);
+
+                self.header.last_root_offset = old_root_offset;
+                self.header.root_offset = new_root_offset;
+            }
+            Err(_) => return Err(Error::UnexpectedError("BTree: Cannot insert.")),
+        }
+
+        self.flush_modified_nodes()?;
+        self.update_header()?;
+        Ok(())
+    }
+
+    fn recursive_insert(
+        &mut self,
+        node_offset: Offset,
+        key: RecordId,
+        value: Offset,
+    ) -> Result<InsertionResult> {
+        let mut node = self.file.read_node(&node_offset)?;
+
+        match node.is_leaf {
+            true => match node.insert(key, value) {
+                Ok(()) => {
+                    let new_offset = self.file.get_next_offset();
+                    self.modified_nodes.insert(new_offset, node);
+                    Ok(InsertionResult::Inserted {
+                        existing_child_new_offset: new_offset,
+                    })
+                }
+                Err(Error::NodeIsFull) => {
+                    let new_offset = self.file.get_next_offset();
+                    let new_node_offset = self.file.get_next_offset();
+
+                    node.next_leaf_offset = new_node_offset;
+
+                    let mut new_node = Node::new(true);
+                    new_node.insert(key, value)?;
+
+                    let key_to_promote =
+                        *node
+                            .keys
+                            .get(HIGHEST_KEY_SLOT)
+                            .ok_or(Error::UnexpectedError(
+                                "BTree: Cannot get value from the highest key slot for leaf node.",
+                            ))?;
+
+                    self.modified_nodes.insert(new_offset, node);
+                    self.modified_nodes.insert(new_node_offset, new_node);
+
+                    Ok(InsertionResult::InsertedAndPromoted {
+                        existing_child_new_offset: new_offset,
+                        promoted_key: key_to_promote,
+                        new_child_offset: new_node_offset,
+                    })
+                }
+                Err(_) => Err(Error::UnexpectedError("BTree: Cannot insert into leaf.")),
+            },
+            false => {
+                let child_offset =
+                    node.get_highest_subtree_offset()
+                        .ok_or(Error::UnexpectedError(
+                            "BTree: Cannot find highest subtree offset for internal node.",
+                        ))?;
+
+                match self.recursive_insert(child_offset, key, value)? {
+                    InsertionResult::Inserted {
+                        existing_child_new_offset,
+                    } => {
+                        let new_offset = self.file.get_next_offset();
+                        node.update_highest_subtree_offset(existing_child_new_offset)?;
+
+                        self.modified_nodes.insert(new_offset, node);
+
+                        Ok(InsertionResult::Inserted {
+                            existing_child_new_offset: new_offset,
+                        })
+                    }
+                    InsertionResult::InsertedAndPromoted {
+                        promoted_key,
+                        existing_child_new_offset,
+                        new_child_offset,
+                    } => {
+                        let new_offset = self.file.get_next_offset();
+                        node.update_highest_subtree_offset(existing_child_new_offset)?;
+
+                        match node.insert(promoted_key, new_child_offset) {
+                            Ok(()) => {
+                                self.modified_nodes.insert(new_offset, node);
+                                Ok(InsertionResult::Inserted {
+                                    existing_child_new_offset: new_offset,
+                                })
+                            }
+                            Err(Error::NodeIsFull) => {
+                                let new_offset = self.file.get_next_offset();
+                                let new_node_offset = self.file.get_next_offset();
+
+                                let mut new_node = Node::new(false);
+                                new_node.values[FIRST_VALUE_SLOT] = new_node_offset;
+
+                                self.modified_nodes.insert(new_offset, node);
+                                self.modified_nodes.insert(new_node_offset, new_node);
+
+                                Ok(InsertionResult::InsertedAndPromoted {
+                                    promoted_key,
+                                    existing_child_new_offset: new_offset,
+                                    new_child_offset: new_node_offset,
+                                })
+                            }
+                            Err(_) => Err(Error::UnexpectedError(
+                                "BTree: Cannot insert into internal node.",
+                            )),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn flush_modified_nodes(&mut self) -> Result<()> {
+        for (_, node) in self.modified_nodes.iter_mut() {
+            node.checksum = node.calculate_checksum();
+        }
+        self.file.write_nodes(&self.modified_nodes)?;
         Ok(())
     }
 }
@@ -331,7 +514,7 @@ mod tests {
             mem::size_of::<BPTreeHeader>() as Offset
         );
         assert!(!root.is_leaf);
-        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; M + 1]);
+        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; MAX_KEYS]);
         assert_eq!(root.values, vec![EMPTY_CHILD_SLOT; M]);
 
         Ok(())
@@ -343,32 +526,32 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
         let mut tree = BPTree::create(path)?;
-        let root_offset = tree.header.root_offset;
-        let value = 1;
+        let value = 123;
 
         //Act
         tree.insert(value)?;
 
         //Assert
-        let root = tree.file.read_node(&root_offset)?;
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+
+        assert!(root.is_leaf);
+        assert_eq!(tree.header.current_max_id, 1);
+        assert_eq!(
+            root.values.get((root.free_key_slot_idx + 1) as usize),
+            Some(&123)
+        );
 
         Ok(())
     }
 
     #[test]
-    fn serialized_size_vs_mem_test() -> Result<()> {
+    fn serialized_size_should_equal_const() -> Result<()> {
         //Arrange
-        let mut node = Node::new(true);
+        let node = Node::new(true);
         let serialized_size = bincode::serialized_size(&node)?;
-        let serialized_keys_size = bincode::serialized_size(&node.keys)?;
-        let serialized_values_size = bincode::serialized_size(&node.values)?;
-        let serialized_parent_offset_size = bincode::serialized_size(&node.parent_offset)?;
-        node.parent_offset = 12121212;
-        let serialized_parent_offset_size_sec = bincode::serialized_size(&node.parent_offset)?;
-        let mem_size = mem::size_of::<Node>();
 
         //Assert
-        assert_eq!(serialized_size, mem_size as u64);
+        assert_eq!(serialized_size, SERIALIZED_NODE_SIZE as u64);
 
         Ok(())
     }
