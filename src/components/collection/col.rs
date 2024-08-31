@@ -1,3 +1,4 @@
+use super::index::types::DEFAULT_BRANCHING_FACTOR;
 use super::{index::tree::BPTree, storage::Storage, types::OperationMode, Result};
 use crate::components::wal::Wal;
 use crate::types::{Dim, Offset};
@@ -20,7 +21,7 @@ impl Collection {
         fs::create_dir(&collection_path)?;
         Wal::create(&collection_path)?;
         Storage::create(&collection_path)?;
-        BPTree::create(&collection_path)?;
+        BPTree::create(&collection_path, DEFAULT_BRANCHING_FACTOR)?;
 
         println!("Collection created at: {:?}", collection_path);
 

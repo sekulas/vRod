@@ -1,7 +1,7 @@
 use super::{
     types::{
-        InsertionResult, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, M,
-        MAX_KEYS, SERIALIZED_NODE_SIZE,
+        InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT,
+        FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, MAX_KEYS, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -26,6 +26,7 @@ use std::{
 
 #[derive(Serialize, Deserialize)]
 struct BPTreeHeader {
+    branching_factor: u16,
     current_max_id: RecordId,
     checksum: u64,
     root_offset: Offset,
@@ -33,6 +34,20 @@ struct BPTreeHeader {
 }
 
 impl BPTreeHeader {
+    fn new(branching_factor: u16) -> Self {
+        let root_offset = mem::size_of::<BPTreeHeader>() as Offset;
+
+        let tree_header = Self {
+            branching_factor,
+            current_max_id: 0,
+            checksum: 0,
+            root_offset,
+            last_root_offset: root_offset,
+        };
+
+        tree_header
+    }
+
     fn calculate_checksum(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -41,7 +56,7 @@ impl BPTreeHeader {
 
     fn define_header(file: &mut File) -> Result<Self> {
         //TODO: Find MAX_ID in tree
-        let mut header = BPTreeHeader::default();
+        let mut header = BPTreeHeader::new(DEFAULT_BRANCHING_FACTOR);
         let checksum = header.calculate_checksum();
         header.checksum = checksum;
 
@@ -54,26 +69,10 @@ impl BPTreeHeader {
 
 impl Hash for BPTreeHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.branching_factor.hash(state);
         self.current_max_id.hash(state);
         self.root_offset.hash(state);
         self.last_root_offset.hash(state);
-    }
-}
-
-impl Default for BPTreeHeader {
-    fn default() -> Self {
-        let root_offset = mem::size_of::<BPTreeHeader>() as Offset;
-
-        let mut tree_header = Self {
-            current_max_id: 0,
-            checksum: 0,
-            root_offset,
-            last_root_offset: root_offset,
-        };
-
-        tree_header.checksum = tree_header.calculate_checksum();
-
-        tree_header
     }
 }
 
@@ -90,18 +89,18 @@ pub struct Node {
     keys: Vec<RecordId>,
     values: Vec<Offset>,
     next_leaf_offset: Offset,
-    free_key_slot_idx: u16,
+    recently_taken_key_slot: u16,
 }
 
 impl Node {
-    fn new(is_leaf: bool) -> Self {
+    fn new(is_leaf: bool, branching_factor: u16) -> Self {
         let mut node = Self {
             checksum: 0,
             is_leaf,
-            keys: vec![EMPTY_KEY_SLOT; MAX_KEYS],
-            values: vec![EMPTY_CHILD_SLOT; M],
+            keys: vec![EMPTY_KEY_SLOT; (branching_factor - 1) as usize],
+            values: vec![EMPTY_CHILD_SLOT; branching_factor as usize],
             next_leaf_offset: NONE,
-            free_key_slot_idx: MAX_KEYS as u16,
+            recently_taken_key_slot: branching_factor,
         };
 
         node.checksum = node.calculate_checksum();
@@ -117,8 +116,8 @@ impl Node {
 
     pub fn is_full(&self) -> bool {
         match self.is_leaf {
-            true => self.free_key_slot_idx == 0,
-            false => self.free_key_slot_idx == 0,
+            true => self.recently_taken_key_slot == 0,
+            false => self.recently_taken_key_slot == 0,
         }
     }
 
@@ -127,36 +126,37 @@ impl Node {
             return Err(Error::NodeIsFull);
         }
 
-        let insert_pos = self.free_key_slot_idx as usize;
+        self.recently_taken_key_slot -= 1;
 
-        self.keys.insert(insert_pos, key);
-        self.values.insert(insert_pos, value);
-
-        self.free_key_slot_idx -= 1;
+        self.keys.insert(self.recently_taken_key_slot as usize, key);
+        self.values
+            .insert(self.recently_taken_key_slot as usize, value);
 
         Ok(())
     }
 
-    pub fn get_highest_subtree_index(&self) -> Option<usize> {
+    pub fn get_highest_subtree_index(&self) -> Option<NodeIdx> {
         if self.is_leaf {
             return None;
         }
 
-        Some(match self.free_key_slot_idx == MAX_KEYS as u16 {
-            true => FIRST_VALUE_SLOT,
-            false => (self.free_key_slot_idx - 1) as usize,
+        let branching_factor = self.values.len() as u16;
+
+        Some(match self.recently_taken_key_slot == branching_factor {
+            true => self.recently_taken_key_slot,
+            false => self.recently_taken_key_slot - 1,
         })
     }
 
     pub fn get_highest_subtree_offset(&self) -> Option<Offset> {
         self.get_highest_subtree_index()
-            .map(|index| self.values[index])
+            .map(|index| self.values[index as usize])
     }
 
     pub fn update_highest_subtree_offset(&mut self, value: Offset) -> Result<()> {
         match self.get_highest_subtree_index() {
             Some(index) => {
-                self.values[index] = value;
+                self.values[index as usize] = value;
                 Ok(())
             }
             None => Err(Error::UnexpectedError(
@@ -172,7 +172,7 @@ impl Hash for Node {
         self.keys.hash(state);
         self.values.hash(state);
         self.next_leaf_offset.hash(state);
-        self.free_key_slot_idx.hash(state);
+        self.recently_taken_key_slot.hash(state);
     }
 }
 
@@ -249,18 +249,21 @@ impl BTreeFile {
 
 impl BPTree {
     //TODO: Is that good to skip ID_OFFSET_STORAGE and work only with index
-    pub fn create(path: &Path) -> Result<Self> {
+    pub fn create(path: &Path, branching_factor: u16) -> Result<Self> {
         let file_path = path.join(INDEX_FILE);
 
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(file_path)?;
 
-        let header = BPTreeHeader::default();
-        file.seek(SeekFrom::Start(serialized_size(&header)? as u64))?;
+        let header = BPTreeHeader::new(branching_factor);
+
+        let file_len = serialized_size(&header)?;
+        file.set_len(file_len)?;
         let file = BTreeFile::new(file)?;
+
         let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
         let mut tree = Self {
@@ -314,7 +317,7 @@ impl BPTree {
     }
 
     fn create_root(&mut self) -> Result<()> {
-        let mut root = Node::new(true);
+        let mut root = Node::new(true, self.header.branching_factor);
         root.checksum = root.calculate_checksum();
 
         let root_offset = self.header.root_offset;
@@ -357,9 +360,9 @@ impl BPTree {
                 new_child_offset,
             }) => {
                 let new_root_offset: u64 = self.file.get_next_offset();
-                let mut new_root = Node::new(false);
+                let mut new_root = Node::new(false, self.header.branching_factor);
 
-                new_root.values[FIRST_VALUE_SLOT] = old_root_offset;
+                new_root.values[FIRST_VALUE_SLOT as usize] = old_root_offset;
                 new_root.insert(promoted_key, new_child_offset)?;
 
                 self.modified_nodes.insert(new_root_offset, new_root);
@@ -398,7 +401,7 @@ impl BPTree {
 
                     node.next_leaf_offset = new_node_offset;
 
-                    let mut new_node = Node::new(true);
+                    let mut new_node = Node::new(true, self.header.branching_factor);
                     new_node.insert(key, value)?;
 
                     let key_to_promote =
@@ -459,8 +462,8 @@ impl BPTree {
                                 let new_offset = self.file.get_next_offset();
                                 let new_node_offset = self.file.get_next_offset();
 
-                                let mut new_node = Node::new(false);
-                                new_node.values[FIRST_VALUE_SLOT] = new_node_offset;
+                                let mut new_node = Node::new(false, self.header.branching_factor);
+                                new_node.values[FIRST_VALUE_SLOT as usize] = new_node_offset;
 
                                 self.modified_nodes.insert(new_offset, node);
                                 self.modified_nodes.insert(new_node_offset, new_node);
@@ -500,9 +503,10 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
+        let branching_factor = 3;
 
         //Act
-        let mut tree = BPTree::create(path)?;
+        let mut tree = BPTree::create(path, branching_factor)?;
 
         //Assert
         let root_offset = tree.header.root_offset;
@@ -513,9 +517,15 @@ mod tests {
             tree.header.root_offset,
             mem::size_of::<BPTreeHeader>() as Offset
         );
-        assert!(!root.is_leaf);
-        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT; MAX_KEYS]);
-        assert_eq!(root.values, vec![EMPTY_CHILD_SLOT; M]);
+        assert!(root.is_leaf);
+        assert_eq!(
+            root.keys,
+            vec![EMPTY_KEY_SLOT; (tree.header.branching_factor - 1) as usize]
+        );
+        assert_eq!(
+            root.values,
+            vec![EMPTY_CHILD_SLOT; tree.header.branching_factor as usize]
+        );
 
         Ok(())
     }
@@ -525,7 +535,8 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let mut tree = BPTree::create(path)?;
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
         let value = 123;
 
         //Act
@@ -537,7 +548,7 @@ mod tests {
         assert!(root.is_leaf);
         assert_eq!(tree.header.current_max_id, 1);
         assert_eq!(
-            root.values.get((root.free_key_slot_idx + 1) as usize),
+            root.values.get((root.recently_taken_key_slot) as usize),
             Some(&123)
         );
 
@@ -547,7 +558,7 @@ mod tests {
     #[test]
     fn serialized_size_should_equal_const() -> Result<()> {
         //Arrange
-        let node = Node::new(true);
+        let node = Node::new(true, DEFAULT_BRANCHING_FACTOR);
         let serialized_size = bincode::serialized_size(&node)?;
 
         //Assert
