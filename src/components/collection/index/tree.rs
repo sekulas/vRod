@@ -37,15 +37,13 @@ impl BPTreeHeader {
     fn new(branching_factor: u16) -> Self {
         let root_offset = mem::size_of::<BPTreeHeader>() as Offset;
 
-        let tree_header = Self {
+        Self {
             branching_factor,
             current_max_id: 0,
             checksum: 0,
             root_offset,
             last_root_offset: root_offset,
-        };
-
-        tree_header
+        }
     }
 
     fn calculate_checksum(&self) -> u64 {
@@ -562,6 +560,49 @@ mod tests {
 
         //Assert
         assert_eq!(serialized_size, SERIALIZED_NODE_SIZE as u64);
+
+        Ok(())
+    }
+
+    #[test]
+    fn after_full_insert_to_root_new_one_should_be_created() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let old_root_offset = tree.header.root_offset;
+
+        //Act
+        tree.insert(1)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+
+        //Assert
+        let root_offset = tree.header.root_offset;
+        let root = tree.file.read_node(&root_offset)?;
+        let new_offset_for_old_root = root.values[2];
+        let new_child_offset = root.values[1];
+
+        assert!(!root.is_leaf);
+        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT, 2]);
+        assert_ne!(old_root_offset, new_offset_for_old_root);
+        assert_eq!(
+            root.values,
+            vec![0, new_child_offset, new_offset_for_old_root]
+        );
+
+        let old_root = tree.file.read_node(&new_offset_for_old_root)?;
+
+        assert!(old_root.is_leaf);
+        assert_eq!(old_root.keys, vec![2, 1]);
+        assert_eq!(old_root.values, vec![2, 1, 0]);
+
+        let new_child = tree.file.read_node(&new_child_offset)?;
+
+        assert!(new_child.is_leaf);
+        assert_eq!(new_child.keys, vec![EMPTY_KEY_SLOT, 3]);
+        assert_eq!(new_child.values, vec![0, 3, 0]);
 
         Ok(())
     }
