@@ -137,12 +137,7 @@ impl Node {
             return None;
         }
 
-        let branching_factor = self.values.len() as u16;
-
-        Some(match self.recently_taken_key_slot == branching_factor {
-            true => self.recently_taken_key_slot,
-            false => self.recently_taken_key_slot - 1,
-        })
+        Some(self.recently_taken_key_slot)
     }
 
     pub fn get_highest_subtree_offset(&self) -> Option<Offset> {
