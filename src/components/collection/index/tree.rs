@@ -100,7 +100,7 @@ impl Node {
             keys: vec![EMPTY_KEY_SLOT; (branching_factor - 1) as usize],
             values: vec![EMPTY_CHILD_SLOT; branching_factor as usize],
             next_leaf_offset: NONE,
-            recently_taken_key_slot: branching_factor,
+            recently_taken_key_slot: branching_factor - 1,
         };
 
         node.checksum = node.calculate_checksum();
@@ -128,9 +128,8 @@ impl Node {
 
         self.recently_taken_key_slot -= 1;
 
-        self.keys.insert(self.recently_taken_key_slot as usize, key);
-        self.values
-            .insert(self.recently_taken_key_slot as usize, value);
+        self.keys[self.recently_taken_key_slot as usize] = key;
+        self.values[self.recently_taken_key_slot as usize] = value;
 
         Ok(())
     }
