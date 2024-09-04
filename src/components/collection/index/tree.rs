@@ -574,8 +574,8 @@ mod tests {
         tree.insert(3)?;
 
         //Assert
-        let root_offset = tree.header.root_offset;
-        let root = tree.file.read_node(&root_offset)?;
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+
         let new_offset_for_old_root = root.values[2];
         let new_child_offset = root.values[1];
 
@@ -592,12 +592,64 @@ mod tests {
         assert!(old_root.is_leaf);
         assert_eq!(old_root.keys, vec![2, 1]);
         assert_eq!(old_root.values, vec![2, 1, 0]);
+        assert_eq!(old_root.next_leaf_offset, new_child_offset);
 
         let new_child = tree.file.read_node(&new_child_offset)?;
 
         assert!(new_child.is_leaf);
         assert_eq!(new_child.keys, vec![EMPTY_KEY_SLOT, 3]);
         assert_eq!(new_child.values, vec![0, 3, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn after_full_insert_to_2nd_lvl_root_new_one_should_be_created_on_3nd_lvl() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        //Act
+        tree.insert(1)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+        tree.insert(4)?;
+        tree.insert(5)?;
+        tree.insert(6)?;
+        tree.insert(7)?;
+
+        //Assert
+        let thrid_root = tree.file.read_node(&tree.header.root_offset)?;
+
+        //older roots checking
+        let second_root_offset = thrid_root.values[2];
+        let second_lvl_child_offset = thrid_root.values[1];
+
+        assert!(!thrid_root.is_leaf);
+        assert_eq!(thrid_root.keys, vec![EMPTY_KEY_SLOT, 6]);
+
+        let second_root = tree.file.read_node(&second_root_offset)?;
+        let frist_root_offset = second_root.values[2];
+
+        assert!(!second_root.is_leaf);
+        assert_eq!(second_root.keys, vec![4, 2]);
+
+        let first_root = tree.file.read_node(&frist_root_offset)?;
+
+        assert!(first_root.is_leaf);
+        assert_eq!(first_root.keys, vec![2, 1]);
+        assert_eq!(first_root.values, vec![2, 1, 0]);
+
+        //new child checking
+        let second_lvl_child = tree.file.read_node(&second_lvl_child_offset)?;
+        let first_lvl_child_offset = second_lvl_child.values[2];
+        let first_lvl_child = tree.file.read_node(&first_lvl_child_offset)?;
+
+        assert!(first_lvl_child.is_leaf);
+        assert_eq!(first_lvl_child.keys, vec![EMPTY_KEY_SLOT, 7]);
+        assert_eq!(first_lvl_child.values, vec![0, 7, 0]);
 
         Ok(())
     }
