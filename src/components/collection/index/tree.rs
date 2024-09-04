@@ -455,7 +455,7 @@ impl BPTree {
                                 let new_node_offset = self.file.get_next_offset();
 
                                 let mut new_node = Node::new(false, self.header.branching_factor);
-                                new_node.values[FIRST_VALUE_SLOT as usize] = new_node_offset;
+                                new_node.values[FIRST_VALUE_SLOT as usize] = new_child_offset;
 
                                 self.modified_nodes.insert(new_offset, node);
                                 self.modified_nodes.insert(new_node_offset, new_node);
