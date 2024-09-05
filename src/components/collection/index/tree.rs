@@ -302,11 +302,6 @@ impl BPTree {
         Ok(tree)
     }
 
-    fn update_header(&mut self) -> Result<()> {
-        self.header.checksum = self.header.calculate_checksum();
-        self.file.update_header(&self.header)
-    }
-
     fn create_root(&mut self) -> Result<()> {
         let mut root = Node::new(true, self.header.branching_factor);
         root.checksum = root.calculate_checksum();
@@ -511,6 +506,11 @@ impl BPTree {
         }
         self.file.write_nodes(&self.modified_nodes)?;
         Ok(())
+    }
+
+    fn update_header(&mut self) -> Result<()> {
+        self.header.checksum = self.header.calculate_checksum();
+        self.file.update_header(&self.header)
     }
 }
 
