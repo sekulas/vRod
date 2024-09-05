@@ -14,6 +14,7 @@ use crate::{
 };
 
 use std::{
+    cmp::Reverse,
     collections::HashMap,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
@@ -345,13 +346,11 @@ impl BPTree {
                 existing_child_new_offset: old_root_offset,
                 new_child_offset,
             }) => {
-                let new_root_offset: u64 = self.file.get_next_offset();
-                let mut new_root = Node::new(false, self.header.branching_factor);
+                let new_root_offset = self.create_new_node(false)?;
+                let new_root = self.get_node_mut(&new_root_offset)?;
 
                 new_root.values[FIRST_VALUE_SLOT as usize] = old_root_offset;
                 new_root.insert(promoted_key, new_child_offset)?;
-
-                self.modified_nodes.insert(new_root_offset, new_root);
 
                 self.header.last_root_offset = old_root_offset;
                 self.header.root_offset = new_root_offset;
