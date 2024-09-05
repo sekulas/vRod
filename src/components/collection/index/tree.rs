@@ -364,6 +364,49 @@ impl BPTree {
         Ok(())
     }
 
+    pub fn search(&mut self, searched_key: RecordId) -> Result<Option<Offset>> {
+        let value = self.recursive_search(self.header.root_offset, searched_key)?;
+
+        Ok(value)
+    }
+
+    fn recursive_search(
+        &mut self,
+        node_offset: Offset,
+        searched_key: RecordId,
+    ) -> Result<Option<Offset>> {
+        let node = self.file.read_node(&node_offset)?;
+
+        match node.is_leaf {
+            true => {
+                let key_idx = node
+                    .keys
+                    .binary_search_by_key(&Reverse(searched_key), |&key| Reverse(key));
+
+                match key_idx {
+                    Ok(idx) => Ok(Some(node.values[idx])),
+                    Err(_) => Ok(None),
+                }
+            }
+            false => {
+                let key_idx = node
+                    .keys
+                    .binary_search_by_key(&Reverse(searched_key), |&key| Reverse(key));
+
+                match key_idx {
+                    Ok(idx) => {
+                        let child_offset = node.values[idx + 1];
+                        self.recursive_search(child_offset, searched_key)
+                    }
+                    Err(idx) => {
+                        let child_offset = node.values[idx];
+                        self.recursive_search(child_offset, searched_key)
+                    }
+                }
+            }
+        }
+    }
+
     fn recursive_insert(
         &mut self,
         node_offset: Offset,
