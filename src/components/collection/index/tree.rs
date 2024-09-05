@@ -682,4 +682,82 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn search_should_find_the_key_existing_in_the_root_in_3rd_lvl_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let expected_value = 1234;
+
+        tree.insert(1)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+        tree.insert(4)?;
+        tree.insert(5)?;
+        tree.insert(expected_value)?;
+        tree.insert(7)?;
+
+        //Act
+        let value = tree.search(6)?;
+
+        //Assert
+        assert_eq!(Some(expected_value), value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_should_find_the_key_existing_only_in_leaf_in_3rd_lvl_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let expected_value = 1234;
+
+        tree.insert(expected_value)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+        tree.insert(4)?;
+        tree.insert(5)?;
+        tree.insert(6)?;
+        tree.insert(7)?;
+
+        //Act
+        let value = tree.search(1)?;
+
+        //Assert
+        assert_eq!(Some(expected_value), value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_should_return_none_if_no_key_in_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let expected_value: Option<Offset> = None;
+
+        tree.insert(1)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+        tree.insert(4)?;
+        tree.insert(5)?;
+        tree.insert(6)?;
+        tree.insert(7)?;
+
+        //Act
+        let value = tree.search(0)?;
+
+        //Assert
+        assert_eq!(expected_value, value);
+
+        Ok(())
+    }
 }
