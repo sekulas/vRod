@@ -804,65 +804,54 @@ mod tests {
     }
 
     #[test]
-    fn search_should_find_the_key_existing_in_the_root_in_3rd_lvl_tree() -> Result<()> {
+    fn update_should_update_value_in_root_when_its_leaf() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
-        let expected_value = 1234;
 
         tree.insert(1)?;
         tree.insert(2)?;
-        tree.insert(3)?;
-        tree.insert(4)?;
-        tree.insert(5)?;
-        tree.insert(expected_value)?;
-        tree.insert(7)?;
 
         //Act
-        let value = tree.search(6)?;
+        tree.update(2, 4)?;
 
         //Assert
-        assert_eq!(Some(expected_value), value);
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+
+        assert_eq!(root.values, vec![4, 1, 0]);
 
         Ok(())
     }
 
     #[test]
-    fn search_should_find_the_key_existing_only_in_leaf_in_3rd_lvl_tree() -> Result<()> {
+    fn update_should_return_err_when_key_not_found() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
-        let expected_value = 1234;
 
-        tree.insert(expected_value)?;
+        tree.insert(1)?;
         tree.insert(2)?;
-        tree.insert(3)?;
-        tree.insert(4)?;
-        tree.insert(5)?;
-        tree.insert(6)?;
-        tree.insert(7)?;
 
         //Act
-        let value = tree.search(1)?;
+        let result = tree.update(3, 4);
 
         //Assert
-        assert_eq!(Some(expected_value), value);
+        assert!(matches!(result, Err(Error::KeyNotFound { key: 3 })));
 
         Ok(())
     }
 
     #[test]
-    fn search_should_return_none_if_no_key_in_tree() -> Result<()> {
+    fn update_should_update_value_in_3rd_lvl_tree_when_key_in_root() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
-        let expected_value: Option<Offset> = None;
 
         tree.insert(1)?;
         tree.insert(2)?;
@@ -873,10 +862,47 @@ mod tests {
         tree.insert(7)?;
 
         //Act
-        let value = tree.search(0)?;
+        tree.update(6, 8)?;
 
         //Assert
-        assert_eq!(expected_value, value);
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+        let second_root_offset = root.values[2];
+        let second_root = tree.file.read_node(&second_root_offset)?;
+        let third_child_offset = second_root.values[0];
+        let third_child = tree.file.read_node(&third_child_offset)?;
+
+        assert_eq!(third_child.values, vec![8, 5, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_update_value_in_3rd_lvl_tree_when_key_not_in_root() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        tree.insert(1)?;
+        tree.insert(2)?;
+        tree.insert(3)?;
+        tree.insert(4)?;
+        tree.insert(5)?;
+        tree.insert(6)?;
+        tree.insert(7)?;
+
+        //Act
+        tree.update(5, 8)?;
+
+        //Assert
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+        let second_root_offset = root.values[2];
+        let second_root = tree.file.read_node(&second_root_offset)?;
+        let third_child_offset = second_root.values[0];
+        let third_child = tree.file.read_node(&third_child_offset)?;
+
+        assert_eq!(third_child.values, vec![6, 8, 0]);
 
         Ok(())
     }
