@@ -1,7 +1,7 @@
 use super::{
     types::{
         InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT,
-        FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, MAX_KEYS, SERIALIZED_NODE_SIZE,
+        FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -13,7 +13,6 @@ use crate::{
     types::{Offset, RecordId, INDEX_FILE},
 };
 
-use core::alloc;
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
@@ -376,104 +375,134 @@ impl BPTree {
         key: RecordId,
         value: Offset,
     ) -> Result<InsertionResult> {
-        let mut node = self.file.read_node(&node_offset)?;
+        let (to_modify_node_offset, is_leaf, highest_subtree_offset) =
+            self.prepare_node(node_offset)?;
 
-        match node.is_leaf {
-            true => match node.insert(key, value) {
-                Ok(()) => {
-                    let new_offset = self.file.get_next_offset();
-                    self.modified_nodes.insert(new_offset, node);
-                    Ok(InsertionResult::Inserted {
-                        existing_child_new_offset: new_offset,
-                    })
-                }
-                Err(Error::NodeIsFull) => {
-                    let new_offset = self.file.get_next_offset();
-                    let new_node_offset = self.file.get_next_offset();
+        if is_leaf {
+            self.insert_into_leaf(to_modify_node_offset, key, value)
+        } else {
+            let child_offset = highest_subtree_offset.ok_or(Error::UnexpectedError(
+                "BTree: Cannot find highest subtree offset for internal node.",
+            ))?;
+            self.insert_into_internal(to_modify_node_offset, child_offset, key, value)
+        }
+    }
 
-                    node.next_leaf_offset = new_node_offset;
+    fn prepare_node(&mut self, offset: Offset) -> Result<(Offset, bool, Option<Offset>)> {
+        let mut to_modify_node_offset = offset;
 
-                    let mut new_node = Node::new(true, self.header.branching_factor);
-                    new_node.insert(key, value)?;
+        if !self.modified_nodes.contains_key(&offset) {
+            let node = self.file.read_node(&offset)?;
+            to_modify_node_offset = self.file.get_next_offset();
+            self.modified_nodes.insert(to_modify_node_offset, node);
+        }
 
-                    let key_to_promote =
-                        *node
-                            .keys
-                            .get(HIGHEST_KEY_SLOT)
-                            .ok_or(Error::UnexpectedError(
-                                "BTree: Cannot get value from the highest key slot for leaf node.",
-                            ))?;
+        let node = self.get_node_mut(&to_modify_node_offset)?;
 
-                    self.modified_nodes.insert(new_offset, node);
-                    self.modified_nodes.insert(new_node_offset, new_node);
+        Ok((
+            to_modify_node_offset,
+            node.is_leaf,
+            node.get_highest_subtree_offset(),
+        ))
+    }
 
-                    Ok(InsertionResult::InsertedAndPromoted {
-                        existing_child_new_offset: new_offset,
-                        promoted_key: key_to_promote,
-                        new_child_offset: new_node_offset,
-                    })
-                }
-                Err(_) => Err(Error::UnexpectedError("BTree: Cannot insert into leaf.")),
-            },
-            false => {
-                let child_offset =
-                    node.get_highest_subtree_offset()
+    fn insert_into_leaf(
+        &mut self,
+        node_offset: Offset,
+        key: RecordId,
+        value: Offset,
+    ) -> Result<InsertionResult> {
+        let node = self.get_node_mut(&node_offset)?;
+
+        match node.insert(key, value) {
+            Ok(()) => Ok(InsertionResult::Inserted {
+                existing_child_new_offset: node_offset,
+            }),
+            Err(Error::NodeIsFull) => {
+                let new_node_offset = self.create_new_node(true)?;
+                let new_node = self.get_node_mut(&new_node_offset)?;
+                new_node.insert(key, value)?;
+
+                let node: &mut Node = self.get_node_mut(&node_offset)?;
+                node.next_leaf_offset = new_node_offset;
+                let key_to_promote =
+                    *node
+                        .keys
+                        .get(HIGHEST_KEY_SLOT)
                         .ok_or(Error::UnexpectedError(
-                            "BTree: Cannot find highest subtree offset for internal node.",
+                            "BTree: Cannot get value from the highest key slot for leaf node.",
                         ))?;
 
-                match self.recursive_insert(child_offset, key, value)? {
-                    InsertionResult::Inserted {
-                        existing_child_new_offset,
-                    } => {
-                        let new_offset = self.file.get_next_offset();
-                        node.update_highest_subtree_offset(existing_child_new_offset)?;
+                Ok(InsertionResult::InsertedAndPromoted {
+                    existing_child_new_offset: node_offset,
+                    promoted_key: key_to_promote,
+                    new_child_offset: new_node_offset,
+                })
+            }
+            Err(_) => Err(Error::UnexpectedError("BTree: Cannot insert into leaf.")),
+        }
+    }
 
-                        self.modified_nodes.insert(new_offset, node);
+    fn insert_into_internal(
+        &mut self,
+        node_offset: Offset,
+        child_offset: Offset,
+        key: RecordId,
+        value: Offset,
+    ) -> Result<InsertionResult> {
+        match self.recursive_insert(child_offset, key, value)? {
+            InsertionResult::Inserted {
+                existing_child_new_offset,
+            } => {
+                let node = self.get_node_mut(&node_offset)?;
+                node.update_highest_subtree_offset(existing_child_new_offset)?;
 
-                        Ok(InsertionResult::Inserted {
-                            existing_child_new_offset: new_offset,
+                Ok(InsertionResult::Inserted {
+                    existing_child_new_offset: node_offset,
+                })
+            }
+            InsertionResult::InsertedAndPromoted {
+                promoted_key,
+                existing_child_new_offset,
+                new_child_offset,
+            } => {
+                let node = self.get_node_mut(&node_offset)?;
+                node.update_highest_subtree_offset(existing_child_new_offset)?;
+
+                match node.insert(promoted_key, new_child_offset) {
+                    Ok(()) => Ok(InsertionResult::Inserted {
+                        existing_child_new_offset: node_offset,
+                    }),
+                    Err(Error::NodeIsFull) => {
+                        let new_node_offset = self.create_new_node(false)?;
+                        let new_node = self.get_node_mut(&new_node_offset)?;
+                        new_node.values[FIRST_VALUE_SLOT as usize] = new_child_offset;
+
+                        Ok(InsertionResult::InsertedAndPromoted {
+                            promoted_key,
+                            existing_child_new_offset: node_offset,
+                            new_child_offset: new_node_offset,
                         })
                     }
-                    InsertionResult::InsertedAndPromoted {
-                        promoted_key,
-                        existing_child_new_offset,
-                        new_child_offset,
-                    } => {
-                        let new_offset = self.file.get_next_offset();
-                        node.update_highest_subtree_offset(existing_child_new_offset)?;
-
-                        match node.insert(promoted_key, new_child_offset) {
-                            Ok(()) => {
-                                self.modified_nodes.insert(new_offset, node);
-                                Ok(InsertionResult::Inserted {
-                                    existing_child_new_offset: new_offset,
-                                })
-                            }
-                            Err(Error::NodeIsFull) => {
-                                let new_offset = self.file.get_next_offset();
-                                let new_node_offset = self.file.get_next_offset();
-
-                                let mut new_node = Node::new(false, self.header.branching_factor);
-                                new_node.values[FIRST_VALUE_SLOT as usize] = new_child_offset;
-
-                                self.modified_nodes.insert(new_offset, node);
-                                self.modified_nodes.insert(new_node_offset, new_node);
-
-                                Ok(InsertionResult::InsertedAndPromoted {
-                                    promoted_key,
-                                    existing_child_new_offset: new_offset,
-                                    new_child_offset: new_node_offset,
-                                })
-                            }
-                            Err(_) => Err(Error::UnexpectedError(
-                                "BTree: Cannot insert into internal node.",
-                            )),
-                        }
-                    }
+                    Err(_) => Err(Error::UnexpectedError(
+                        "BTree: Cannot insert into internal node.",
+                    )),
                 }
             }
         }
+    }
+
+    fn get_node_mut(&mut self, offset: &Offset) -> Result<&mut Node> {
+        self.modified_nodes
+            .get_mut(offset)
+            .ok_or(Error::UnexpectedError("BTree: Cannot get node to modify."))
+    }
+
+    fn create_new_node(&mut self, is_leaf: bool) -> Result<Offset> {
+        let new_offset = self.file.get_next_offset();
+        let node = Node::new(is_leaf, self.header.branching_factor);
+        self.modified_nodes.insert(new_offset, node);
+        Ok(new_offset)
     }
 
     fn flush_modified_nodes(&mut self) -> Result<()> {
