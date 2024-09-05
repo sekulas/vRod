@@ -119,9 +119,9 @@ impl Node {
         }
     }
 
-    pub fn insert(&mut self, key: RecordId, value: Offset) -> Result<()> {
+    pub fn insert(&mut self, key: RecordId, value: Offset) -> Option<Offset> {
         if self.is_full() {
-            return Err(Error::NodeIsFull);
+            return None;
         }
 
         self.recently_taken_key_slot -= 1;
@@ -129,7 +129,8 @@ impl Node {
         self.keys[self.recently_taken_key_slot as usize] = key;
         self.values[self.recently_taken_key_slot as usize] = value;
 
-        Ok(())
+        Some(value)
+    }
     }
 
     pub fn get_highest_subtree_index(&self) -> Option<NodeIdx> {
@@ -393,7 +394,7 @@ impl BPTree {
                 let new_root = self.get_node_mut(&new_root_offset)?;
 
                 new_root.values[FIRST_VALUE_SLOT as usize] = old_root_offset;
-                new_root.insert(promoted_key, new_child_offset)?;
+                new_root.insert(promoted_key, new_child_offset);
 
                 self.header.last_root_offset = old_root_offset;
                 self.header.root_offset = new_root_offset;
@@ -412,32 +413,32 @@ impl BPTree {
         key: RecordId,
         value: Offset,
     ) -> Result<InsertionResult> {
-        let (to_modify_node_offset, is_leaf, highest_subtree_offset) =
+        let (modified_node_offset, is_leaf, highest_subtree_offset) =
             self.prepare_node(node_offset)?;
 
         if is_leaf {
-            self.insert_into_leaf(to_modify_node_offset, key, value)
+            self.insert_into_leaf(modified_node_offset, key, value)
         } else {
             let child_offset = highest_subtree_offset.ok_or(Error::UnexpectedError(
                 "BTree: Cannot find highest subtree offset for internal node.",
             ))?;
-            self.insert_into_internal(to_modify_node_offset, child_offset, key, value)
+            self.insert_into_internal(modified_node_offset, child_offset, key, value)
         }
     }
 
     fn prepare_node(&mut self, offset: Offset) -> Result<(Offset, bool, Option<Offset>)> {
-        let mut to_modify_node_offset = offset;
+        let mut modified_node_offset = offset;
 
         if !self.modified_nodes.contains_key(&offset) {
             let node = self.file.read_node(&offset)?;
-            to_modify_node_offset = self.file.get_next_offset();
-            self.modified_nodes.insert(to_modify_node_offset, node);
+            modified_node_offset = self.file.get_next_offset();
+            self.modified_nodes.insert(modified_node_offset, node);
         }
 
-        let node = self.get_node_mut(&to_modify_node_offset)?;
+        let node = self.get_node_mut(&modified_node_offset)?;
 
         Ok((
-            to_modify_node_offset,
+            modified_node_offset,
             node.is_leaf,
             node.get_highest_subtree_offset(),
         ))
@@ -452,13 +453,13 @@ impl BPTree {
         let node = self.get_node_mut(&node_offset)?;
 
         match node.insert(key, value) {
-            Ok(()) => Ok(InsertionResult::Inserted {
+            Some(_) => Ok(InsertionResult::Inserted {
                 existing_child_new_offset: node_offset,
             }),
-            Err(Error::NodeIsFull) => {
+            None => {
                 let new_node_offset = self.create_new_node(true)?;
                 let new_node = self.get_node_mut(&new_node_offset)?;
-                new_node.insert(key, value)?;
+                new_node.insert(key, value);
 
                 let node: &mut Node = self.get_node_mut(&node_offset)?;
                 node.next_leaf_offset = new_node_offset;
@@ -476,7 +477,6 @@ impl BPTree {
                     new_child_offset: new_node_offset,
                 })
             }
-            Err(_) => Err(Error::UnexpectedError("BTree: Cannot insert into leaf.")),
         }
     }
 
@@ -507,10 +507,10 @@ impl BPTree {
                 node.update_highest_subtree_offset(existing_child_new_offset)?;
 
                 match node.insert(promoted_key, new_child_offset) {
-                    Ok(()) => Ok(InsertionResult::Inserted {
+                    Some(_) => Ok(InsertionResult::Inserted {
                         existing_child_new_offset: node_offset,
                     }),
-                    Err(Error::NodeIsFull) => {
+                    None => {
                         let new_node_offset = self.create_new_node(false)?;
                         let new_node = self.get_node_mut(&new_node_offset)?;
                         new_node.values[FIRST_VALUE_SLOT as usize] = new_child_offset;
@@ -521,10 +521,10 @@ impl BPTree {
                             new_child_offset: new_node_offset,
                         })
                     }
-                    Err(_) => Err(Error::UnexpectedError(
-                        "BTree: Cannot insert into internal node.",
-                    )),
                 }
+            }
+        }
+    }
             }
         }
     }
