@@ -1,7 +1,7 @@
 use super::{
     types::{
-        InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT,
-        FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
+        FindKeyResult, InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT,
+        EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -9,7 +9,7 @@ use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::types::NONE,
+    components::collection::{index::types::UpdateResult, types::NONE},
     types::{Offset, RecordId, INDEX_FILE},
 };
 
@@ -131,6 +131,28 @@ impl Node {
 
         Some(value)
     }
+
+    pub fn update(&mut self, key: RecordId, value: Offset) -> Option<Offset> {
+        let key_idx = self.find_key_idx(key);
+
+        match key_idx {
+            FindKeyResult::Found { idx } => {
+                self.values[idx] = value;
+                Some(value)
+            }
+            FindKeyResult::NotFound { idx } => None,
+        }
+    }
+
+    pub fn find_key_idx(&self, key: RecordId) -> FindKeyResult {
+        let key_idx = self
+            .keys
+            .binary_search_by_key(&Reverse(key), |&key| Reverse(key));
+
+        match key_idx {
+            Ok(idx) => FindKeyResult::Found { idx },
+            Err(idx) => FindKeyResult::NotFound { idx },
+        }
     }
 
     pub fn get_highest_subtree_index(&self) -> Option<NodeIdx> {
@@ -525,6 +547,62 @@ impl BPTree {
             }
         }
     }
+
+    pub fn update(&mut self, key: RecordId, value: Offset) -> Result<()> {
+        match self.recursive_update(self.header.root_offset, key, value) {
+            Ok(UpdateResult::Updated {
+                existing_child_new_offset,
+            }) => {
+                self.header.last_root_offset = self.header.root_offset;
+                self.header.root_offset = existing_child_new_offset;
+            }
+            Ok(UpdateResult::KeyNotFound) => return Err(Error::KeyNotFound { key }),
+            Err(e) => return Err(e),
+        }
+
+        self.flush_modified_nodes()?;
+        self.update_header()?;
+        Ok(())
+    }
+
+    fn recursive_update(
+        &mut self,
+        node_offset: Offset,
+        key: RecordId,
+        value: Offset,
+    ) -> Result<UpdateResult> {
+        let (modified_node_offset, is_leaf, _) = self.prepare_node(node_offset)?;
+
+        if is_leaf {
+            let node = self.get_node_mut(&modified_node_offset)?;
+
+            match node.update(key, value) {
+                Some(_) => Ok(UpdateResult::Updated {
+                    existing_child_new_offset: modified_node_offset,
+                }),
+                None => Ok(UpdateResult::KeyNotFound),
+            }
+        } else {
+            let node = self.get_node_mut(&modified_node_offset)?;
+
+            let child_offset = match node.find_key_idx(key) {
+                FindKeyResult::Found { idx } => node.values[idx + 1],
+                FindKeyResult::NotFound { idx } => node.values[idx],
+            };
+
+            match self.recursive_update(child_offset, key, value) {
+                Ok(UpdateResult::Updated {
+                    existing_child_new_offset,
+                }) => {
+                    let node = self.get_node_mut(&modified_node_offset)?;
+                    node.update_highest_subtree_offset(existing_child_new_offset)?;
+
+                    Ok(UpdateResult::Updated {
+                        existing_child_new_offset: modified_node_offset,
+                    })
+                }
+                Ok(UpdateResult::KeyNotFound) => Ok(UpdateResult::KeyNotFound),
+                Err(_) => Err(Error::UnexpectedError("BTree: Cannot update.")),
             }
         }
     }

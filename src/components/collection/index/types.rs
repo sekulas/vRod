@@ -27,3 +27,13 @@ pub enum InsertionResult {
         new_child_offset: Offset,
     },
 }
+
+pub enum UpdateResult {
+    Updated { existing_child_new_offset: Offset },
+    KeyNotFound,
+}
+
+pub enum FindKeyResult {
+    Found { idx: usize },
+    NotFound { idx: usize },
+}
