@@ -2,7 +2,7 @@ use super::{
     types::{
         FindKeyResult, Index, IndexCommand, IndexQuery, IndexQueryResult, InsertionResult, NodeIdx,
         DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT,
-HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
+        HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -440,7 +440,7 @@ impl BPTree {
             Ok(InsertionResult::Inserted {
                 existing_child_new_offset,
             }) => {
-                                self.header.root_offset = existing_child_new_offset;
+                self.header.root_offset = existing_child_new_offset;
             }
             Ok(InsertionResult::InsertedAndPromoted {
                 promoted_key,
@@ -453,12 +453,12 @@ impl BPTree {
                 new_root.values[FIRST_VALUE_SLOT as usize] = old_root_offset;
                 new_root.insert(promoted_key, new_child_offset);
 
-                                self.header.root_offset = new_root_offset;
+                self.header.root_offset = new_root_offset;
             }
             Err(_) => return Err(Error::UnexpectedError("BTree: Cannot insert.")),
         }
 
-                Ok(())
+        Ok(())
     }
 
     fn recursive_insert(
@@ -585,13 +585,13 @@ impl BPTree {
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
             }) => {
-                                self.header.root_offset = existing_child_new_offset;
+                self.header.root_offset = existing_child_new_offset;
             }
             Ok(UpdateResult::KeyNotFound) => return Err(Error::KeyNotFound { key }),
             Err(e) => return Err(e),
         }
 
-                Ok(())
+        Ok(())
     }
 
     fn recursive_update(
@@ -656,7 +656,7 @@ impl BPTree {
             node.checksum = node.calculate_checksum();
         }
         self.file.write_nodes(&self.modified_nodes)?;
-self.modified_nodes.clear();
+        self.modified_nodes.clear();
         Ok(())
     }
 

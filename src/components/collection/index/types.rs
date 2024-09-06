@@ -1,5 +1,6 @@
 use std::mem;
 
+use super::Result;
 use crate::types::{Offset, RecordId};
 
 //TODO: Change DEFAULT_BRANCHING_FACTOR;
@@ -16,6 +17,29 @@ pub const SERIALIZED_NODE_SIZE: usize = 8
     + (DEFAULT_BRANCHING_FACTOR * mem::size_of::<Offset>() as u16 + 8) as usize
     + 8
     + 2;
+
+pub trait Index {
+    fn perform_command(&mut self, command: IndexCommand) -> Result<()>;
+    fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult>;
+}
+
+pub enum IndexCommand {
+    BulkInsert(Vec<Offset>),
+    Insert(Offset),
+    Update(RecordId, Offset),
+}
+
+pub enum IndexQuery {
+    SearchAll,
+    Search(RecordId),
+}
+
+#[derive(PartialEq, Debug)]
+pub enum IndexQueryResult {
+    SearchAll(Vec<(RecordId, Offset)>),
+    SearchResult(Offset),
+    NotFound,
+}
 
 pub enum InsertionResult {
     Inserted {
