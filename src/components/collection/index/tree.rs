@@ -636,6 +636,7 @@ let old_root = self.header.root_offset;
             node.checksum = node.calculate_checksum();
         }
         self.file.write_nodes(&self.modified_nodes)?;
+self.modified_nodes.clear();
         Ok(())
     }
 
