@@ -562,16 +562,13 @@ let old_root = self.header.root_offset;
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
             }) => {
-                self.header.last_root_offset = self.header.root_offset;
-                self.header.root_offset = existing_child_new_offset;
+                                self.header.root_offset = existing_child_new_offset;
             }
             Ok(UpdateResult::KeyNotFound) => return Err(Error::KeyNotFound { key }),
             Err(e) => return Err(e),
         }
 
-        self.flush_modified_nodes()?;
-        self.update_header()?;
-        Ok(())
+                Ok(())
     }
 
     fn recursive_update(
@@ -594,7 +591,7 @@ let old_root = self.header.root_offset;
         } else {
             let node = self.get_node_mut(&modified_node_offset)?;
 
-            let child_offset = match node.find_key_idx(key) {
+            let child_idx = match node.find_key_idx(key) {
                 FindKeyResult::Found { idx } => idx + 1,
                 FindKeyResult::NotFound { idx } => idx,
             };
