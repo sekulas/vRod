@@ -926,6 +926,124 @@ mod tests {
     }
 
     #[test]
+    fn bulk_insert_to_full_root_should_create_new_root() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let old_root_offset = tree.header.root_offset;
+        let values = vec![1, 2, 3];
+
+        //Act
+        tree.bulk_insert(&values)?;
+
+        //Assert
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+
+        let new_offset_for_old_root = root.values[2];
+        let new_child_offset = root.values[1];
+
+        assert!(!root.is_leaf);
+        assert_eq!(root.keys, vec![EMPTY_KEY_SLOT, 2]);
+        assert_ne!(old_root_offset, new_offset_for_old_root);
+        assert_eq!(
+            root.values,
+            vec![0, new_child_offset, new_offset_for_old_root]
+        );
+
+        let old_root = tree.file.read_node(&new_offset_for_old_root)?;
+
+        assert!(old_root.is_leaf);
+        assert_eq!(old_root.keys, vec![2, 1]);
+        assert_eq!(old_root.values, vec![2, 1, 0]);
+        assert_eq!(old_root.next_leaf_offset, new_child_offset);
+
+        let new_child = tree.file.read_node(&new_child_offset)?;
+
+        assert!(new_child.is_leaf);
+        assert_eq!(new_child.keys, vec![EMPTY_KEY_SLOT, 3]);
+        assert_eq!(new_child.values, vec![0, 3, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_to_full_2nd_lvl_root_should_create_new_on_3rd_lvl() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        let values = vec![1, 2, 3, 4, 5, 6, 7];
+
+        //Act
+        tree.bulk_insert(&values)?;
+
+        //Assert
+        let thrid_root = tree.file.read_node(&tree.header.root_offset)?;
+
+        //older roots checking
+        let second_root_offset = thrid_root.values[2];
+        let second_lvl_child_offset = thrid_root.values[1];
+
+        assert!(!thrid_root.is_leaf);
+        assert_eq!(thrid_root.keys, vec![EMPTY_KEY_SLOT, 6]);
+
+        let second_root = tree.file.read_node(&second_root_offset)?;
+        let frist_root_offset = second_root.values[2];
+
+        assert!(!second_root.is_leaf);
+        assert_eq!(second_root.keys, vec![4, 2]);
+
+        let first_root = tree.file.read_node(&frist_root_offset)?;
+
+        assert!(first_root.is_leaf);
+        assert_eq!(first_root.keys, vec![2, 1]);
+        assert_eq!(first_root.values, vec![2, 1, 0]);
+
+        //new child checking
+        let second_lvl_child = tree.file.read_node(&second_lvl_child_offset)?;
+        let first_lvl_child_offset = second_lvl_child.values[2];
+        let first_lvl_child = tree.file.read_node(&first_lvl_child_offset)?;
+
+        assert!(first_lvl_child.is_leaf);
+        assert_eq!(first_lvl_child.keys, vec![EMPTY_KEY_SLOT, 7]);
+        assert_eq!(first_lvl_child.values, vec![0, 7, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_should_extend_file_less_than_insert() -> Result<()> {
+        //Arrange
+        let values = vec![1, 2, 3];
+
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+        tree.insert(values[0])?;
+        tree.insert(values[1])?;
+        tree.insert(values[2])?;
+
+        let temp_dir_bulk = tempfile::tempdir()?;
+        let path_bulk = temp_dir_bulk.path();
+        let mut tree_bulk = BPTree::create(path_bulk, branching_factor)?;
+
+        //Act
+        tree_bulk.bulk_insert(&values)?;
+
+        //Assert
+        let file_len = tree.file.file.seek(SeekFrom::End(0))?;
+        let file_len_bulk = tree_bulk.file.file.seek(SeekFrom::End(0))?;
+
+        assert!(file_len > file_len_bulk);
+
+        Ok(())
+    }
+
+    #[test]
     fn update_should_update_value_in_root_when_its_leaf() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
