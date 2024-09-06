@@ -798,7 +798,42 @@ mod tests {
     }
 
     #[test]
-    fn after_full_insert_to_root_new_one_should_be_created() -> Result<()> {
+    fn insert_should_create_new_root_after_first_write() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        //Act
+        tree.insert(1)?;
+
+        //Assert
+        assert_ne!(tree.header.root_offset, tree.header.last_root_offset);
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_should_create_copy_of_root_on_second_write() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        //Act
+        tree.insert(1)?;
+        tree.insert(2)?;
+
+        //Assert
+        assert_ne!(tree.header.root_offset, tree.header.last_root_offset);
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_to_full_root_should_create_new_root() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
@@ -842,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn after_full_insert_to_2nd_lvl_root_new_one_should_be_created_on_3nd_lvl() -> Result<()> {
+    fn insert_to_full_2nd_lvl_root_should_create_new_on_3rd_lvl() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
