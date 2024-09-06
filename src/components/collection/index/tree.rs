@@ -396,7 +396,27 @@ impl BPTree {
         }
     }
 
+    fn bulk_insert(&mut self, values: &[Offset]) -> Result<()> {
+        let old_root = self.header.root_offset;
+        for value in values {
+            self.insert_base(*value)?;
+        }
+        self.flush_modified_nodes()?;
+
+        self.header.last_root_offset = old_root;
+        self.update_header()
+    }
+
     pub fn insert(&mut self, value: Offset) -> Result<()> {
+let old_root = self.header.root_offset;
+        self.insert_base(value)?;
+        self.flush_modified_nodes()?;
+
+        self.header.last_root_offset = old_root;
+        self.update_header()
+    }
+
+    fn insert_base(&mut self, value: Offset) -> Result<()> {
         self.header.current_max_id += 1;
         let next_key = self.header.current_max_id;
 
@@ -404,8 +424,7 @@ impl BPTree {
             Ok(InsertionResult::Inserted {
                 existing_child_new_offset,
             }) => {
-                self.header.last_root_offset = self.header.root_offset;
-                self.header.root_offset = existing_child_new_offset;
+                                self.header.root_offset = existing_child_new_offset;
             }
             Ok(InsertionResult::InsertedAndPromoted {
                 promoted_key,
@@ -418,15 +437,12 @@ impl BPTree {
                 new_root.values[FIRST_VALUE_SLOT as usize] = old_root_offset;
                 new_root.insert(promoted_key, new_child_offset);
 
-                self.header.last_root_offset = old_root_offset;
-                self.header.root_offset = new_root_offset;
+                                self.header.root_offset = new_root_offset;
             }
             Err(_) => return Err(Error::UnexpectedError("BTree: Cannot insert.")),
         }
 
-        self.flush_modified_nodes()?;
-        self.update_header()?;
-        Ok(())
+                Ok(())
     }
 
     fn recursive_insert(
