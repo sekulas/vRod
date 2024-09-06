@@ -140,7 +140,7 @@ impl Node {
                 self.values[idx] = value;
                 Some(value)
             }
-            FindKeyResult::NotFound { idx } => None,
+            FindKeyResult::NotFound { idx: _ } => None,
         }
     }
 
@@ -549,6 +549,15 @@ impl BPTree {
     }
 
     pub fn update(&mut self, key: RecordId, value: Offset) -> Result<()> {
+let old_root = self.header.root_offset;
+        self.update_base(key, value)?;
+        self.flush_modified_nodes()?;
+
+        self.header.last_root_offset = old_root;
+        self.update_header()
+    }
+
+    fn update_base(&mut self, key: RecordId, value: Offset) -> Result<()> {
         match self.recursive_update(self.header.root_offset, key, value) {
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
@@ -586,16 +595,18 @@ impl BPTree {
             let node = self.get_node_mut(&modified_node_offset)?;
 
             let child_offset = match node.find_key_idx(key) {
-                FindKeyResult::Found { idx } => node.values[idx + 1],
-                FindKeyResult::NotFound { idx } => node.values[idx],
+                FindKeyResult::Found { idx } => idx + 1,
+                FindKeyResult::NotFound { idx } => idx,
             };
+
+            let child_offset = node.values[child_idx];
 
             match self.recursive_update(child_offset, key, value) {
                 Ok(UpdateResult::Updated {
                     existing_child_new_offset,
                 }) => {
                     let node = self.get_node_mut(&modified_node_offset)?;
-                    node.update_highest_subtree_offset(existing_child_new_offset)?;
+                    node.values[child_idx] = existing_child_new_offset;
 
                     Ok(UpdateResult::Updated {
                         existing_child_new_offset: modified_node_offset,
