@@ -1,7 +1,8 @@
 use super::{
     types::{
-        FindKeyResult, InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT,
-        EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
+        FindKeyResult, Index, IndexCommand, IndexQuery, IndexQueryResult, InsertionResult, NodeIdx,
+        DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT,
+HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -23,6 +24,33 @@ use std::{
     path::Path,
     vec,
 };
+
+impl Index for BPTree {
+    fn perform_command(&mut self, command: IndexCommand) -> Result<()> {
+        let old_root = self.header.root_offset;
+
+        match command {
+            IndexCommand::BulkInsert(values) => self.bulk_insert(&values)?,
+            IndexCommand::Insert(value) => self.insert(value)?,
+            IndexCommand::Update(key, value) => self.update(key, value)?,
+        }
+
+        self.flush_modified_nodes()?;
+
+        self.header.last_root_offset = old_root;
+        self.update_header()
+    }
+
+    fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult> {
+        match query {
+            IndexQuery::Search(key) => match self.search(key)? {
+                Some(offset) => Ok(IndexQueryResult::SearchResult(offset)),
+                None => Ok(IndexQueryResult::NotFound),
+            },
+            IndexQuery::SearchAll => todo!("TODO: SearchAll"),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct BPTreeHeader {
@@ -397,26 +425,14 @@ impl BPTree {
     }
 
     fn bulk_insert(&mut self, values: &[Offset]) -> Result<()> {
-        let old_root = self.header.root_offset;
         for value in values {
-            self.insert_base(*value)?;
+            self.insert(*value)?;
         }
-        self.flush_modified_nodes()?;
 
-        self.header.last_root_offset = old_root;
-        self.update_header()
+        Ok(())
     }
 
-    pub fn insert(&mut self, value: Offset) -> Result<()> {
-let old_root = self.header.root_offset;
-        self.insert_base(value)?;
-        self.flush_modified_nodes()?;
-
-        self.header.last_root_offset = old_root;
-        self.update_header()
-    }
-
-    fn insert_base(&mut self, value: Offset) -> Result<()> {
+    fn insert(&mut self, value: Offset) -> Result<()> {
         self.header.current_max_id += 1;
         let next_key = self.header.current_max_id;
 
@@ -498,9 +514,9 @@ let old_root = self.header.root_offset;
                 let new_node_offset = self.create_new_node(true)?;
                 let new_node = self.get_node_mut(&new_node_offset)?;
                 new_node.insert(key, value);
+                new_node.next_leaf_offset = node_offset;
 
                 let node: &mut Node = self.get_node_mut(&node_offset)?;
-                node.next_leaf_offset = new_node_offset;
                 let key_to_promote =
                     *node
                         .keys
@@ -564,16 +580,7 @@ let old_root = self.header.root_offset;
         }
     }
 
-    pub fn update(&mut self, key: RecordId, value: Offset) -> Result<()> {
-let old_root = self.header.root_offset;
-        self.update_base(key, value)?;
-        self.flush_modified_nodes()?;
-
-        self.header.last_root_offset = old_root;
-        self.update_header()
-    }
-
-    fn update_base(&mut self, key: RecordId, value: Offset) -> Result<()> {
+    fn update(&mut self, key: RecordId, value: Offset) -> Result<()> {
         match self.recursive_update(self.header.root_offset, key, value) {
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
