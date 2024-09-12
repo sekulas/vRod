@@ -1142,4 +1142,117 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn update_should_update_value_in_3rd_lvl_tree_when_key_in_new_branch() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3, 4, 5, 6, 7];
+        tree.perform_command(IndexCommand::BulkInsert(values))?;
+
+        //Act
+        tree.perform_command(IndexCommand::Update(7, 8))?;
+
+        //Assert
+        let root = tree.file.read_node(&tree.header.root_offset)?;
+        let second_lvl_new_child_offset = root.values[1];
+        let second_lvl_new_child = tree.file.read_node(&second_lvl_new_child_offset)?;
+        let first_lvl_new_child_offset = second_lvl_new_child.values[2];
+        let first_lvl_new_child = tree.file.read_node(&first_lvl_new_child_offset)?;
+
+        assert_eq!(first_lvl_new_child.values, vec![0, 8, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_empty_vec_when_no_keys_in_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        //Act
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        //Assert
+        assert_eq!(IndexQueryResult::SearchAll(vec![]), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_all_keys_and_offsets_if_there_is_only_root() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2];
+        tree.perform_command(IndexCommand::BulkInsert(values))?;
+
+        //Act
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        //Assert
+        let expected_result = vec![(2, 2), (1, 1)];
+
+        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_all_keys_and_offsets_in_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3, 4, 5, 6, 7];
+        tree.perform_command(IndexCommand::BulkInsert(values))?;
+
+        //Act
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        //Assert
+        let expected_result = vec![(7, 7), (6, 6), (5, 5), (4, 4), (3, 3), (2, 2), (1, 1)];
+
+        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_all_keys_and_offsets_in_tree_after_updates() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3, 4, 5, 6, 7];
+        tree.perform_command(IndexCommand::BulkInsert(values))?;
+
+        //Act
+        tree.perform_command(IndexCommand::Update(7, 10))?;
+        tree.perform_command(IndexCommand::Update(5, 10))?;
+        tree.perform_command(IndexCommand::Update(1, 10))?;
+
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        //Assert
+        let expected_result = vec![(7, 10), (6, 6), (5, 10), (4, 4), (3, 3), (2, 2), (1, 1)];
+
+        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+
+        Ok(())
+    }
 }
