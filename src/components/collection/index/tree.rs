@@ -47,7 +47,10 @@ impl Index for BPTree {
                 Some(offset) => Ok(IndexQueryResult::SearchResult(offset)),
                 None => Ok(IndexQueryResult::NotFound),
             },
-            IndexQuery::SearchAll => todo!("TODO: SearchAll"),
+            IndexQuery::SearchAll => {
+                let ids_and_offsets = self.search_all()?;
+                Ok(IndexQueryResult::SearchAll(ids_and_offsets))
+            }
         }
     }
 }
@@ -175,11 +178,15 @@ impl Node {
     pub fn find_key_idx(&self, key: RecordId) -> FindKeyResult {
         let key_idx = self
             .keys
-            .binary_search_by_key(&Reverse(key), |&key| Reverse(key));
+            .iter()
+            .position(|&k| k != EMPTY_KEY_SLOT && k <= key);
 
         match key_idx {
-            Ok(idx) => FindKeyResult::Found { idx },
-            Err(idx) => FindKeyResult::NotFound { idx },
+            Some(idx) if self.keys[idx] == key => FindKeyResult::Found { idx },
+            Some(idx) => FindKeyResult::NotFound { idx },
+            None => FindKeyResult::NotFound {
+                idx: self.keys.len(),
+            },
         }
     }
 
@@ -364,24 +371,46 @@ impl BPTree {
         Ok(())
     }
 
-    fn find_leftmost_leaf_path(&mut self) -> Result<Vec<(Offset, Node)>> {
-        let mut path = Vec::new();
+    fn search_all(&mut self) -> Result<Vec<(RecordId, Offset)>> {
+        let mut ids_and_offsets = Vec::new();
 
-        let mut offset = self.header.root_offset;
-        let mut node = self.file.read_node(&offset)?;
+        let mut current_offset;
+        let mut node = self.file.read_node(&self.header.root_offset)?;
 
-        while let Some(next_offset) = node.get_highest_subtree_offset() {
-            path.push((offset, node));
-            node = self.file.read_node(&offset)?;
-            offset = next_offset;
+        while !node.is_leaf {
+            current_offset = node
+                .get_highest_subtree_offset()
+                .ok_or(Error::UnexpectedError(
+                    "BTree: Cannot find highest subtree offset for internal node.",
+                ))?;
+
+            node = self.file.read_node(&current_offset)?;
         }
 
-        path.push((offset, node));
+        loop {
+            for (key, value) in node
+                .keys
+                .iter()
+                .zip(node.values.iter())
+                .take(node.keys.len())
+            {
+                if *key != EMPTY_KEY_SLOT {
+                    ids_and_offsets.push((*key, *value));
+                }
+            }
 
-        Ok(path)
+            if node.next_leaf_offset == NONE {
+                break;
+            }
+
+            current_offset = node.next_leaf_offset;
+            node = self.file.read_node(&current_offset)?;
+        }
+
+        Ok(ids_and_offsets)
     }
 
-    pub fn search(&mut self, searched_key: RecordId) -> Result<Option<Offset>> {
+    fn search(&mut self, searched_key: RecordId) -> Result<Option<Offset>> {
         let value = self.recursive_search(self.header.root_offset, searched_key)?;
 
         Ok(value)
