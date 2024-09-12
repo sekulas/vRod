@@ -249,7 +249,6 @@ impl BTreeFile {
         self.file.seek(SeekFrom::Start(*offset))?;
         serialize_into(&mut BufWriter::new(&self.file), node)?;
 
-        //TODO: file.sync_all()?
         Ok(())
     }
 
@@ -266,6 +265,8 @@ impl BTreeFile {
                 .ok_or(Error::UnexpectedError("BTree: Cannot get node."))?;
             self.write_node(node, offset)?;
         }
+
+        self.file.sync_all()?;
 
         Ok(())
     }
@@ -301,7 +302,6 @@ impl BTreeFile {
 }
 
 impl BPTree {
-    //TODO: Is that good to skip ID_OFFSET_STORAGE and work only with index
     pub fn create(path: &Path, branching_factor: u16) -> Result<Self> {
         let file_path = path.join(INDEX_FILE);
 
