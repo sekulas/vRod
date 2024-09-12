@@ -810,6 +810,67 @@ mod tests {
     }
 
     #[test]
+    fn load_should_load_tree_correctly() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let tree = BPTree::create(path, branching_factor)?;
+
+        //Act
+        let loaded_tree = BPTree::load(path)?;
+
+        //Assert
+        assert_eq!(
+            tree.header.branching_factor,
+            loaded_tree.header.branching_factor
+        );
+        assert_eq!(
+            tree.header.current_max_id,
+            loaded_tree.header.current_max_id
+        );
+        assert_eq!(tree.header.root_offset, loaded_tree.header.root_offset);
+        assert_eq!(
+            tree.header.last_root_offset,
+            loaded_tree.header.last_root_offset
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_should_load_modified_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        tree.perform_command(IndexCommand::Insert(1))?;
+        tree.perform_command(IndexCommand::Insert(2))?;
+
+        //Act
+        let loaded_tree = BPTree::load(path)?;
+
+        //Assert
+        assert_eq!(
+            tree.header.branching_factor,
+            loaded_tree.header.branching_factor
+        );
+        assert_eq!(
+            tree.header.current_max_id,
+            loaded_tree.header.current_max_id
+        );
+        assert_eq!(tree.header.root_offset, loaded_tree.header.root_offset);
+        assert_eq!(
+            tree.header.last_root_offset,
+            loaded_tree.header.last_root_offset
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn insert_into_empty_tree() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
