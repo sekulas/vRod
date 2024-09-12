@@ -1278,7 +1278,32 @@ mod tests {
         let result = tree.perform_query(IndexQuery::SearchAll)?;
 
         //Assert
-        let expected_result = vec![(7, 10), (6, 6), (5, 10), (4, 4), (3, 3), (2, 2), (1, 1)];
+        let expected_result = vec![(7, 10), (6, 6), (5, 10), (4, 4), (3, 3), (2, 2), (1, 10)];
+
+        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_all_keys_and_offsets_in_2lvl_tree_after_updates() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3];
+        tree.perform_command(IndexCommand::BulkInsert(values))?;
+
+        //Act
+        tree.perform_command(IndexCommand::Update(3, 10))?;
+        tree.perform_command(IndexCommand::Update(1, 10))?;
+
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        //Assert
+        let expected_result = vec![(3, 10), (2, 2), (1, 10)];
 
         assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
 
