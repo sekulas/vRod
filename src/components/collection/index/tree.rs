@@ -778,7 +778,7 @@ mod tests {
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn bptree_create_should_create_root() -> Result<()> {
+    fn create_should_create_root() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
