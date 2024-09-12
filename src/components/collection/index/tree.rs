@@ -272,8 +272,11 @@ impl BTreeFile {
 
     fn read_node(&mut self, offset: &Offset) -> Result<Node> {
         self.file.seek(SeekFrom::Start(*offset))?;
-        //TODO: BufReader with specified size
-        let node: Node = deserialize_from(&mut BufReader::new(&self.file))?;
+
+        let node: Node = deserialize_from(&mut BufReader::with_capacity(
+            SERIALIZED_NODE_SIZE,
+            &self.file,
+        ))?;
 
         match node.checksum == node.calculate_checksum() {
             true => Ok(node),
