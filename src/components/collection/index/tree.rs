@@ -247,7 +247,11 @@ impl BTreeFile {
 
     fn write_node(&mut self, node: &Node, offset: &Offset) -> Result<()> {
         self.file.seek(SeekFrom::Start(*offset))?;
-        serialize_into(&mut BufWriter::new(&self.file), node)?;
+
+        serialize_into(
+            &mut BufWriter::with_capacity(SERIALIZED_NODE_SIZE, &self.file),
+            node,
+        )?;
 
         Ok(())
     }
