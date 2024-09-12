@@ -613,6 +613,7 @@ impl BPTree {
         match self.recursive_update(self.header.root_offset, key, value) {
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
+                next_leaf_to_connect_offset_from_child: _,
             }) => {
                 self.header.root_offset = existing_child_new_offset;
             }
@@ -637,6 +638,7 @@ impl BPTree {
             match node.update(key, value) {
                 Some(_) => Ok(UpdateResult::Updated {
                     existing_child_new_offset: modified_node_offset,
+                    next_leaf_to_connect_offset_from_child: modified_node_offset,
                 }),
                 None => Ok(UpdateResult::KeyNotFound),
             }
@@ -653,17 +655,92 @@ impl BPTree {
             match self.recursive_update(child_offset, key, value) {
                 Ok(UpdateResult::Updated {
                     existing_child_new_offset,
+                    next_leaf_to_connect_offset_from_child,
                 }) => {
                     let node = self.get_node_mut(&modified_node_offset)?;
                     node.values[child_idx] = existing_child_new_offset;
 
-                    Ok(UpdateResult::Updated {
-                        existing_child_new_offset: modified_node_offset,
-                    })
+                    if let UpdateResult::Updated {
+                        existing_child_new_offset,
+                        next_leaf_to_connect_offset_from_child,
+                    } = self.update_next_leaf_pointers(
+                        modified_node_offset,
+                        child_idx as u16,
+                        next_leaf_to_connect_offset_from_child,
+                    )? {
+                        Ok(UpdateResult::Updated {
+                            existing_child_new_offset,
+                            next_leaf_to_connect_offset_from_child,
+                        })
+                    } else {
+                        Err(Error::UnexpectedError(
+                            "BTree: Cannot update next leaf pointers.",
+                        ))
+                    }
                 }
                 Ok(UpdateResult::KeyNotFound) => Ok(UpdateResult::KeyNotFound),
                 Err(_) => Err(Error::UnexpectedError("BTree: Cannot update.")),
             }
+        }
+    }
+
+    fn update_next_leaf_pointers(
+        &mut self,
+        node_offset: Offset,
+        updated_child_idx: u16,
+        mut next_leaf_to_connect_offset: Offset,
+    ) -> Result<UpdateResult> {
+        let (modified_offset, is_leaf, _) = self.prepare_node(node_offset)?;
+
+        if is_leaf {
+            let node = self.get_node_mut(&modified_offset)?;
+            node.next_leaf_offset = next_leaf_to_connect_offset;
+
+            Ok(UpdateResult::Updated {
+                existing_child_new_offset: modified_offset,
+                next_leaf_to_connect_offset_from_child: modified_offset,
+            })
+        } else {
+            let mut child_offsets = Vec::new();
+            {
+                let max_value_idx = self.header.branching_factor - 1;
+                let node = self.get_node_mut(&modified_offset)?;
+
+                if node.recently_taken_key_slot == max_value_idx {
+                    child_offsets.push((max_value_idx, node.values[max_value_idx as usize]));
+                } else {
+                    for idx in (node.recently_taken_key_slot..updated_child_idx).rev() {
+                        child_offsets.push((idx, node.values[idx as usize]));
+                    }
+                }
+            }
+
+            for (idx, child_offset) in child_offsets {
+                match self.update_next_leaf_pointers(
+                    child_offset,
+                    self.header.branching_factor - 1,
+                    next_leaf_to_connect_offset,
+                )? {
+                    UpdateResult::Updated {
+                        existing_child_new_offset,
+                        next_leaf_to_connect_offset_from_child,
+                    } => {
+                        let node = self.get_node_mut(&modified_offset)?;
+                        node.values[idx as usize] = existing_child_new_offset;
+                        next_leaf_to_connect_offset = next_leaf_to_connect_offset_from_child;
+                    }
+                    _ => {
+                        return Err(Error::UnexpectedError(
+                            "BTree: Cannot update next leaf pointers.",
+                        ))
+                    }
+                }
+            }
+
+            Ok(UpdateResult::Updated {
+                existing_child_new_offset: modified_offset,
+                next_leaf_to_connect_offset_from_child: next_leaf_to_connect_offset,
+            })
         }
     }
 
@@ -1260,7 +1337,7 @@ mod tests {
     }
 
     #[test]
-    fn search_all_should_return_all_keys_and_offsets_in_tree_after_updates() -> Result<()> {
+    fn search_all_should_return_all_keys_and_offsets_in_3lvl_tree_after_updates() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();

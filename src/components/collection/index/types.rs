@@ -53,7 +53,10 @@ pub enum InsertionResult {
 }
 
 pub enum UpdateResult {
-    Updated { existing_child_new_offset: Offset },
+    Updated {
+        existing_child_new_offset: Offset,
+        next_leaf_to_connect_offset_from_child: Offset,
+    },
     KeyNotFound,
 }
 
