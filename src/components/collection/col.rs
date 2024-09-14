@@ -29,7 +29,16 @@ impl Collection {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        todo!("Not implemented.");
+        let collection_path = path.to_path_buf();
+
+        let storage = Storage::load(&collection_path.join(STORAGE_FILE))?;
+        let index = BPTree::load(&collection_path.join(INDEX_FILE))?;
+
+        Ok(Self {
+            path: collection_path,
+            storage,
+            index,
+        })
     }
 
     pub fn insert(&mut self, vector: &[Dim], payload: &str) -> Result<Offset> {
