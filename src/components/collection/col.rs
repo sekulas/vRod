@@ -43,15 +43,44 @@ impl Collection {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::WAL_FILE;
+
+    use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
     fn create_should_create_col() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+
+        //Act
+        Collection::create(path, collection_name)?;
+
+        //Assert
+        assert!(path.join(collection_name).exists());
+        assert!(path.join(collection_name).join(WAL_FILE).exists());
+        assert!(path.join(collection_name).join(STORAGE_FILE).exists());
+        assert!(path.join(collection_name).join(INDEX_FILE).exists());
+
         Ok(())
     }
 
     #[test]
     fn load_should_load_col() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+
+        //Act
+        let col = Collection::load(&path.join(collection_name))?;
+
+        //Assert
+        assert_eq!(col.path, path.join(collection_name));
+
         Ok(())
     }
 
