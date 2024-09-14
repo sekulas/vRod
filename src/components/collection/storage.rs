@@ -22,7 +22,7 @@ pub struct Storage {
 }
 
 //TODO: Offset backup for storing recently deleted record?
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct StorageHeader {
     current_max_lsn: u64,
     vector_dim_amount: u16,
@@ -85,6 +85,19 @@ impl Hash for StorageHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.current_max_lsn.hash(state);
         self.vector_dim_amount.hash(state);
+    }
+}
+
+impl Default for StorageHeader {
+    fn default() -> Self {
+        let mut header = Self {
+            current_max_lsn: 0,
+            vector_dim_amount: 0,
+            checksum: 0,
+        };
+
+        header.checksum = header.calculate_checksum();
+        header
     }
 }
 
@@ -163,7 +176,7 @@ impl Storage {
             file,
             header,
         };
-        storage.flush_header()?;
+        storage.update_header()?;
 
         Ok(storage)
     }
@@ -221,9 +234,9 @@ impl Storage {
 
         serialize_into(&mut BufWriter::new(&self.file), &record)?;
         if let OperationMode::RawOperation = mode {
-            self.flush_header()?;
+            self.update_header()?;
         }
-        //TODO: SYNC TUTAJ??
+
         Ok(record_offset)
     }
 
@@ -250,7 +263,7 @@ impl Storage {
         serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
 
         if let OperationMode::RawOperation = mode {
-            self.flush_header()?;
+            self.update_header()?;
         }
 
         Ok(())
@@ -279,15 +292,18 @@ impl Storage {
 
         let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
 
-        self.flush_header()?;
+        self.update_header()?;
 
         Ok(new_offset)
     }
 
-    fn flush_header(&mut self) -> Result<()> {
+    fn update_header(&mut self) -> Result<()> {
         self.file.seek(SeekFrom::Start(0))?;
+
+        self.header.checksum = self.header.calculate_checksum();
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
-        //TODO: SYNC TUTAJ POTENCJALNIE?
+
+        self.file.sync_all()?;
         Ok(())
     }
 
@@ -310,16 +326,6 @@ impl Storage {
         Ok(())
     }
 }
-
-// TODO: needed?
-// Implementing the Drop trait for the Storage struct to ensure cleanup
-// impl Drop for Storage {
-//     fn drop(&mut self) {
-//         if let Err(e) = self.file.sync_all() {
-//             eprintln!("Failed to sync file on drop: {:?}", e);
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

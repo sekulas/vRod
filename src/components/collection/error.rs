@@ -1,5 +1,7 @@
 use crate::{components::wal, types::Dim};
 
+use super::index;
+
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -23,6 +25,9 @@ pub enum Error {
 
     #[error(transparent)]
     Serialization(#[from] bincode::Error),
+
+    #[error(transparent)]
+    BPTree(#[from] index::Error),
 
     #[error(transparent)]
     Wal(#[from] wal::Error),
