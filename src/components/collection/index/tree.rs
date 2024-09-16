@@ -823,7 +823,7 @@ mod tests {
         let tree = BPTree::create(path, branching_factor)?;
 
         //Act
-        let loaded_tree = BPTree::load(path)?;
+        let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
 
         //Assert
         assert_eq!(
@@ -855,7 +855,7 @@ mod tests {
         tree.perform_command(IndexCommand::Insert(2))?;
 
         //Act
-        let loaded_tree = BPTree::load(path)?;
+        let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
 
         //Assert
         assert_eq!(
