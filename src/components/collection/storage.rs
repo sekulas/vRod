@@ -10,7 +10,7 @@ use super::{
     types::{OperationMode, NONE, NOT_SET},
     Error, Result,
 };
-use bincode::{deserialize_from, serialize_into, serialized_size};
+use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::types::{Dim, Offset, STORAGE_FILE};
@@ -103,15 +103,15 @@ impl Default for StorageHeader {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
-    record_header: RecordHeader,
-    vector: Vec<Dim>,
-    payload: String,
+    pub record_header: RecordHeader,
+    pub vector: Vec<Dim>,
+    pub payload: String,
 }
 
 impl Record {
-    fn new(lsn: u64, payload_offset: Offset, vector: &[Dim], payload: &str) -> Self {
+    fn new(lsn: u64, vector: &[Dim], payload: &str) -> Self {
         let mut record = Self {
-            record_header: RecordHeader::new(lsn, payload_offset),
+            record_header: RecordHeader::new(lsn),
             vector: vector.to_owned(),
             payload: payload.to_owned(),
         };
@@ -131,7 +131,6 @@ impl Hash for Record {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.record_header.lsn.hash(state);
         self.record_header.deleted.hash(state);
-        self.record_header.payload_offset.hash(state);
 
         for dim in &self.vector {
             dim.to_bits().hash(state);
@@ -142,20 +141,18 @@ impl Hash for Record {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct RecordHeader {
-    lsn: u64,
-    deleted: bool,
+pub struct RecordHeader {
+    pub lsn: u64,
+    pub deleted: bool,
     checksum: u64,
-    payload_offset: Offset,
 }
 
 impl RecordHeader {
-    fn new(lsn: u64, payload_offset: Offset) -> Self {
+    fn new(lsn: u64) -> Self {
         Self {
             lsn,
             deleted: false,
             checksum: NONE,
-            payload_offset,
         }
     }
 }
@@ -227,10 +224,7 @@ impl Storage {
 
         let record_offset = self.file.seek(SeekFrom::End(0))?;
 
-        let payload_offset =
-            record_offset + mem::size_of::<RecordHeader>() as u64 + serialized_size(&vector)?;
-
-        let record = Record::new(self.header.current_max_lsn, payload_offset, vector, payload);
+        let record = Record::new(self.header.current_max_lsn, vector, payload);
 
         serialize_into(&mut BufWriter::new(&self.file), &record)?;
         if let OperationMode::RawOperation = mode {
@@ -329,6 +323,7 @@ impl Storage {
 
 #[cfg(test)]
 mod tests {
+    use bincode::serialized_size;
     use std::io::Write;
 
     use super::*;
