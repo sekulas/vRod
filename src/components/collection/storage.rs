@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::{
+    index::types::EMPTY_KEY_SLOT,
     types::{OperationMode, NONE, NOT_SET},
     Error, Result,
 };
@@ -101,7 +102,7 @@ impl Default for StorageHeader {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Record {
     pub record_header: RecordHeader,
     pub vector: Vec<Dim>,
@@ -125,6 +126,19 @@ impl Record {
         self.hash(&mut hasher);
         hasher.finish()
     }
+
+    pub fn validate_checksum(&self) -> Result<()> {
+        if self.record_header.checksum == self.calculate_checksum() {
+            Ok(())
+        } else {
+            Err(Error::IncorrectChecksum {
+                record_id: EMPTY_KEY_SLOT,
+                record: self.clone(),
+                expected: self.record_header.checksum,
+                actual: self.calculate_checksum(),
+            })
+        }
+    }
 }
 
 impl Hash for Record {
@@ -140,7 +154,7 @@ impl Hash for Record {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RecordHeader {
     pub lsn: u64,
     pub deleted: bool,
@@ -574,6 +588,39 @@ mod tests {
         assert_eq!(storage.header.current_max_lsn, 0);
         assert_eq!(storage.header.vector_dim_amount, 0);
         assert_eq!(storage.header.checksum, checksum);
+        Ok(())
+    }
+
+    #[test]
+    fn validate_checksum_should_return_error_when_checksum_is_incorrect() -> Result<()> {
+        //Arrange
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let mut record = Record::new(1, &vector, payload);
+        record.payload = "corrupted payload".to_owned();
+
+        //Act
+        let result = record.validate_checksum();
+
+        //Assert
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn validate_checksum_should_return_ok_when_checksum_is_correct() -> Result<()> {
+        //Arrange
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let record = Record::new(1, &vector, payload);
+
+        //Act
+        let result = record.validate_checksum();
+
+        //Assert
+        assert!(result.is_ok());
         Ok(())
     }
 }
