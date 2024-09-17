@@ -95,32 +95,182 @@ mod tests {
 
     #[test]
     fn insert_should_store_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        //Act
+        let offset = col.insert(&vector, payload)?;
+
+        //Assert
+        let stored_vector = col.storage.search(offset)?;
+        assert_eq!(stored_vector.vector, vector);
+        assert_eq!(stored_vector.payload, payload);
+        assert_eq!(stored_vector.record_header.lsn, 1);
+        assert!(!stored_vector.record_header.deleted);
+
         Ok(())
     }
 
     #[test]
     fn insert_twice_should_store_two_records() -> Result<()> {
-        Ok(())
-    }
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
 
-    #[test]
-    fn delete_should_delete_record() -> Result<()> {
-        Ok(())
-    }
+        //Act
+        let offset1 = col.insert(&vector, payload)?;
+        let offset2 = col.insert(&vector, payload)?;
 
-    #[test]
-    fn update_should_delete_old_record_and_store_new() -> Result<()> {
+        //Assert
+        let stored_vector1 = col.storage.search(offset1)?;
+        assert_eq!(stored_vector1.vector, vector);
+        assert_eq!(stored_vector1.payload, payload);
+        assert_eq!(stored_vector1.record_header.lsn, 1);
+        assert!(!stored_vector1.record_header.deleted);
+
+        let stored_vector2 = col.storage.search(offset2)?;
+        assert_eq!(stored_vector2.vector, vector);
+        assert_eq!(stored_vector2.payload, payload);
+        assert_eq!(stored_vector2.record_header.lsn, 2);
+        assert!(!stored_vector2.record_header.deleted);
+
         Ok(())
     }
 
     #[test]
     fn search_should_return_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let _ = col.insert(&vector, payload)?;
+
+        //Act
+        let record = col.search(1)?;
+
+        //Assert
+        match record {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::Found(record) => {
+                assert_eq!(record.vector, vector);
+                assert_eq!(record.payload, payload);
+                assert_eq!(record.record_header.lsn, 1);
+                assert!(!record.record_header.deleted);
         Ok(())
+            }
+        }
     }
 
     #[test]
     fn search_for_deleted_record_should_return_nothing() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let _ = col.insert(&vector, payload)?;
+
+        //Act
+        col.delete(1)?;
+
+        //Assert
+        match col.search(1)? {
+            CollectionSearchResult::Found(_) => panic!("Record found"),
+            CollectionSearchResult::NotFound => Ok(()),
+        }
+    }
+
+    #[test]
+    fn search_for_non_existing_record_should_return_nothing() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+
+        //Act
+        let record = col.search(1)?;
+
+        //Assert
+        match record {
+            CollectionSearchResult::NotFound => Ok(()),
+            CollectionSearchResult::Found(_) => panic!("Record found"),
+        }
+    }
+
+    #[test]
+    fn update_should_delete_old_record_and_store_new() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let _ = col.insert(&vector, payload)?;
+
+        //Act
+        let new_vector = vec![4.0, 5.0, 6.0];
+        let new_payload = "new_test";
+        col.update(1, Some(&new_vector), Some(new_payload))?;
+
+        //Assert
+        let record = col.search(1)?;
+
+        match record {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::Found(record) => {
+                assert_eq!(record.vector, new_vector);
+                assert_eq!(record.payload, new_payload);
+                assert_eq!(record.record_header.lsn, 2);
+                assert!(!record.record_header.deleted);
         Ok(())
+    }
+        }
+    }
+
+    #[test]
+    fn delete_should_delete_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let _ = col.insert(&vector, payload)?;
+
+        //Act
+        col.delete(1)?;
+
+        //Assert
+        let record = col.search(1)?;
+
+        match record {
+            CollectionSearchResult::NotFound => Ok(()),
+            CollectionSearchResult::Found(_) => panic!("Record found"),
+        }
     }
 
     #[test]

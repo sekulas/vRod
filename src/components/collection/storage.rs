@@ -132,7 +132,6 @@ impl Record {
             Ok(())
         } else {
             Err(Error::IncorrectChecksum {
-                record_id: EMPTY_KEY_SLOT,
                 record: self.clone(),
                 expected: self.record_header.checksum,
                 actual: self.calculate_checksum(),

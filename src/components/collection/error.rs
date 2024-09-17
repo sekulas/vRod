@@ -1,6 +1,9 @@
-use crate::{components::wal, types::Dim};
+use crate::{
+    components::wal,
+    types::{Dim, RecordId},
+};
 
-use super::index;
+use super::{index, storage::Record};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -23,6 +26,13 @@ pub enum Error {
         vector: Vec<Dim>,
     },
 
+    #[error("Incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
+    IncorrectChecksum {
+        record: Record,
+        expected: u64,
+        actual: u64,
+    },
+
     #[error(transparent)]
     Serialization(#[from] bincode::Error),
 
@@ -34,4 +44,7 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(&'static str),
 }
