@@ -249,8 +249,11 @@ impl Storage {
 
     pub fn search(&mut self, offset: Offset) -> Result<Record> {
         self.file.seek(SeekFrom::Start(offset))?;
-        match deserialize_from(&mut BufReader::new(&self.file)) {
-            Ok(record) => Ok(record),
+        match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
+            Ok(record) => {
+                record.validate_checksum()?;
+                Ok(record)
+            }
             Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
         }
     }
