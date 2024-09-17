@@ -1,7 +1,12 @@
-use super::index::types::DEFAULT_BRANCHING_FACTOR;
+use super::index::types::{
+    Index, IndexCommand, IndexQuery, IndexQueryResult, DEFAULT_BRANCHING_FACTOR,
+};
+
+use super::types::CollectionSearchResult;
+use super::Error;
 use super::{index::tree::BPTree, storage::Storage, types::OperationMode, Result};
 use crate::components::wal::Wal;
-use crate::types::{Dim, Offset};
+use crate::types::{Dim, Offset, RecordId, INDEX_FILE, STORAGE_FILE};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -10,7 +15,6 @@ use std::{
 pub struct Collection {
     path: PathBuf,
     storage: Storage,
-    wal: Wal,
     index: BPTree,
 }
 
@@ -46,7 +50,73 @@ impl Collection {
             .storage
             .insert(vector, payload, &OperationMode::RawOperation)?;
 
+        self.index.perform_command(IndexCommand::Insert(offset))?;
+
         Ok(offset)
+    }
+
+    pub fn search(&mut self, record_id: RecordId) -> Result<CollectionSearchResult> {
+        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+
+        match query_result {
+            IndexQueryResult::SearchResult(offset) => {
+                let record = self.storage.search(offset)?;
+
+                match record.record_header.deleted {
+                    true => Ok(CollectionSearchResult::NotFound),
+                    false => Ok(CollectionSearchResult::Found(record)),
+                }
+            }
+            IndexQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
+            _ => Err(Error::UnexpectedError(
+                "Collection: Search returned unexpected result.",
+            )),
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        record_id: RecordId,
+        vector: Option<&[Dim]>,
+        payload: Option<&str>,
+    ) -> Result<()> {
+        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+
+        match query_result {
+            IndexQueryResult::SearchResult(offset) => {
+                let new_offset = self.storage.update(offset, vector, payload)?;
+
+                self.index
+                    .perform_command(IndexCommand::Update(record_id, new_offset))?;
+
+                Ok(())
+            }
+            IndexQueryResult::NotFound => {
+                println!("Collection: Cannot update non-existing record with Id '{record_id}'.");
+                Ok(())
+            }
+            _ => Err(Error::UnexpectedError(
+                "Collection: Update returned unexpected result.",
+            )),
+        }
+    }
+
+    pub fn delete(&mut self, record_id: RecordId) -> Result<()> {
+        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+
+        match query_result {
+            IndexQueryResult::SearchResult(offset) => {
+                self.storage.delete(offset, &OperationMode::RawOperation)?;
+                Ok(())
+            }
+            IndexQueryResult::NotFound => {
+                println!("Collection: Cannot delete non-existing record with Id '{record_id}'.");
+                Ok(())
+            }
+            _ => Err(Error::UnexpectedError(
+                "Collection: Delete returned unexpected result.",
+            )),
+        }
     }
 }
 
@@ -171,7 +241,7 @@ mod tests {
                 assert_eq!(record.payload, payload);
                 assert_eq!(record.record_header.lsn, 1);
                 assert!(!record.record_header.deleted);
-        Ok(())
+                Ok(())
             }
         }
     }
@@ -244,8 +314,8 @@ mod tests {
                 assert_eq!(record.payload, new_payload);
                 assert_eq!(record.record_header.lsn, 2);
                 assert!(!record.record_header.deleted);
-        Ok(())
-    }
+                Ok(())
+            }
         }
     }
 
