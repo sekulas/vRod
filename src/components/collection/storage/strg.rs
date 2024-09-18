@@ -7,14 +7,16 @@ use std::{
 };
 
 use super::{
-    index::types::EMPTY_KEY_SLOT,
-    types::{OperationMode, NONE, NOT_SET},
+    types::{StorageDeleteResult, StorageUpdateResult},
     Error, Result,
 };
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Dim, Offset, STORAGE_FILE};
+use crate::{
+    components::collection::types::{OperationMode, NONE, NOT_SET},
+    types::{Dim, Offset, STORAGE_FILE},
+};
 
 pub struct Storage {
     path: PathBuf,
@@ -247,36 +249,41 @@ impl Storage {
         Ok(record_offset)
     }
 
-    pub fn search(&mut self, offset: Offset) -> Result<Record> {
+    pub fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
             Ok(record) => {
                 record.validate_checksum()?;
-                Ok(record)
+                if record.record_header.deleted {
+                    return Ok(None);
+                }
+                Ok(Some(record))
             }
             Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
         }
     }
 
-    pub fn delete(&mut self, offset: Offset, mode: &OperationMode) -> Result<()> {
-        let mut record = self.search(offset)?;
+    pub fn delete(&mut self, offset: Offset, mode: &OperationMode) -> Result<StorageDeleteResult> {
+        if let Some(mut record) = self.search(offset)? {
+            if let OperationMode::RawOperation = mode {
+                self.header.current_max_lsn += 1;
+            }
 
-        if let OperationMode::RawOperation = mode {
-            self.header.current_max_lsn += 1;
+            record.record_header.lsn = self.header.current_max_lsn;
+            record.record_header.deleted = true;
+            record.record_header.checksum = record.calculate_checksum();
+
+            self.file.seek(SeekFrom::Start(offset))?;
+            serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
+
+            if let OperationMode::RawOperation = mode {
+                self.update_header()?;
+            }
+
+            Ok(StorageDeleteResult::Deleted)
+        } else {
+            Ok(StorageDeleteResult::NotFound)
         }
-
-        record.record_header.lsn = self.header.current_max_lsn;
-        record.record_header.deleted = true;
-        record.record_header.checksum = record.calculate_checksum();
-
-        self.file.seek(SeekFrom::Start(offset))?;
-        serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
-
-        if let OperationMode::RawOperation = mode {
-            self.update_header()?;
-        }
-
-        Ok(())
     }
 
     pub fn update(
@@ -284,27 +291,29 @@ impl Storage {
         offset: Offset,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
-    ) -> Result<u64> {
-        let mut record = self.search(offset)?;
+    ) -> Result<StorageUpdateResult> {
+        if let Some(mut record) = self.search(offset)? {
+            if let Some(vector) = vector {
+                self.validate_vector(vector)?;
+                record.vector = vector.to_owned();
+            }
+            if let Some(payload) = payload {
+                record.payload = payload.to_owned();
+            }
 
-        if let Some(vector) = vector {
-            self.validate_vector(vector)?;
-            record.vector = vector.to_owned();
+            self.header.current_max_lsn += 1;
+            let mode = OperationMode::InUpdateOperation;
+
+            self.delete(offset, &mode)?;
+
+            let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
+
+            self.update_header()?;
+
+            Ok(StorageUpdateResult::Updated { new_offset })
+        } else {
+            Ok(StorageUpdateResult::NotFound)
         }
-        if let Some(payload) = payload {
-            record.payload = payload.to_owned();
-        }
-
-        self.header.current_max_lsn += 1;
-        let mode = OperationMode::InUpdateOperation;
-
-        self.delete(offset, &mode)?;
-
-        let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
-
-        self.update_header()?;
-
-        Ok(new_offset)
     }
 
     fn update_header(&mut self) -> Result<()> {
@@ -420,6 +429,9 @@ mod tests {
         let record = storage.search(offset)?;
 
         //Assert
+        assert!(record.is_some());
+        let record = record.unwrap();
+
         assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
@@ -466,13 +478,8 @@ mod tests {
 
         //Assert
         let record = storage.search(offset)?;
+        assert!(record.is_none());
 
-        assert!(record.record_header.deleted);
-        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-        assert_eq!(record.vector, vector);
-        assert_eq!(record.payload, payload);
-
-        assert_eq!(storage.header.current_max_lsn, record.record_header.lsn);
         Ok(())
     }
 
@@ -489,22 +496,29 @@ mod tests {
         let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
 
         //Act
-        let new_offset = storage.update(offset, Some(&new_vector), Some(new_payload))?;
+        let update_result = storage.update(offset, Some(&new_vector), Some(new_payload))?;
 
         //Assert
         let old_record = storage.search(offset)?;
 
-        assert_eq!(old_record.record_header.lsn, storage.header.current_max_lsn);
-        assert!(old_record.record_header.deleted);
+        assert!(old_record.is_none());
 
-        let record = storage.search(new_offset)?;
+        match update_result {
+            StorageUpdateResult::Updated { new_offset } => {
+                let record = storage.search(new_offset)?;
 
-        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
-        assert!(!record.record_header.deleted);
-        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-        assert_eq!(record.vector, new_vector);
-        assert_eq!(record.payload, new_payload);
-        Ok(())
+                assert!(record.is_some());
+                let record = record.unwrap();
+
+                assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
+                assert!(!record.record_header.deleted);
+                assert_eq!(record.record_header.checksum, record.calculate_checksum());
+                assert_eq!(record.vector, new_vector);
+                assert_eq!(record.payload, new_payload);
+                Ok(())
+            }
+            _ => panic!("Expected 'StorageUpdateResult::Updated'"),
+        }
     }
 
     #[test]

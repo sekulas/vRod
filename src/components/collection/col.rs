@@ -2,9 +2,10 @@ use super::index::types::{
     Index, IndexCommand, IndexQuery, IndexQueryResult, DEFAULT_BRANCHING_FACTOR,
 };
 
+use super::storage::types::StorageUpdateResult;
 use super::types::CollectionSearchResult;
 use super::Error;
-use super::{index::tree::BPTree, storage::Storage, types::OperationMode, Result};
+use super::{index::tree::BPTree, storage::strg::Storage, types::OperationMode, Result};
 use crate::components::wal::Wal;
 use crate::types::{Dim, Offset, RecordId, INDEX_FILE, STORAGE_FILE};
 use std::{
@@ -62,9 +63,9 @@ impl Collection {
             IndexQueryResult::SearchResult(offset) => {
                 let record = self.storage.search(offset)?;
 
-                match record.record_header.deleted {
-                    true => Ok(CollectionSearchResult::NotFound),
-                    false => Ok(CollectionSearchResult::Found(record)),
+                match record {
+                    Some(record) => Ok(CollectionSearchResult::Found(record)),
+                    None => Ok(CollectionSearchResult::NotFound),
                 }
             }
             IndexQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
@@ -84,10 +85,16 @@ impl Collection {
 
         match query_result {
             IndexQueryResult::SearchResult(offset) => {
-                let new_offset = self.storage.update(offset, vector, payload)?;
+                let update_result = self.storage.update(offset, vector, payload)?;
 
-                self.index
-                    .perform_command(IndexCommand::Update(record_id, new_offset))?;
+                match update_result {
+                    StorageUpdateResult::Updated { new_offset } => {
+                        self.index
+                            .perform_command(IndexCommand::Update(record_id, new_offset))?;
+                    }
+
+                    StorageUpdateResult::NotFound => {}
+                }
 
                 Ok(())
             }
@@ -179,6 +186,10 @@ mod tests {
 
         //Assert
         let stored_vector = col.storage.search(offset)?;
+
+        assert!(stored_vector.is_some());
+        let stored_vector = stored_vector.unwrap();
+
         assert_eq!(stored_vector.vector, vector);
         assert_eq!(stored_vector.payload, payload);
         assert_eq!(stored_vector.record_header.lsn, 1);
@@ -204,12 +215,20 @@ mod tests {
 
         //Assert
         let stored_vector1 = col.storage.search(offset1)?;
+
+        assert!(stored_vector1.is_some());
+        let stored_vector1 = stored_vector1.unwrap();
+
         assert_eq!(stored_vector1.vector, vector);
         assert_eq!(stored_vector1.payload, payload);
         assert_eq!(stored_vector1.record_header.lsn, 1);
         assert!(!stored_vector1.record_header.deleted);
 
         let stored_vector2 = col.storage.search(offset2)?;
+
+        assert!(stored_vector2.is_some());
+        let stored_vector2 = stored_vector2.unwrap();
+
         assert_eq!(stored_vector2.vector, vector);
         assert_eq!(stored_vector2.payload, payload);
         assert_eq!(stored_vector2.record_header.lsn, 2);

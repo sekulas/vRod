@@ -1,4 +1,4 @@
-use super::storage::Record;
+use super::storage::strg::Record;
 
 pub enum OperationMode {
     RawOperation,
