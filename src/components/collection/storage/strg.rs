@@ -416,6 +416,55 @@ mod tests {
     }
 
     #[test]
+    fn batch_insert_two_records_should_store_two_record() -> Result<()> {
+        // Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
+        let payload2 = "test2";
+
+        // Act
+        let offsets = storage
+            .batch_insert(&[(vector.as_slice(), payload), (vector2.as_slice(), payload2)])?;
+
+        // Assert
+        let record = storage.search(offsets[0])?;
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert!(!record.record_header.deleted);
+        assert_eq!(record.record_header.checksum, record.calculate_checksum());
+        assert_eq!(record.vector, vector);
+        assert_eq!(record.payload, payload);
+
+        let record2 = storage.search(offsets[1])?;
+        assert!(record2.is_some());
+        let record2 = record2.unwrap();
+        assert!(!record2.record_header.deleted);
+        assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
+        assert_eq!(record2.vector, vector2);
+        assert_eq!(record2.payload, payload2);
+        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
+
+        Ok(())
+    }
+
+    #[test]
+    fn batch_insert_empty_array_should_return_empty_offsets() -> Result<()> {
+        // Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+
+        // Act
+        let offsets = storage.batch_insert(&[])?;
+
+        // Assert
+        assert!(offsets.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn search_record_should_return_record() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
