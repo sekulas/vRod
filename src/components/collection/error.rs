@@ -1,37 +1,23 @@
-use crate::{components::wal, types::Dim};
+use crate::components::wal;
 
-use super::index;
+use super::{index, storage};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Cannot deserialize record with the given offset: '{offset}'. Source: '{source}")]
-    CannotDeserializeRecord {
-        offset: u64,
-        #[source]
-        source: bincode::Error,
-    },
-
-    #[error(
-        "Provided vector has incorrect dimension. Expected: '{expected}', Actural: '{actual}'.\
-    Vector: '{vector:?}'"
-    )]
-    InvalidVectorDim {
-        expected: u16,
-        actual: u16,
-        vector: Vec<Dim>,
-    },
+    #[error(transparent)]
+    Index(#[from] index::Error),
 
     #[error(transparent)]
-    Serialization(#[from] bincode::Error),
-
-    #[error(transparent)]
-    BPTree(#[from] index::Error),
+    Storage(#[from] storage::Error),
 
     #[error(transparent)]
     Wal(#[from] wal::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(&'static str),
 }

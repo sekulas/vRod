@@ -336,9 +336,7 @@ impl BPTree {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let file_path = path.join(INDEX_FILE);
-
-        let mut file = OpenOptions::new().read(true).write(true).open(file_path)?;
+        let mut file = OpenOptions::new().read(true).write(true).open(path)?;
 
         let header: BPTreeHeader =
             match deserialize_from::<_, BPTreeHeader>(&mut BufReader::new(&file)) {
@@ -825,7 +823,7 @@ mod tests {
         let tree = BPTree::create(path, branching_factor)?;
 
         //Act
-        let loaded_tree = BPTree::load(path)?;
+        let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
 
         //Assert
         assert_eq!(
@@ -857,7 +855,7 @@ mod tests {
         tree.perform_command(IndexCommand::Insert(2))?;
 
         //Act
-        let loaded_tree = BPTree::load(path)?;
+        let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
 
         //Assert
         assert_eq!(
