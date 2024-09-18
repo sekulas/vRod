@@ -249,6 +249,19 @@ impl Storage {
         Ok(record_offset)
     }
 
+    pub fn batch_insert(&mut self, records: &[(&[Dim], &str)]) -> Result<Vec<Offset>> {
+        let mut offsets = Vec::with_capacity(records.len());
+
+        for (vector, payload) in records.iter() {
+            self.header.current_max_lsn += 1;
+            let offset = self.insert(vector, payload, &OperationMode::RawOperation)?;
+            offsets.push(offset);
+        }
+
+        self.update_header()?;
+        Ok(offsets)
+    }
+
     pub fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
@@ -355,7 +368,7 @@ mod tests {
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn insert_record_should_store_record_and_return_offset() -> Result<()> {
+    fn insert_should_store_record_and_return_offset() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
@@ -379,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn inserting_two_records_should_store_two_records() -> Result<()> {
+    fn insert_two_records_should_store_two_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
@@ -480,7 +493,6 @@ mod tests {
         //Assert
         assert!(record.is_some());
         let record = record.unwrap();
-
         assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
@@ -558,7 +570,6 @@ mod tests {
 
                 assert!(record.is_some());
                 let record = record.unwrap();
-
                 assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
                 assert!(!record.record_header.deleted);
                 assert_eq!(record.record_header.checksum, record.calculate_checksum());
