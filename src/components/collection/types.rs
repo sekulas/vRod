@@ -2,7 +2,7 @@ use super::storage::strg::Record;
 
 pub enum OperationMode {
     RawOperation,
-    InUpdateOperation,
+    InOtherOperation,
 }
 
 pub const NOT_SET: u16 = 0;

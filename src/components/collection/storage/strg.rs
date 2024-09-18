@@ -251,10 +251,10 @@ impl Storage {
 
     pub fn batch_insert(&mut self, records: &[(&[Dim], &str)]) -> Result<Vec<Offset>> {
         let mut offsets = Vec::with_capacity(records.len());
+        self.header.current_max_lsn += 1; //TODO: Popping up lsn to collection?
 
         for (vector, payload) in records.iter() {
-            self.header.current_max_lsn += 1;
-            let offset = self.insert(vector, payload, &OperationMode::RawOperation)?;
+            let offset = self.insert(vector, payload, &OperationMode::InOtherOperation)?;
             offsets.push(offset);
         }
 
@@ -315,7 +315,7 @@ impl Storage {
             }
 
             self.header.current_max_lsn += 1;
-            let mode = OperationMode::InUpdateOperation;
+            let mode = OperationMode::InOtherOperation;
 
             self.delete(offset, &mode)?;
 
