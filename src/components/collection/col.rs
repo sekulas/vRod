@@ -56,6 +56,15 @@ impl Collection {
         Ok(offset)
     }
 
+    pub fn batch_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)]) -> Result<()> {
+        let offsets = self.storage.batch_insert(vectors_and_payloads)?;
+
+        self.index
+            .perform_command(IndexCommand::BulkInsert(offsets))?;
+
+        Ok(())
+    }
+
     pub fn search(&mut self, record_id: RecordId) -> Result<CollectionSearchResult> {
         let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
