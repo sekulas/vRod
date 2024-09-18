@@ -238,6 +238,69 @@ mod tests {
     }
 
     #[test]
+    fn batch_insert_two_records_should_store_two_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test1";
+        let vector2 = vec![4.0, 5.0, 6.0];
+        let payload2 = "test2";
+
+        //Act
+        col.batch_insert(&[(&vector, payload), (&vector2, payload2)])?;
+
+        //Assert
+        let stored_vector = col.search(1)?;
+
+        match stored_vector {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::Found(record) => {
+                assert_eq!(record.vector, vector);
+                assert_eq!(record.payload, payload);
+                assert_eq!(record.record_header.lsn, 1);
+                assert!(!record.record_header.deleted);
+            }
+        }
+
+        let stored_vector2 = col.search(2)?;
+
+        match stored_vector2 {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::Found(record) => {
+                assert_eq!(record.vector, vector2);
+                assert_eq!(record.payload, payload2);
+                assert_eq!(record.record_header.lsn, 1);
+                assert!(!record.record_header.deleted);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn batch_insert_no_records_should_not_store_any_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+
+        //Act
+        col.batch_insert(&[])?;
+
+        //Assert
+        match col.search(1)? {
+            CollectionSearchResult::NotFound => Ok(()),
+            CollectionSearchResult::Found(_) => panic!("Record found"),
+        }
+    }
+
+    #[test]
     fn search_should_return_record() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
