@@ -38,7 +38,7 @@ pub enum StorageCommandResult {
 }
 
 pub enum StorageQueryResult {
-    SearchResult { record: Option<Record> },
+    FoundRecord { record: Record },
     NotFound,
 }
 

@@ -5,7 +5,7 @@ use super::index::types::{
 use super::storage::types::StorageUpdateResult;
 use super::types::CollectionSearchResult;
 use super::Error;
-use super::{index::tree::BPTree, storage::strg::Storage, Result};
+use super::{index::tree::BPTree, storage::Storage, Result};
 use crate::components::wal::Wal;
 use crate::types::{Dim, Offset, RecordId, INDEX_FILE, LSN, STORAGE_FILE};
 use std::{
