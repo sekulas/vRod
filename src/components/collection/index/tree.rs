@@ -38,7 +38,7 @@ impl Index for BPTree {
         self.flush_modified_nodes()?;
 
         self.header.last_root_offset = old_root;
-        self.header.modification_lsn += lsn;
+        self.header.modification_lsn = lsn;
         self.update_header()
     }
 
