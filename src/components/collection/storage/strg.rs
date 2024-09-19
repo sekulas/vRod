@@ -283,7 +283,7 @@ impl Storage {
         Ok(storage)
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
+    fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
         self.validate_vector(vector)?;
 
         let record_offset = self.file.seek(SeekFrom::End(0))?;
@@ -295,7 +295,7 @@ impl Storage {
         Ok(record_offset)
     }
 
-    pub fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: LSN) -> Result<Vec<Offset>> {
+    fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: LSN) -> Result<Vec<Offset>> {
         let mut offsets = Vec::with_capacity(records.len());
 
         for (vector, payload) in records.iter() {
@@ -306,7 +306,7 @@ impl Storage {
         Ok(offsets)
     }
 
-    pub fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
+    fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
             Ok(record) => {
@@ -320,7 +320,7 @@ impl Storage {
         }
     }
 
-    pub fn delete(&mut self, offset: Offset, lsn: LSN) -> Result<StorageDeleteResult> {
+    fn delete(&mut self, offset: Offset, lsn: LSN) -> Result<StorageDeleteResult> {
         if let Some(mut record) = self.search(offset)? {
             record.record_header.lsn = lsn;
             record.record_header.deleted = true;
@@ -335,7 +335,7 @@ impl Storage {
         }
     }
 
-    pub fn update(
+    fn update(
         &mut self,
         offset: Offset,
         vector: Option<&[Dim]>,
