@@ -1,7 +1,7 @@
 use std::mem;
 
 use super::Result;
-use crate::types::{Offset, RecordId};
+use crate::types::{Offset, RecordId, LSN};
 
 //TODO: Change DEFAULT_BRANCHING_FACTOR;
 pub type NodeIdx = u16;
@@ -19,7 +19,7 @@ pub const SERIALIZED_NODE_SIZE: usize = 8
     + 2;
 
 pub trait Index {
-    fn perform_command(&mut self, command: IndexCommand) -> Result<()>;
+    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<()>;
     fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult>;
 }
 

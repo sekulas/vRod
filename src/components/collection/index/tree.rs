@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     components::collection::{index::types::UpdateResult, types::NONE},
-    types::{Offset, RecordId, INDEX_FILE},
+    types::{Offset, RecordId, INDEX_FILE, LSN},
 };
 
 use std::{
@@ -26,7 +26,7 @@ use std::{
 };
 
 impl Index for BPTree {
-    fn perform_command(&mut self, command: IndexCommand) -> Result<()> {
+    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<()> {
         let old_root = self.header.root_offset;
 
         match command {
@@ -38,6 +38,7 @@ impl Index for BPTree {
         self.flush_modified_nodes()?;
 
         self.header.last_root_offset = old_root;
+        self.header.modification_lsn += lsn;
         self.update_header()
     }
 
@@ -59,6 +60,7 @@ impl Index for BPTree {
 struct BPTreeHeader {
     branching_factor: u16,
     current_max_id: RecordId,
+    modification_lsn: LSN,
     checksum: u64,
     root_offset: Offset,
     last_root_offset: Offset,
@@ -71,6 +73,7 @@ impl BPTreeHeader {
         Self {
             branching_factor,
             current_max_id: 0,
+            modification_lsn: 0,
             checksum: 0,
             root_offset,
             last_root_offset: root_offset,
@@ -100,6 +103,7 @@ impl Hash for BPTreeHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.branching_factor.hash(state);
         self.current_max_id.hash(state);
+        self.modification_lsn.hash(state);
         self.root_offset.hash(state);
         self.last_root_offset.hash(state);
     }
@@ -839,6 +843,10 @@ mod tests {
             tree.header.last_root_offset,
             loaded_tree.header.last_root_offset
         );
+        assert_eq!(
+            tree.header.modification_lsn,
+            loaded_tree.header.modification_lsn
+        );
 
         Ok(())
     }
@@ -851,8 +859,8 @@ mod tests {
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
 
-        tree.perform_command(IndexCommand::Insert(1))?;
-        tree.perform_command(IndexCommand::Insert(2))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
+        tree.perform_command(IndexCommand::Insert(2), 2)?;
 
         //Act
         let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
@@ -871,6 +879,7 @@ mod tests {
             tree.header.last_root_offset,
             loaded_tree.header.last_root_offset
         );
+        assert_eq!(tree.header.modification_lsn, 2);
 
         Ok(())
     }
@@ -885,7 +894,7 @@ mod tests {
         let value = 123;
 
         //Act
-        tree.perform_command(IndexCommand::Insert(value))?;
+        tree.perform_command(IndexCommand::Insert(value), 1)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -896,6 +905,7 @@ mod tests {
             root.values.get((root.recently_taken_key_slot) as usize),
             Some(&123)
         );
+        assert_eq!(tree.header.modification_lsn, 1);
 
         Ok(())
     }
@@ -922,7 +932,7 @@ mod tests {
         let expected_value = 1234;
 
         for value in [1, 2, 3, 4, 5, expected_value, 7] {
-            tree.perform_command(IndexCommand::Insert(value))?;
+            tree.perform_command(IndexCommand::Insert(value), 1)?;
         }
 
         //Act
@@ -944,7 +954,7 @@ mod tests {
         let expected_value = 1234;
 
         for value in [expected_value, 2, 3, 4, 5, 6, 7] {
-            tree.perform_command(IndexCommand::Insert(value))?;
+            tree.perform_command(IndexCommand::Insert(value), 1)?;
         }
 
         //Act
@@ -965,7 +975,7 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         for value in 1..=7 {
-            tree.perform_command(IndexCommand::Insert(value))?;
+            tree.perform_command(IndexCommand::Insert(value), value)?;
         }
 
         //Act
@@ -986,7 +996,7 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         //Act
-        tree.perform_command(IndexCommand::Insert(1))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
 
         //Assert
         assert_ne!(tree.header.root_offset, tree.header.last_root_offset);
@@ -1003,8 +1013,8 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         //Act
-        tree.perform_command(IndexCommand::Insert(1))?;
-        tree.perform_command(IndexCommand::Insert(2))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
+        tree.perform_command(IndexCommand::Insert(2), 2)?;
 
         //Assert
         assert_ne!(tree.header.root_offset, tree.header.last_root_offset);
@@ -1022,9 +1032,9 @@ mod tests {
         let old_root_offset = tree.header.root_offset;
 
         //Act
-        tree.perform_command(IndexCommand::Insert(1))?;
-        tree.perform_command(IndexCommand::Insert(2))?;
-        tree.perform_command(IndexCommand::Insert(3))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
+        tree.perform_command(IndexCommand::Insert(2), 2)?;
+        tree.perform_command(IndexCommand::Insert(3), 3)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1066,7 +1076,7 @@ mod tests {
 
         //Act
         for value in 1..=7 {
-            tree.perform_command(IndexCommand::Insert(value))?;
+            tree.perform_command(IndexCommand::Insert(value), value)?;
         }
 
         //Assert
@@ -1114,7 +1124,7 @@ mod tests {
         let values = vec![1, 2, 3];
 
         //Act
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1156,7 +1166,7 @@ mod tests {
         let values = vec![1, 2, 3, 4, 5, 6, 7];
 
         //Act
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Assert
         let thrid_root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1202,7 +1212,7 @@ mod tests {
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
         for &value in &values {
-            tree.perform_command(IndexCommand::Insert(value))?;
+            tree.perform_command(IndexCommand::Insert(value), 1)?;
         }
 
         let temp_dir_bulk = tempfile::tempdir()?;
@@ -1210,7 +1220,7 @@ mod tests {
         let mut tree_bulk = BPTree::create(path_bulk, branching_factor)?;
 
         //Act
-        tree_bulk.perform_command(IndexCommand::BulkInsert(values))?;
+        tree_bulk.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Assert
         let file_len = tree.file.file.seek(SeekFrom::End(0))?;
@@ -1229,11 +1239,11 @@ mod tests {
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
 
-        tree.perform_command(IndexCommand::Insert(1))?;
-        tree.perform_command(IndexCommand::Insert(2))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
+        tree.perform_command(IndexCommand::Insert(2), 2)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(2, 4))?;
+        tree.perform_command(IndexCommand::Update(2, 4), 3)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1251,11 +1261,11 @@ mod tests {
         let branching_factor = 3;
         let mut tree = BPTree::create(path, branching_factor)?;
 
-        tree.perform_command(IndexCommand::Insert(1))?;
-        tree.perform_command(IndexCommand::Insert(2))?;
+        tree.perform_command(IndexCommand::Insert(1), 1)?;
+        tree.perform_command(IndexCommand::Insert(2), 2)?;
 
         //Act
-        let result = tree.perform_command(IndexCommand::Update(3, 4));
+        let result = tree.perform_command(IndexCommand::Update(3, 4), 3);
 
         //Assert
         assert!(matches!(result, Err(Error::KeyNotFound { key: 3 })));
@@ -1272,10 +1282,10 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(6, 8))?;
+        tree.perform_command(IndexCommand::Update(6, 8), 2)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1298,10 +1308,10 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(5, 8))?;
+        tree.perform_command(IndexCommand::Update(5, 8), 2)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1324,10 +1334,10 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(7, 8))?;
+        tree.perform_command(IndexCommand::Update(7, 8), 2)?;
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
@@ -1367,7 +1377,7 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
         let result = tree.perform_query(IndexQuery::SearchAll)?;
@@ -1389,7 +1399,7 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
         let result = tree.perform_query(IndexQuery::SearchAll)?;
@@ -1411,12 +1421,12 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(7, 10))?;
-        tree.perform_command(IndexCommand::Update(5, 10))?;
-        tree.perform_command(IndexCommand::Update(1, 10))?;
+        tree.perform_command(IndexCommand::Update(7, 10), 2)?;
+        tree.perform_command(IndexCommand::Update(5, 10), 3)?;
+        tree.perform_command(IndexCommand::Update(1, 10), 4)?;
 
         let result = tree.perform_query(IndexQuery::SearchAll)?;
 
@@ -1437,11 +1447,11 @@ mod tests {
         let mut tree = BPTree::create(path, branching_factor)?;
 
         let values = vec![1, 2, 3];
-        tree.perform_command(IndexCommand::BulkInsert(values))?;
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
 
         //Act
-        tree.perform_command(IndexCommand::Update(3, 10))?;
-        tree.perform_command(IndexCommand::Update(1, 10))?;
+        tree.perform_command(IndexCommand::Update(3, 10), 2)?;
+        tree.perform_command(IndexCommand::Update(1, 10), 3)?;
 
         let result = tree.perform_query(IndexQuery::SearchAll)?;
 

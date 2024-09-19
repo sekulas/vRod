@@ -5,3 +5,4 @@ pub const DB_CONFIG: &str = "vr_config.json";
 pub type Offset = u64;
 pub type RecordId = u32;
 pub type Dim = f32;
+pub type LSN = u64;

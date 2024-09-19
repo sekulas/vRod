@@ -127,17 +127,23 @@ fn redo_last_command(
     arg: Option<String>,
 ) -> Result<()> {
     if let CQType::Command(last_command) = CQBuilder::build(target_path, command, arg)? {
-        println!("Redoing last command: {:?}", last_command.to_string());
-        last_command.rollback()?;
-        last_command.execute()?;
+        let stringified_last_command = last_command.to_string();
+        println!("Redoing last command: {:?}", stringified_last_command);
+
+        let mut lsn = wal.append(format!("ROLLBACK {stringified_last_command}"))?;
+        last_command.rollback(lsn)?;
+        wal.commit()?;
+
+        lsn = wal.append(stringified_last_command)?;
+        last_command.execute(lsn)?;
         wal.commit()?;
     }
     Ok(())
 }
 
 fn execute_command(wal: &mut Wal, command: Box<dyn Command>) -> Result<()> {
-    wal.append(command.to_string())?;
-    command.execute()?;
+    let lsn = wal.append(command.to_string())?;
+    command.execute(lsn)?;
     wal.commit()?;
     Ok(())
 }

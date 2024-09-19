@@ -1,5 +1,6 @@
 use super::Result;
 use crate::command_query_builder::parsing_ops::parse_vec_n_payload;
+use crate::types::LSN;
 use crate::{
     command_query_builder::{CQAction, Command},
     components::collection::Collection,
@@ -18,16 +19,16 @@ impl InsertCommand {
 }
 
 impl Command for InsertCommand {
-    fn execute(&self) -> Result<()> {
+    fn execute(&self, lsn: LSN) -> Result<()> {
         let (vector, payload) = parse_vec_n_payload(&self.data)?;
 
         let mut collection = self.collection.borrow_mut();
-        collection.insert(&vector, &payload)?;
+        collection.insert(&vector, &payload, lsn)?;
 
         Ok(())
     }
 
-    fn rollback(&self) -> Result<()> {
+    fn rollback(&self, lsn: LSN) -> Result<()> {
         todo!("Not implemented.")
     }
 }

@@ -230,6 +230,7 @@ impl Storage {
         vector: &[Dim],
         payload: &str,
         mode: &OperationMode,
+        lsn
     ) -> Result<Offset> {
         self.validate_vector(vector)?;
 

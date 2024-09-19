@@ -1,4 +1,4 @@
-use crate::types::WAL_FILE;
+use crate::types::{LSN, WAL_FILE};
 
 use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
@@ -120,7 +120,7 @@ impl Wal {
         }
     }
 
-    pub fn append(&mut self, data: String) -> Result<()> {
+    pub fn append(&mut self, data: String) -> Result<LSN> {
         self.header.current_max_lsn += 1;
         let entry = WalEntry::new(self.header.current_max_lsn, false, data);
 
@@ -130,7 +130,7 @@ impl Wal {
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
 
         self.flush_header()?;
-        Ok(())
+        Ok(self.header.current_max_lsn)
     }
 
     pub fn commit(&mut self) -> Result<()> {

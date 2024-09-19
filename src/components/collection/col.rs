@@ -7,7 +7,7 @@ use super::types::CollectionSearchResult;
 use super::Error;
 use super::{index::tree::BPTree, storage::strg::Storage, types::OperationMode, Result};
 use crate::components::wal::Wal;
-use crate::types::{Dim, Offset, RecordId, INDEX_FILE, STORAGE_FILE};
+use crate::types::{Dim, Offset, RecordId, INDEX_FILE, LSN, STORAGE_FILE};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -46,21 +46,22 @@ impl Collection {
         })
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str) -> Result<Offset> {
+    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
         let offset = self
             .storage
-            .insert(vector, payload, &OperationMode::RawOperation)?;
+            .insert(vector, payload, &OperationMode::RawOperation, lsn)?;
 
-        self.index.perform_command(IndexCommand::Insert(offset))?;
+        self.index
+            .perform_command(IndexCommand::Insert(offset), lsn)?;
 
         Ok(offset)
     }
 
     pub fn batch_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)]) -> Result<()> {
-        let offsets = self.storage.batch_insert(vectors_and_payloads)?;
+        let offsets = self.storage.batch_insert(vectors_and_payloads, lsn)?;
 
         self.index
-            .perform_command(IndexCommand::BulkInsert(offsets))?;
+            .perform_command(IndexCommand::BulkInsert(offsets), lsn)?;
 
         Ok(())
     }
@@ -90,16 +91,17 @@ impl Collection {
         vector: Option<&[Dim]>,
         payload: Option<&str>,
     ) -> Result<()> {
+        //TODO: Change return type to CollectionUpdateResult
         let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
         match query_result {
             IndexQueryResult::SearchResult(offset) => {
-                let update_result = self.storage.update(offset, vector, payload)?;
+                let update_result = self.storage.update(offset, vector, payload, lsn)?;
 
                 match update_result {
                     StorageUpdateResult::Updated { new_offset } => {
                         self.index
-                            .perform_command(IndexCommand::Update(record_id, new_offset))?;
+                            .perform_command(IndexCommand::Update(record_id, new_offset), lsn)?;
                     }
 
                     StorageUpdateResult::NotFound => {}
@@ -122,7 +124,8 @@ impl Collection {
 
         match query_result {
             IndexQueryResult::SearchResult(offset) => {
-                self.storage.delete(offset, &OperationMode::RawOperation)?;
+                self.storage
+                    .delete(offset, &OperationMode::RawOperation, lsn)?;
                 Ok(())
             }
             IndexQueryResult::NotFound => {
@@ -134,6 +137,25 @@ impl Collection {
             )),
         }
     }
+
+    // pub fn rollback_insert(&mut self) -> Result<()> {
+    //     let record_id = self.index.get_highest_id_in_tree()?;
+    //     let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+
+    //     match query_result {
+    //         IndexQueryResult::SearchResult(offset) => {
+    //             self.storage.delete(offset, &OperationMode::RawOperation)?;
+    //             Ok(())
+    //         }
+    //         IndexQueryResult::NotFound => {
+    //             println!("Collection: Cannot rollback insert. No records to rollback.");
+    //             Ok(())
+    //         }
+    //         _ => Err(Error::UnexpectedError(
+    //             "Collection: Rollback insert returned unexpected result.",
+    //         )),
+    //     }
+    // }
 }
 
 #[cfg(test)]
