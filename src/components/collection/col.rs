@@ -5,7 +5,7 @@ use super::index::types::{
 use super::storage::types::StorageUpdateResult;
 use super::types::CollectionSearchResult;
 use super::Error;
-use super::{index::tree::BPTree, storage::strg::Storage, types::OperationMode, Result};
+use super::{index::tree::BPTree, storage::strg::Storage, Result};
 use crate::components::wal::Wal;
 use crate::types::{Dim, Offset, RecordId, INDEX_FILE, LSN, STORAGE_FILE};
 use std::{
@@ -47,9 +47,7 @@ impl Collection {
     }
 
     pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
-        let offset = self
-            .storage
-            .insert(vector, payload, &OperationMode::RawOperation, lsn)?;
+        let offset = self.storage.insert(vector, payload, lsn)?;
 
         self.index
             .perform_command(IndexCommand::Insert(offset), lsn)?;
@@ -57,8 +55,8 @@ impl Collection {
         Ok(offset)
     }
 
-    pub fn batch_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)]) -> Result<()> {
-        let offsets = self.storage.batch_insert(vectors_and_payloads, lsn)?;
+    pub fn bulk_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)], lsn: LSN) -> Result<()> {
+        let offsets = self.storage.bulk_insert(vectors_and_payloads, lsn)?;
 
         self.index
             .perform_command(IndexCommand::BulkInsert(offsets), lsn)?;
@@ -90,6 +88,7 @@ impl Collection {
         record_id: RecordId,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
+        lsn: LSN,
     ) -> Result<()> {
         //TODO: Change return type to CollectionUpdateResult
         let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
@@ -119,13 +118,12 @@ impl Collection {
         }
     }
 
-    pub fn delete(&mut self, record_id: RecordId) -> Result<()> {
+    pub fn delete(&mut self, record_id: RecordId, lsn: LSN) -> Result<()> {
         let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
         match query_result {
             IndexQueryResult::SearchResult(offset) => {
-                self.storage
-                    .delete(offset, &OperationMode::RawOperation, lsn)?;
+                self.storage.delete(offset, lsn)?;
                 Ok(())
             }
             IndexQueryResult::NotFound => {
@@ -213,7 +211,7 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset = col.insert(&vector, payload)?;
+        let offset = col.insert(&vector, payload, 1)?;
 
         //Assert
         let stored_vector = col.storage.search(offset)?;
@@ -241,8 +239,8 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset1 = col.insert(&vector, payload)?;
-        let offset2 = col.insert(&vector, payload)?;
+        let offset1 = col.insert(&vector, payload, 1)?;
+        let offset2 = col.insert(&vector, payload, 2)?;
 
         //Assert
         let stored_vector1 = col.storage.search(offset1)?;
@@ -269,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn batch_insert_two_records_should_store_two_records() -> Result<()> {
+    fn bulk_insert_two_records_should_store_two_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
@@ -282,7 +280,7 @@ mod tests {
         let payload2 = "test2";
 
         //Act
-        col.batch_insert(&[(&vector, payload), (&vector2, payload2)])?;
+        col.bulk_insert(&[(&vector, payload), (&vector2, payload2)], 1)?;
 
         //Assert
         let stored_vector = col.search(1)?;
@@ -313,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn batch_insert_no_records_should_not_store_any_records() -> Result<()> {
+    fn bulk_insert_no_records_should_not_store_any_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
@@ -322,7 +320,7 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
 
         //Act
-        col.batch_insert(&[])?;
+        col.bulk_insert(&[], 1)?;
 
         //Assert
         match col.search(1)? {
@@ -341,7 +339,7 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload)?;
+        let _ = col.insert(&vector, payload, 1)?;
 
         //Act
         let record = col.search(1)?;
@@ -369,10 +367,10 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload)?;
+        let _ = col.insert(&vector, payload, 1)?;
 
         //Act
-        col.delete(1)?;
+        col.delete(1, 2)?;
 
         //Assert
         match col.search(1)? {
@@ -410,12 +408,12 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload)?;
+        let _ = col.insert(&vector, payload, 1)?;
 
         //Act
         let new_vector = vec![4.0, 5.0, 6.0];
         let new_payload = "new_test";
-        col.update(1, Some(&new_vector), Some(new_payload))?;
+        col.update(1, Some(&new_vector), Some(new_payload), 2)?;
 
         //Assert
         let record = col.search(1)?;
@@ -442,10 +440,10 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload)?;
+        let _ = col.insert(&vector, payload, 1)?;
 
         //Act
-        col.delete(1)?;
+        col.delete(1, 2)?;
 
         //Assert
         let record = col.search(1)?;

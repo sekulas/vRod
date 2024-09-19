@@ -7,16 +7,70 @@ use std::{
 };
 
 use super::{
-    types::{StorageDeleteResult, StorageUpdateResult},
+    types::{
+        StorageCommand, StorageCommandResult, StorageDeleteResult, StorageInterface, StorageQuery,
+        StorageQueryResult, StorageUpdateResult,
+    },
     Error, Result,
 };
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::types::{OperationMode, NONE, NOT_SET},
-    types::{Dim, Offset, STORAGE_FILE},
+    components::collection::types::{NONE, NOT_SET},
+    types::{Dim, Offset, LSN, STORAGE_FILE},
 };
+
+impl StorageInterface for Storage {
+    fn perform_command(
+        &mut self,
+        command: StorageCommand,
+        lsn: LSN,
+    ) -> Result<StorageCommandResult> {
+        let result = match command {
+            StorageCommand::BulkInsert {
+                vectors_and_payloads,
+            } => {
+                let offsets = self.bulk_insert(vectors_and_payloads, lsn)?;
+                StorageCommandResult::BulkInserted { offsets }
+            }
+            StorageCommand::Insert { vector, payload } => {
+                let offset = self.insert(vector, payload, lsn)?;
+                StorageCommandResult::Inserted { offset }
+            }
+            StorageCommand::Update {
+                offset,
+                vector,
+                payload,
+            } => {
+                let strg_update_result = self.update(offset, vector, payload, lsn)?;
+
+                match strg_update_result {
+                    StorageUpdateResult::NotFound => return Ok(StorageCommandResult::NotFound),
+                    StorageUpdateResult::Updated { new_offset } => {
+                        StorageCommandResult::Updated { new_offset }
+                    }
+                }
+            }
+        };
+
+        self.header.modification_lsn = lsn; //TODO:: Modification lsn updated even if no changes were made?
+        self.update_header()?;
+
+        Ok(result)
+    }
+
+    fn perform_query(&mut self, query: StorageQuery) -> Result<StorageQueryResult> {
+        let result = match query {
+            StorageQuery::Search { offset } => {
+                let record = self.search(offset)?;
+                StorageQueryResult::SearchResult { record }
+            }
+        };
+
+        Ok(result)
+    }
+}
 
 pub struct Storage {
     path: PathBuf,
@@ -27,15 +81,15 @@ pub struct Storage {
 //TODO: Offset backup for storing recently deleted record?
 #[derive(Serialize, Deserialize, Clone)]
 struct StorageHeader {
-    current_max_lsn: u64,
+    modification_lsn: u64,
     vector_dim_amount: u16,
     checksum: u64,
 }
 
 impl StorageHeader {
-    fn new(current_max_lsn: u64, vector_dim_amount: u16) -> Self {
+    fn new(modification_lsn: u64, vector_dim_amount: u16) -> Self {
         let mut header = Self {
-            current_max_lsn,
+            modification_lsn,
             vector_dim_amount,
             checksum: NONE,
         };
@@ -86,7 +140,7 @@ impl StorageHeader {
 
 impl Hash for StorageHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.current_max_lsn.hash(state);
+        self.modification_lsn.hash(state);
         self.vector_dim_amount.hash(state);
     }
 }
@@ -94,7 +148,7 @@ impl Hash for StorageHeader {
 impl Default for StorageHeader {
     fn default() -> Self {
         let mut header = Self {
-            current_max_lsn: 0,
+            modification_lsn: 0,
             vector_dim_amount: 0,
             checksum: 0,
         };
@@ -225,41 +279,26 @@ impl Storage {
         Ok(storage)
     }
 
-    pub fn insert(
-        &mut self,
-        vector: &[Dim],
-        payload: &str,
-        mode: &OperationMode,
-        lsn
-    ) -> Result<Offset> {
+    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
         self.validate_vector(vector)?;
-
-        if let OperationMode::RawOperation = mode {
-            self.header.current_max_lsn += 1;
-        }
 
         let record_offset = self.file.seek(SeekFrom::End(0))?;
 
-        let record = Record::new(self.header.current_max_lsn, vector, payload);
+        let record = Record::new(lsn, vector, payload);
 
         serialize_into(&mut BufWriter::new(&self.file), &record)?;
-        if let OperationMode::RawOperation = mode {
-            self.update_header()?;
-        }
 
         Ok(record_offset)
     }
 
-    pub fn batch_insert(&mut self, records: &[(&[Dim], &str)]) -> Result<Vec<Offset>> {
+    pub fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: LSN) -> Result<Vec<Offset>> {
         let mut offsets = Vec::with_capacity(records.len());
-        self.header.current_max_lsn += 1; //TODO: Popping up lsn to collection?
 
         for (vector, payload) in records.iter() {
-            let offset = self.insert(vector, payload, &OperationMode::InOtherOperation)?;
+            let offset = self.insert(vector, payload, lsn)?;
             offsets.push(offset);
         }
 
-        self.update_header()?;
         Ok(offsets)
     }
 
@@ -277,22 +316,14 @@ impl Storage {
         }
     }
 
-    pub fn delete(&mut self, offset: Offset, mode: &OperationMode) -> Result<StorageDeleteResult> {
+    pub fn delete(&mut self, offset: Offset, lsn: LSN) -> Result<StorageDeleteResult> {
         if let Some(mut record) = self.search(offset)? {
-            if let OperationMode::RawOperation = mode {
-                self.header.current_max_lsn += 1;
-            }
-
-            record.record_header.lsn = self.header.current_max_lsn;
+            record.record_header.lsn = lsn;
             record.record_header.deleted = true;
             record.record_header.checksum = record.calculate_checksum();
 
             self.file.seek(SeekFrom::Start(offset))?;
             serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
-
-            if let OperationMode::RawOperation = mode {
-                self.update_header()?;
-            }
 
             Ok(StorageDeleteResult::Deleted)
         } else {
@@ -305,6 +336,7 @@ impl Storage {
         offset: Offset,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
+        lsn: LSN,
     ) -> Result<StorageUpdateResult> {
         if let Some(mut record) = self.search(offset)? {
             if let Some(vector) = vector {
@@ -315,12 +347,9 @@ impl Storage {
                 record.payload = payload.to_owned();
             }
 
-            self.header.current_max_lsn += 1;
-            let mode = OperationMode::InOtherOperation;
+            self.delete(offset, lsn)?;
 
-            self.delete(offset, &mode)?;
-
-            let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
+            let new_offset = self.insert(&record.vector, &record.payload, lsn)?;
 
             self.update_header()?;
 
