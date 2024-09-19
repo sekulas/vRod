@@ -52,6 +52,14 @@ impl StorageInterface for Storage {
                     }
                 }
             }
+            StorageCommand::Delete { offset } => {
+                let strg_delete_result = self.delete(offset, lsn)?;
+
+                match strg_delete_result {
+                    StorageDeleteResult::NotFound => return Ok(StorageCommandResult::NotFound),
+                    StorageDeleteResult::Deleted => StorageCommandResult::Deleted,
+                }
+            }
         };
 
         self.header.modification_lsn = lsn; //TODO:: Modification lsn updated even if no changes were made? Example: Insert [] empty array.

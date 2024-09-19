@@ -1,9 +1,12 @@
 use super::index::types::{
-    Index, IndexCommand, IndexQuery, IndexQueryResult, DEFAULT_BRANCHING_FACTOR,
+    Index, IndexCommand, IndexCommandResult, IndexQuery, IndexQueryResult, DEFAULT_BRANCHING_FACTOR,
 };
 
-use super::storage::types::StorageUpdateResult;
-use super::types::CollectionSearchResult;
+use super::storage::types::{
+    StorageCommand, StorageCommandResult, StorageDeleteResult, StorageInterface, StorageQuery,
+    StorageQueryResult, StorageUpdateResult,
+};
+use super::types::{CollectionDeleteResult, CollectionSearchResult, CollectionUpdateResult};
 use super::Error;
 use super::{index::tree::BPTree, storage::Storage, Result};
 use crate::components::wal::Wal;
@@ -46,34 +49,57 @@ impl Collection {
         })
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
-        let offset = self.storage.insert(vector, payload, lsn)?;
+    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<()> {
+        let storage_insert_result = self
+            .storage
+            .perform_command(StorageCommand::Insert { vector, payload }, lsn)?;
 
-        self.index
-            .perform_command(IndexCommand::Insert(offset), lsn)?;
-
-        Ok(offset)
+        match storage_insert_result {
+            StorageCommandResult::Inserted { offset } => {
+                self.index
+                    .perform_command(IndexCommand::Insert(offset), lsn)?;
+                Ok(())
+            }
+            _ => Err(Error::UnexpectedError(
+                "Collection: Insert returned unexpected result.",
+            )),
+        }
     }
 
     pub fn bulk_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)], lsn: LSN) -> Result<()> {
-        let offsets = self.storage.bulk_insert(vectors_and_payloads, lsn)?;
+        let bulk_insert_result = self.storage.perform_command(
+            StorageCommand::BulkInsert {
+                vectors_and_payloads,
+            },
+            lsn,
+        )?;
 
-        self.index
-            .perform_command(IndexCommand::BulkInsert(offsets), lsn)?;
-
-        Ok(())
+        match bulk_insert_result {
+            StorageCommandResult::BulkInserted { offsets } => {
+                self.index
+                    .perform_command(IndexCommand::BulkInsert(offsets), lsn)?;
+                Ok(())
+            }
+            _ => Err(Error::UnexpectedError(
+                "Collection: Bulk insert returned unexpected result.",
+            )),
+        }
     }
 
     pub fn search(&mut self, record_id: RecordId) -> Result<CollectionSearchResult> {
-        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+        let search_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
-        match query_result {
-            IndexQueryResult::SearchResult(offset) => {
-                let record = self.storage.search(offset)?;
+        match search_result {
+            IndexQueryResult::FoundValue(offset) => {
+                let record = self
+                    .storage
+                    .perform_query(StorageQuery::Search { offset })?;
 
                 match record {
-                    Some(record) => Ok(CollectionSearchResult::Found(record)),
-                    None => Ok(CollectionSearchResult::NotFound),
+                    StorageQueryResult::FoundRecord { record } => {
+                        Ok(CollectionSearchResult::FoundRecord(record))
+                    }
+                    StorageQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
                 }
             }
             IndexQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
@@ -89,49 +115,60 @@ impl Collection {
         vector: Option<&[Dim]>,
         payload: Option<&str>,
         lsn: LSN,
-    ) -> Result<()> {
-        //TODO: Change return type to CollectionUpdateResult
-        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+    ) -> Result<CollectionUpdateResult> {
+        let search_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
-        match query_result {
-            IndexQueryResult::SearchResult(offset) => {
-                let update_result = self.storage.update(offset, vector, payload, lsn)?;
+        match search_result {
+            IndexQueryResult::FoundValue(offset) => {
+                let update_result = self.storage.perform_command(
+                    StorageCommand::Update {
+                        offset,
+                        vector,
+                        payload,
+                    },
+                    lsn,
+                )?;
 
                 match update_result {
-                    StorageUpdateResult::Updated { new_offset } => {
-                        self.index
+                    StorageCommandResult::Updated { new_offset } => {
+                        let update_result = self
+                            .index
                             .perform_command(IndexCommand::Update(record_id, new_offset), lsn)?;
+                        match update_result {
+                            IndexCommandResult::Updated => Ok(CollectionUpdateResult::Updated),
+                            _ => Err(Error::UnexpectedError(
+                                "Collection: Update - post index update returned unexpected result.",
+                            )),
+                        }
                     }
-
-                    StorageUpdateResult::NotFound => {}
+                    _ => Err(Error::UnexpectedError(
+                        "Collection: update - post storage update returned unexpected result.",
+                    )),
                 }
-
-                Ok(())
             }
-            IndexQueryResult::NotFound => {
-                println!("Collection: Cannot update non-existing record with Id '{record_id}'.");
-                Ok(())
-            }
+            IndexQueryResult::NotFound => Ok(CollectionUpdateResult::NotFound),
             _ => Err(Error::UnexpectedError(
-                "Collection: Update returned unexpected result.",
+                "Collection: Update - post search update returned unexpected result.",
             )),
         }
     }
 
-    pub fn delete(&mut self, record_id: RecordId, lsn: LSN) -> Result<()> {
-        let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+    pub fn delete(&mut self, record_id: RecordId, lsn: LSN) -> Result<CollectionDeleteResult> {
+        let search_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
-        match query_result {
-            IndexQueryResult::SearchResult(offset) => {
-                self.storage.delete(offset, lsn)?;
-                Ok(())
-            }
-            IndexQueryResult::NotFound => {
-                println!("Collection: Cannot delete non-existing record with Id '{record_id}'.");
-                Ok(())
-            }
+        match search_result {
+            IndexQueryResult::FoundValue(offset) => match self
+                .storage
+                .perform_command(StorageCommand::Delete { offset }, lsn)?
+            {
+                StorageCommandResult::Deleted => Ok(CollectionDeleteResult::Deleted),
+                _ => Err(Error::UnexpectedError(
+                    "Collection: Delete - post storage delete returned unexpected result.",
+                )),
+            },
+            IndexQueryResult::NotFound => Ok(CollectionDeleteResult::NotFound),
             _ => Err(Error::UnexpectedError(
-                "Collection: Delete returned unexpected result.",
+                "Collection: Delete - post search delete returned unexpected result.",
             )),
         }
     }
@@ -211,18 +248,20 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset = col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 1)?;
 
         //Assert
-        let stored_vector = col.storage.search(offset)?;
+        let stored_vector = col.search(1)?;
 
-        assert!(stored_vector.is_some());
-        let stored_vector = stored_vector.unwrap();
-
-        assert_eq!(stored_vector.vector, vector);
-        assert_eq!(stored_vector.payload, payload);
-        assert_eq!(stored_vector.record_header.lsn, 1);
-        assert!(!stored_vector.record_header.deleted);
+        match stored_vector {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::FoundRecord(record) => {
+                assert_eq!(record.vector, vector);
+                assert_eq!(record.payload, payload);
+                assert_eq!(record.record_header.lsn, 1);
+                assert!(!record.record_header.deleted);
+            }
+        }
 
         Ok(())
     }
@@ -239,29 +278,33 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset1 = col.insert(&vector, payload, 1)?;
-        let offset2 = col.insert(&vector, payload, 2)?;
+        col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 2)?;
 
         //Assert
-        let stored_vector1 = col.storage.search(offset1)?;
+        let stored_vector = col.search(1)?;
 
-        assert!(stored_vector1.is_some());
-        let stored_vector1 = stored_vector1.unwrap();
+        match stored_vector {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::FoundRecord(record) => {
+                assert_eq!(record.vector, vector);
+                assert_eq!(record.payload, payload);
+                assert_eq!(record.record_header.lsn, 1);
+                assert!(!record.record_header.deleted);
+            }
+        }
 
-        assert_eq!(stored_vector1.vector, vector);
-        assert_eq!(stored_vector1.payload, payload);
-        assert_eq!(stored_vector1.record_header.lsn, 1);
-        assert!(!stored_vector1.record_header.deleted);
+        let stored_vector2 = col.search(2)?;
 
-        let stored_vector2 = col.storage.search(offset2)?;
-
-        assert!(stored_vector2.is_some());
-        let stored_vector2 = stored_vector2.unwrap();
-
-        assert_eq!(stored_vector2.vector, vector);
-        assert_eq!(stored_vector2.payload, payload);
-        assert_eq!(stored_vector2.record_header.lsn, 2);
-        assert!(!stored_vector2.record_header.deleted);
+        match stored_vector2 {
+            CollectionSearchResult::NotFound => panic!("Record not found"),
+            CollectionSearchResult::FoundRecord(record) => {
+                assert_eq!(record.vector, vector);
+                assert_eq!(record.payload, payload);
+                assert_eq!(record.record_header.lsn, 2);
+                assert!(!record.record_header.deleted);
+            }
+        }
 
         Ok(())
     }
@@ -287,7 +330,7 @@ mod tests {
 
         match stored_vector {
             CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::Found(record) => {
+            CollectionSearchResult::FoundRecord(record) => {
                 assert_eq!(record.vector, vector);
                 assert_eq!(record.payload, payload);
                 assert_eq!(record.record_header.lsn, 1);
@@ -299,7 +342,7 @@ mod tests {
 
         match stored_vector2 {
             CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::Found(record) => {
+            CollectionSearchResult::FoundRecord(record) => {
                 assert_eq!(record.vector, vector2);
                 assert_eq!(record.payload, payload2);
                 assert_eq!(record.record_header.lsn, 1);
@@ -325,7 +368,7 @@ mod tests {
         //Assert
         match col.search(1)? {
             CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::Found(_) => panic!("Record found"),
+            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
         }
     }
 
@@ -339,7 +382,7 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 1)?;
 
         //Act
         let record = col.search(1)?;
@@ -347,7 +390,7 @@ mod tests {
         //Assert
         match record {
             CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::Found(record) => {
+            CollectionSearchResult::FoundRecord(record) => {
                 assert_eq!(record.vector, vector);
                 assert_eq!(record.payload, payload);
                 assert_eq!(record.record_header.lsn, 1);
@@ -367,14 +410,14 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 1)?;
 
         //Act
         col.delete(1, 2)?;
 
         //Assert
         match col.search(1)? {
-            CollectionSearchResult::Found(_) => panic!("Record found"),
+            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
             CollectionSearchResult::NotFound => Ok(()),
         }
     }
@@ -394,7 +437,7 @@ mod tests {
         //Assert
         match record {
             CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::Found(_) => panic!("Record found"),
+            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
         }
     }
 
@@ -408,7 +451,7 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 1)?;
 
         //Act
         let new_vector = vec![4.0, 5.0, 6.0];
@@ -420,7 +463,7 @@ mod tests {
 
         match record {
             CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::Found(record) => {
+            CollectionSearchResult::FoundRecord(record) => {
                 assert_eq!(record.vector, new_vector);
                 assert_eq!(record.payload, new_payload);
                 assert_eq!(record.record_header.lsn, 2);
@@ -440,7 +483,7 @@ mod tests {
         let mut col = Collection::load(&path.join(collection_name))?;
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
-        let _ = col.insert(&vector, payload, 1)?;
+        col.insert(&vector, payload, 1)?;
 
         //Act
         col.delete(1, 2)?;
@@ -450,7 +493,7 @@ mod tests {
 
         match record {
             CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::Found(_) => panic!("Record found"),
+            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
         }
     }
 

@@ -24,6 +24,9 @@ pub enum StorageCommand<'a> {
         vector: Option<&'a [Dim]>,
         payload: Option<&'a str>,
     },
+    Delete {
+        offset: Offset,
+    },
 }
 
 pub enum StorageQuery {
@@ -34,6 +37,7 @@ pub enum StorageCommandResult {
     BulkInserted { offsets: Vec<Offset> },
     Inserted { offset: Offset },
     Updated { new_offset: Offset },
+    Deleted,
     NotFound,
 }
 

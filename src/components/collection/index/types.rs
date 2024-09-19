@@ -19,7 +19,7 @@ pub const SERIALIZED_NODE_SIZE: usize = 8
     + 2;
 
 pub trait Index {
-    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<()>;
+    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<IndexCommandResult>;
     fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult>;
 }
 
@@ -29,6 +29,14 @@ pub enum IndexCommand {
     Update(RecordId, Offset),
 }
 
+#[derive(PartialEq, Debug)]
+pub enum IndexCommandResult {
+    BulkInserted,
+    Inserted,
+    Updated,
+    NotFound,
+}
+
 pub enum IndexQuery {
     SearchAll,
     Search(RecordId),
@@ -36,8 +44,13 @@ pub enum IndexQuery {
 
 #[derive(PartialEq, Debug)]
 pub enum IndexQueryResult {
-    SearchAll(Vec<(RecordId, Offset)>),
-    SearchResult(Offset),
+    FoundKeysAndValues(Vec<(RecordId, Offset)>),
+    FoundValue(Offset),
+    NotFound,
+}
+
+pub enum IndexUpdateResult {
+    Updated,
     NotFound,
 }
 

@@ -1,8 +1,8 @@
 use super::{
     types::{
-        FindKeyResult, Index, IndexCommand, IndexQuery, IndexQueryResult, InsertionResult, NodeIdx,
-        DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT,
-        HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
+        FindKeyResult, Index, IndexCommand, IndexCommandResult, IndexQuery, IndexQueryResult,
+        IndexUpdateResult, InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT,
+        EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -26,31 +26,42 @@ use std::{
 };
 
 impl Index for BPTree {
-    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<()> {
+    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<IndexCommandResult> {
         let old_root = self.header.root_offset;
 
-        match command {
-            IndexCommand::BulkInsert(values) => self.bulk_insert(&values)?,
-            IndexCommand::Insert(value) => self.insert(value)?,
-            IndexCommand::Update(key, value) => self.update(key, value)?,
-        }
+        let result = match command {
+            IndexCommand::BulkInsert(values) => {
+                self.bulk_insert(&values)?;
+                IndexCommandResult::BulkInserted
+            }
+            IndexCommand::Insert(value) => {
+                self.insert(value)?;
+                IndexCommandResult::Inserted
+            }
+            IndexCommand::Update(key, value) => match self.update(key, value)? {
+                IndexUpdateResult::Updated => IndexCommandResult::Updated,
+                IndexUpdateResult::NotFound => IndexCommandResult::NotFound,
+            },
+        };
 
         self.flush_modified_nodes()?;
 
         self.header.last_root_offset = old_root;
         self.header.modification_lsn = lsn;
-        self.update_header()
+        self.update_header()?;
+
+        Ok(result)
     }
 
     fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult> {
         match query {
             IndexQuery::Search(key) => match self.search(key)? {
-                Some(offset) => Ok(IndexQueryResult::SearchResult(offset)),
+                Some(offset) => Ok(IndexQueryResult::FoundValue(offset)),
                 None => Ok(IndexQueryResult::NotFound),
             },
             IndexQuery::SearchAll => {
                 let ids_and_offsets = self.search_all()?;
-                Ok(IndexQueryResult::SearchAll(ids_and_offsets))
+                Ok(IndexQueryResult::FoundKeysAndValues(ids_and_offsets))
             }
         }
     }
@@ -618,19 +629,18 @@ impl BPTree {
         }
     }
 
-    fn update(&mut self, key: RecordId, value: Offset) -> Result<()> {
+    fn update(&mut self, key: RecordId, value: Offset) -> Result<IndexUpdateResult> {
         match self.recursive_update(self.header.root_offset, key, value) {
             Ok(UpdateResult::Updated {
                 existing_child_new_offset,
                 next_leaf_to_connect_offset_from_child: _,
             }) => {
                 self.header.root_offset = existing_child_new_offset;
+                Ok(IndexUpdateResult::Updated)
             }
-            Ok(UpdateResult::KeyNotFound) => return Err(Error::KeyNotFound { key }),
+            Ok(UpdateResult::KeyNotFound) => Ok(IndexUpdateResult::NotFound),
             Err(e) => return Err(e),
         }
-
-        Ok(())
     }
 
     fn recursive_update(
@@ -939,7 +949,7 @@ mod tests {
         let result = tree.perform_query(IndexQuery::Search(6))?;
 
         //Assert
-        assert_eq!(IndexQueryResult::SearchResult(expected_value), result);
+        assert_eq!(IndexQueryResult::FoundValue(expected_value), result);
 
         Ok(())
     }
@@ -961,7 +971,7 @@ mod tests {
         let result = tree.perform_query(IndexQuery::Search(1))?;
 
         //Assert
-        assert_eq!(IndexQueryResult::SearchResult(expected_value), result);
+        assert_eq!(IndexQueryResult::FoundValue(expected_value), result);
 
         Ok(())
     }
@@ -1265,10 +1275,10 @@ mod tests {
         tree.perform_command(IndexCommand::Insert(2), 2)?;
 
         //Act
-        let result = tree.perform_command(IndexCommand::Update(3, 4), 3);
+        let result = tree.perform_command(IndexCommand::Update(3, 4), 3)?;
 
         //Assert
-        assert!(matches!(result, Err(Error::KeyNotFound { key: 3 })));
+        assert_eq!(IndexCommandResult::NotFound, result);
 
         Ok(())
     }
@@ -1363,7 +1373,7 @@ mod tests {
         let result = tree.perform_query(IndexQuery::SearchAll)?;
 
         //Assert
-        assert_eq!(IndexQueryResult::SearchAll(vec![]), result);
+        assert_eq!(IndexQueryResult::FoundKeysAndValues(vec![]), result);
 
         Ok(())
     }
@@ -1385,7 +1395,10 @@ mod tests {
         //Assert
         let expected_result = vec![(2, 2), (1, 1)];
 
-        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(expected_result),
+            result
+        );
 
         Ok(())
     }
@@ -1407,7 +1420,10 @@ mod tests {
         //Assert
         let expected_result = vec![(7, 7), (6, 6), (5, 5), (4, 4), (3, 3), (2, 2), (1, 1)];
 
-        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(expected_result),
+            result
+        );
 
         Ok(())
     }
@@ -1433,7 +1449,10 @@ mod tests {
         //Assert
         let expected_result = vec![(7, 10), (6, 6), (5, 10), (4, 4), (3, 3), (2, 2), (1, 10)];
 
-        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(expected_result),
+            result
+        );
 
         Ok(())
     }
@@ -1458,7 +1477,10 @@ mod tests {
         //Assert
         let expected_result = vec![(3, 10), (2, 2), (1, 10)];
 
-        assert_eq!(IndexQueryResult::SearchAll(expected_result), result);
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(expected_result),
+            result
+        );
 
         Ok(())
     }

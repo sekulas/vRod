@@ -4,6 +4,16 @@ pub const NOT_SET: u16 = 0;
 pub const NONE: u64 = 0;
 
 pub enum CollectionSearchResult {
-    Found(Record),
+    FoundRecord(Record),
+    NotFound,
+}
+
+pub enum CollectionUpdateResult {
+    Updated,
+    NotFound,
+}
+
+pub enum CollectionDeleteResult {
+    Deleted,
     NotFound,
 }
