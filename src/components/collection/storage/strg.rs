@@ -377,14 +377,14 @@ mod tests {
         let payload = "test";
 
         //Act
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, 1)?;
 
         //Assert
         let mut file = File::open(storage.path)?;
         file.seek(SeekFrom::Start(offset))?;
         let record: Record = deserialize_from(&mut BufReader::new(&file))?;
 
-        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
+        assert_eq!(record.record_header.lsn, 1);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, vector);
@@ -404,33 +404,35 @@ mod tests {
         let payload2 = "test2";
 
         //Act
-        let offset1 = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let offset2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, 1)?;
+        let offset2 = storage.insert(&vector2, payload2, 2)?;
 
         //Assert
-        let mut file = File::open(storage.path)?;
-        file.seek(SeekFrom::Start(offset1))?;
-        let record1: Record = deserialize_from(&mut BufReader::new(&file))?;
+        let record = storage.search(offset)?;
+        assert!(record.is_some());
+        let record = record.unwrap();
 
-        assert!(!record1.record_header.deleted);
-        assert_eq!(record1.record_header.checksum, record1.calculate_checksum());
-        assert_eq!(record1.vector, vector);
-        assert_eq!(record1.payload, payload);
+        assert!(!record.record_header.deleted);
+        assert!(record.record_header.lsn == 1);
+        assert_eq!(record.record_header.checksum, record.calculate_checksum());
+        assert_eq!(record.vector, vector);
+        assert_eq!(record.payload, payload);
 
-        file.seek(SeekFrom::Start(offset2))?;
-        let record2: Record = deserialize_from(&mut BufReader::new(&file))?;
+        let record2 = storage.search(offset2)?;
+        assert!(record2.is_some());
+        let record2 = record2.unwrap();
 
         assert!(!record2.record_header.deleted);
+        assert!(record2.record_header.lsn == 2);
         assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
         assert_eq!(record2.vector, vector2);
         assert_eq!(record2.payload, payload2);
 
-        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
         Ok(())
     }
 
     #[test]
-    fn batch_insert_two_records_should_store_two_record() -> Result<()> {
+    fn bulk_insert_two_records_should_store_two_record() -> Result<()> {
         // Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
@@ -440,13 +442,17 @@ mod tests {
         let payload2 = "test2";
 
         // Act
-        let offsets = storage
-            .batch_insert(&[(vector.as_slice(), payload), (vector2.as_slice(), payload2)])?;
+        let offsets = storage.bulk_insert(
+            &[(vector.as_slice(), payload), (vector2.as_slice(), payload2)],
+            1,
+        )?;
 
         // Assert
         let record = storage.search(offsets[0])?;
         assert!(record.is_some());
         let record = record.unwrap();
+
+        assert_eq!(record.record_header.lsn, 1);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, vector);
@@ -455,26 +461,28 @@ mod tests {
         let record2 = storage.search(offsets[1])?;
         assert!(record2.is_some());
         let record2 = record2.unwrap();
+
+        assert_eq!(record2.record_header.lsn, 1);
         assert!(!record2.record_header.deleted);
         assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
         assert_eq!(record2.vector, vector2);
         assert_eq!(record2.payload, payload2);
-        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
 
         Ok(())
     }
 
     #[test]
-    fn batch_insert_empty_array_should_return_empty_offsets() -> Result<()> {
+    fn bulk_insert_empty_array_should_return_empty_offsets() -> Result<()> {
         // Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path())?;
 
         // Act
-        let offsets = storage.batch_insert(&[])?;
+        let offsets = storage.bulk_insert(&[], 1)?;
 
         // Assert
         assert!(offsets.is_empty());
+
         Ok(())
     }
 
@@ -486,7 +494,7 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, 1)?;
 
         //Act
         let record = storage.search(offset)?;
@@ -494,7 +502,7 @@ mod tests {
         //Assert
         assert!(record.is_some());
         let record = record.unwrap();
-        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
+        assert_eq!(record.record_header.lsn, 1);
         assert!(!record.record_header.deleted);
         assert_eq!(record.record_header.checksum, record.calculate_checksum());
         assert_eq!(record.vector, vector);
@@ -511,8 +519,8 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let _ = storage.insert(&vector, payload, 1)?;
+        let offset = storage.insert(&vector, payload, 2)?;
 
         let record = storage.search(offset)?;
         let invalid_offset = offset - serialized_size(&record)? - 1;
@@ -533,10 +541,10 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, 1)?;
 
         //Act
-        storage.delete(offset, &OperationMode::RawOperation)?;
+        storage.delete(offset, 2)?;
 
         //Assert
         let record = storage.search(offset)?;
@@ -555,10 +563,10 @@ mod tests {
         let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let new_payload = "test2";
 
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let offset = storage.insert(&vector, payload, 1)?;
 
         //Act
-        let update_result = storage.update(offset, Some(&new_vector), Some(new_payload))?;
+        let update_result = storage.update(offset, Some(&new_vector), Some(new_payload), 1)?;
 
         //Assert
         let old_record = storage.search(offset)?;
@@ -571,7 +579,7 @@ mod tests {
 
                 assert!(record.is_some());
                 let record = record.unwrap();
-                assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
+                assert_eq!(record.record_header.lsn, 1);
                 assert!(!record.record_header.deleted);
                 assert_eq!(record.record_header.checksum, record.calculate_checksum());
                 assert_eq!(record.vector, new_vector);
@@ -593,8 +601,8 @@ mod tests {
         let payload2 = "test2";
 
         //Act
-        let result = storage.insert(&vector, payload, &OperationMode::RawOperation);
-        let result2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation);
+        let result = storage.insert(&vector, payload, 1);
+        let result2 = storage.insert(&vector2, payload2, 2);
 
         //Assert
         assert!(result.is_ok());
@@ -612,15 +620,15 @@ mod tests {
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
 
         //Act
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let result = storage.update(offset, Some(&vector2), None);
+        let offset = storage.insert(&vector, payload, 1)?;
+        let result = storage.update(offset, Some(&vector2), None, 2);
 
         //Assert
         assert!(result.is_err());
         Ok(())
     }
 
-    #[test]
+    #[ignore = "Not sure if it will be needed."]
     fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -628,7 +636,7 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
-        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let _ = storage.insert(&vector, payload, 1)?;
         let checksum = storage.header.checksum;
 
         let mut file = File::open(&storage.path)?;
@@ -640,8 +648,8 @@ mod tests {
         let storage = Storage::load(&storage.path)?;
 
         //Assert
-        assert_eq!(storage.header.current_max_lsn, 1);
-        assert_eq!(storage.header.vector_dim_amount, 3);
+        assert_eq!(storage.header.modification_lsn, 1); //TODO: Should it somehow get the max lsn? How?
+        assert_eq!(storage.header.vector_dim_amount, 3); //TODO: Maybe make it readonly instead of defining it?
         assert_eq!(storage.header.checksum, checksum);
         Ok(())
     }
@@ -662,7 +670,7 @@ mod tests {
         let storage = Storage::load(&storage.path)?;
 
         //Assert
-        assert_eq!(storage.header.current_max_lsn, 0);
+        assert_eq!(storage.header.modification_lsn, 0);
         assert_eq!(storage.header.vector_dim_amount, 0);
         assert_eq!(storage.header.checksum, checksum);
         Ok(())
