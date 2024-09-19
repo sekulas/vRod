@@ -1,4 +1,4 @@
-use crate::types::LSN;
+use crate::types::Lsn;
 
 use super::CommandResult;
 use super::QueryResult;
@@ -13,8 +13,8 @@ pub trait CQAction {
 }
 
 pub trait Command: CQAction {
-    fn execute(&self, lsn: LSN) -> CommandResult<()>;
-    fn rollback(&self, lsn: LSN) -> CommandResult<()>;
+    fn execute(&self, lsn: Lsn) -> CommandResult<()>;
+    fn rollback(&self, lsn: Lsn) -> CommandResult<()>;
 }
 
 pub trait Query: CQAction {

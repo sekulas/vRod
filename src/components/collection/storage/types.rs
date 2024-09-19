@@ -1,4 +1,4 @@
-use crate::types::{Dim, Offset, LSN};
+use crate::types::{Dim, Lsn, Offset};
 
 use super::strg::Record;
 use super::Result;
@@ -7,7 +7,7 @@ pub trait StorageInterface {
     fn perform_command(
         &mut self,
         command: StorageCommand,
-        lsn: LSN,
+        lsn: Lsn,
     ) -> Result<StorageCommandResult>;
     fn perform_query(&mut self, query: StorageQuery) -> Result<StorageQueryResult>;
 }

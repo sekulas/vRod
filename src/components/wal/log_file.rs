@@ -1,4 +1,4 @@
-use crate::types::{LSN, WAL_FILE};
+use crate::types::{Lsn, WAL_FILE};
 
 use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
@@ -41,14 +41,14 @@ impl Default for WalHeader {
 
 #[derive(Serialize, Deserialize)]
 pub struct WalEntry {
-    lsn: u64,
+    lsn: Lsn,
     commited: bool,
     data_len: u16, //TODO: Is that needed? Maybe hash.
     data: String,
 }
 
 impl WalEntry {
-    pub fn new(lsn: u64, commited: bool, data: String) -> Self {
+    pub fn new(lsn: Lsn, commited: bool, data: String) -> Self {
         Self {
             lsn,
             commited,
@@ -120,7 +120,7 @@ impl Wal {
         }
     }
 
-    pub fn append(&mut self, data: String) -> Result<LSN> {
+    pub fn append(&mut self, data: String) -> Result<Lsn> {
         self.header.current_max_lsn += 1;
         let entry = WalEntry::new(self.header.current_max_lsn, false, data);
 

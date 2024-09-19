@@ -3,21 +3,16 @@ use super::index::types::{
 };
 
 use super::storage::types::{
-    StorageCommand, StorageCommandResult, StorageDeleteResult, StorageInterface, StorageQuery,
-    StorageQueryResult, StorageUpdateResult,
+    StorageCommand, StorageCommandResult, StorageInterface, StorageQuery, StorageQueryResult,
 };
 use super::types::{CollectionDeleteResult, CollectionSearchResult, CollectionUpdateResult};
 use super::Error;
 use super::{index::tree::BPTree, storage::Storage, Result};
 use crate::components::wal::Wal;
-use crate::types::{Dim, Offset, RecordId, INDEX_FILE, LSN, STORAGE_FILE};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use crate::types::{Dim, Lsn, RecordId, INDEX_FILE, STORAGE_FILE};
+use std::{fs, path::Path};
 
 pub struct Collection {
-    path: PathBuf,
     storage: Storage,
     index: BPTree,
 }
@@ -42,14 +37,10 @@ impl Collection {
         let storage = Storage::load(&collection_path.join(STORAGE_FILE))?;
         let index = BPTree::load(&collection_path.join(INDEX_FILE))?;
 
-        Ok(Self {
-            path: collection_path,
-            storage,
-            index,
-        })
+        Ok(Self { storage, index })
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<()> {
+    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: Lsn) -> Result<()> {
         let storage_insert_result = self
             .storage
             .perform_command(StorageCommand::Insert { vector, payload }, lsn)?;
@@ -60,13 +51,13 @@ impl Collection {
                     .perform_command(IndexCommand::Insert(offset), lsn)?;
                 Ok(())
             }
-            _ => Err(Error::UnexpectedError(
+            _ => Err(Error::Unexpected(
                 "Collection: Insert returned unexpected result.",
             )),
         }
     }
 
-    pub fn bulk_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)], lsn: LSN) -> Result<()> {
+    pub fn bulk_insert(&mut self, vectors_and_payloads: &[(&[Dim], &str)], lsn: Lsn) -> Result<()> {
         let bulk_insert_result = self.storage.perform_command(
             StorageCommand::BulkInsert {
                 vectors_and_payloads,
@@ -80,7 +71,7 @@ impl Collection {
                     .perform_command(IndexCommand::BulkInsert(offsets), lsn)?;
                 Ok(())
             }
-            _ => Err(Error::UnexpectedError(
+            _ => Err(Error::Unexpected(
                 "Collection: Bulk insert returned unexpected result.",
             )),
         }
@@ -103,7 +94,7 @@ impl Collection {
                 }
             }
             IndexQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
-            _ => Err(Error::UnexpectedError(
+            _ => Err(Error::Unexpected(
                 "Collection: Search returned unexpected result.",
             )),
         }
@@ -114,7 +105,7 @@ impl Collection {
         record_id: RecordId,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
-        lsn: LSN,
+        lsn: Lsn,
     ) -> Result<CollectionUpdateResult> {
         let search_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
@@ -136,24 +127,24 @@ impl Collection {
                             .perform_command(IndexCommand::Update(record_id, new_offset), lsn)?;
                         match update_result {
                             IndexCommandResult::Updated => Ok(CollectionUpdateResult::Updated),
-                            _ => Err(Error::UnexpectedError(
+                            _ => Err(Error::Unexpected(
                                 "Collection: Update - post index update returned unexpected result.",
                             )),
                         }
                     }
-                    _ => Err(Error::UnexpectedError(
+                    _ => Err(Error::Unexpected(
                         "Collection: update - post storage update returned unexpected result.",
                     )),
                 }
             }
             IndexQueryResult::NotFound => Ok(CollectionUpdateResult::NotFound),
-            _ => Err(Error::UnexpectedError(
+            _ => Err(Error::Unexpected(
                 "Collection: Update - post search update returned unexpected result.",
             )),
         }
     }
 
-    pub fn delete(&mut self, record_id: RecordId, lsn: LSN) -> Result<CollectionDeleteResult> {
+    pub fn delete(&mut self, record_id: RecordId, lsn: Lsn) -> Result<CollectionDeleteResult> {
         let search_result = self.index.perform_query(IndexQuery::Search(record_id))?;
 
         match search_result {
@@ -162,12 +153,12 @@ impl Collection {
                 .perform_command(StorageCommand::Delete { offset }, lsn)?
             {
                 StorageCommandResult::Deleted => Ok(CollectionDeleteResult::Deleted),
-                _ => Err(Error::UnexpectedError(
+                _ => Err(Error::Unexpected(
                     "Collection: Delete - post storage delete returned unexpected result.",
                 )),
             },
             IndexQueryResult::NotFound => Ok(CollectionDeleteResult::NotFound),
-            _ => Err(Error::UnexpectedError(
+            _ => Err(Error::Unexpected(
                 "Collection: Delete - post search delete returned unexpected result.",
             )),
         }
@@ -228,10 +219,10 @@ mod tests {
         Collection::create(path, collection_name)?;
 
         //Act
-        let col = Collection::load(&path.join(collection_name))?;
+        let result = Collection::load(&path.join(collection_name));
 
         //Assert
-        assert_eq!(col.path, path.join(collection_name));
+        assert!(result.is_ok());
         Ok(())
     }
 

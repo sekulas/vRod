@@ -19,5 +19,5 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Unexpected error: {0}")]
-    UnexpectedError(&'static str),
+    Unexpected(&'static str),
 }

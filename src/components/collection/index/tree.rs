@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     components::collection::{index::types::UpdateResult, types::NONE},
-    types::{Offset, RecordId, INDEX_FILE, LSN},
+    types::{Lsn, Offset, RecordId, INDEX_FILE},
 };
 
 use std::{
@@ -26,7 +26,7 @@ use std::{
 };
 
 impl Index for BPTree {
-    fn perform_command(&mut self, command: IndexCommand, lsn: LSN) -> Result<IndexCommandResult> {
+    fn perform_command(&mut self, command: IndexCommand, lsn: Lsn) -> Result<IndexCommandResult> {
         let old_root = self.header.root_offset;
 
         let result = match command {
@@ -71,7 +71,7 @@ impl Index for BPTree {
 struct BPTreeHeader {
     branching_factor: u16,
     current_max_id: RecordId,
-    modification_lsn: LSN,
+    modification_lsn: Lsn,
     checksum: u64,
     root_offset: Offset,
     last_root_offset: Offset,
@@ -224,7 +224,7 @@ impl Node {
                 self.values[index as usize] = value;
                 Ok(())
             }
-            None => Err(Error::UnexpectedError(
+            None => Err(Error::Unexpected(
                 "BTree: Cannot find highest subtree index.",
             )),
         }
@@ -281,7 +281,7 @@ impl BTreeFile {
         for offset in offsets {
             let node = nodes
                 .get(offset)
-                .ok_or(Error::UnexpectedError("BTree: Cannot get node."))?;
+                .ok_or(Error::Unexpected("BTree: Cannot get node."))?;
             self.write_node(node, offset)?;
         }
 
@@ -398,11 +398,9 @@ impl BPTree {
         let mut node = self.file.read_node(&self.header.root_offset)?;
 
         while !node.is_leaf {
-            current_offset = node
-                .get_highest_subtree_offset()
-                .ok_or(Error::UnexpectedError(
-                    "BTree: Cannot find highest subtree offset for internal node.",
-                ))?;
+            current_offset = node.get_highest_subtree_offset().ok_or(Error::Unexpected(
+                "BTree: Cannot find highest subtree offset for internal node.",
+            ))?;
 
             node = self.file.read_node(&current_offset)?;
         }
@@ -504,7 +502,7 @@ impl BPTree {
 
                 self.header.root_offset = new_root_offset;
             }
-            Err(_) => return Err(Error::UnexpectedError("BTree: Cannot insert.")),
+            Err(_) => return Err(Error::Unexpected("BTree: Cannot insert.")),
         }
 
         Ok(())
@@ -522,7 +520,7 @@ impl BPTree {
         if is_leaf {
             self.insert_into_leaf(modified_node_offset, key, value)
         } else {
-            let child_offset = highest_subtree_offset.ok_or(Error::UnexpectedError(
+            let child_offset = highest_subtree_offset.ok_or(Error::Unexpected(
                 "BTree: Cannot find highest subtree offset for internal node.",
             ))?;
             self.insert_into_internal(modified_node_offset, child_offset, key, value)
@@ -566,13 +564,9 @@ impl BPTree {
                 new_node.next_leaf_offset = node_offset;
 
                 let node: &mut Node = self.get_node_mut(&node_offset)?;
-                let key_to_promote =
-                    *node
-                        .keys
-                        .get(HIGHEST_KEY_SLOT)
-                        .ok_or(Error::UnexpectedError(
-                            "BTree: Cannot get value from the highest key slot for leaf node.",
-                        ))?;
+                let key_to_promote = *node.keys.get(HIGHEST_KEY_SLOT).ok_or(Error::Unexpected(
+                    "BTree: Cannot get value from the highest key slot for leaf node.",
+                ))?;
 
                 Ok(InsertionResult::InsertedAndPromoted {
                     existing_child_new_offset: node_offset,
@@ -639,7 +633,7 @@ impl BPTree {
                 Ok(IndexUpdateResult::Updated)
             }
             Ok(UpdateResult::KeyNotFound) => Ok(IndexUpdateResult::NotFound),
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         }
     }
 
@@ -692,13 +686,13 @@ impl BPTree {
                             next_leaf_to_connect_offset_from_child,
                         })
                     } else {
-                        Err(Error::UnexpectedError(
+                        Err(Error::Unexpected(
                             "BTree: Cannot update next leaf pointers.",
                         ))
                     }
                 }
                 Ok(UpdateResult::KeyNotFound) => Ok(UpdateResult::KeyNotFound),
-                Err(_) => Err(Error::UnexpectedError("BTree: Cannot update.")),
+                Err(_) => Err(Error::Unexpected("BTree: Cannot update.")),
             }
         }
     }
@@ -749,7 +743,7 @@ impl BPTree {
                         next_leaf_to_connect_offset = next_leaf_to_connect_offset_from_child;
                     }
                     _ => {
-                        return Err(Error::UnexpectedError(
+                        return Err(Error::Unexpected(
                             "BTree: Cannot update next leaf pointers.",
                         ))
                     }
@@ -766,7 +760,7 @@ impl BPTree {
     fn get_node_mut(&mut self, offset: &Offset) -> Result<&mut Node> {
         self.modified_nodes
             .get_mut(offset)
-            .ok_or(Error::UnexpectedError("BTree: Cannot get node to modify."))
+            .ok_or(Error::Unexpected("BTree: Cannot get node to modify."))
     }
 
     fn create_new_node(&mut self, is_leaf: bool) -> Result<Offset> {

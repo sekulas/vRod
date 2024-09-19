@@ -3,7 +3,7 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
     mem,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use super::{
@@ -18,14 +18,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     components::collection::types::{NONE, NOT_SET},
-    types::{Dim, Offset, LSN, STORAGE_FILE},
+    types::{Dim, Lsn, Offset, STORAGE_FILE},
 };
 
 impl StorageInterface for Storage {
     fn perform_command(
         &mut self,
         command: StorageCommand,
-        lsn: LSN,
+        lsn: Lsn,
     ) -> Result<StorageCommandResult> {
         let result = match command {
             StorageCommand::BulkInsert {
@@ -85,7 +85,6 @@ impl StorageInterface for Storage {
 }
 
 pub struct Storage {
-    path: PathBuf,
     file: File,
     header: StorageHeader,
 }
@@ -247,14 +246,10 @@ impl Storage {
             .read(true)
             .write(true)
             .create(true)
-            .open(&file_path)?;
+            .open(file_path)?;
 
         let header = StorageHeader::default();
-        let mut storage = Self {
-            path: file_path,
-            file,
-            header,
-        };
+        let mut storage = Self { file, header };
         storage.update_header()?;
 
         Ok(storage)
@@ -283,16 +278,12 @@ impl Storage {
                 }
             };
 
-        let storage = Self {
-            path: path.to_owned(),
-            file,
-            header,
-        };
+        let storage = Self { file, header };
 
         Ok(storage)
     }
 
-    fn insert(&mut self, vector: &[Dim], payload: &str, lsn: LSN) -> Result<Offset> {
+    fn insert(&mut self, vector: &[Dim], payload: &str, lsn: Lsn) -> Result<Offset> {
         self.validate_vector(vector)?;
 
         let record_offset = self.file.seek(SeekFrom::End(0))?;
@@ -304,7 +295,7 @@ impl Storage {
         Ok(record_offset)
     }
 
-    fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: LSN) -> Result<Vec<Offset>> {
+    fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: Lsn) -> Result<Vec<Offset>> {
         let mut offsets = Vec::with_capacity(records.len());
 
         for (vector, payload) in records.iter() {
@@ -329,7 +320,7 @@ impl Storage {
         }
     }
 
-    fn delete(&mut self, offset: Offset, lsn: LSN) -> Result<StorageDeleteResult> {
+    fn delete(&mut self, offset: Offset, lsn: Lsn) -> Result<StorageDeleteResult> {
         if let Some(mut record) = self.search(offset)? {
             record.record_header.lsn = lsn;
             record.record_header.deleted = true;
@@ -349,7 +340,7 @@ impl Storage {
         offset: Offset,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
-        lsn: LSN,
+        lsn: Lsn,
     ) -> Result<StorageUpdateResult> {
         if let Some(mut record) = self.search(offset)? {
             if let Some(vector) = vector {
@@ -414,6 +405,7 @@ mod tests {
     fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path().join(STORAGE_FILE);
         let mut storage = Storage::create(temp_dir.path())?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
@@ -421,13 +413,13 @@ mod tests {
         let _ = storage.insert(&vector, payload, 1)?;
         let checksum = storage.header.checksum;
 
-        let mut file = File::open(&storage.path)?;
+        let mut file = File::open(&path)?;
         file.seek(SeekFrom::Start(0))?;
         let mut writer = BufWriter::new(&file);
         writer.write_all(b"corrupted data")?;
 
         //Act
-        let storage = Storage::load(&storage.path)?;
+        let storage = Storage::load(&path)?;
 
         //Assert
         assert_eq!(storage.header.modification_lsn, 1); //TODO: Should it somehow get the max lsn? How?
@@ -440,16 +432,17 @@ mod tests {
     fn load_should_define_header_with_default_values_when_no_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path().join(STORAGE_FILE);
         let storage = Storage::create(temp_dir.path())?;
         let checksum = storage.header.checksum;
 
-        let mut file = File::open(&storage.path)?;
+        let mut file = File::open(&path)?;
         file.seek(SeekFrom::Start(0))?;
         let mut writer = BufWriter::new(&file);
         writer.write_all(b"corrupted data")?;
 
         //Act
-        let storage = Storage::load(&storage.path)?;
+        let storage = Storage::load(&path)?;
 
         //Assert
         assert_eq!(storage.header.modification_lsn, 0);

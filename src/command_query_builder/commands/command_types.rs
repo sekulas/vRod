@@ -1,7 +1,7 @@
 use super::Result;
 use crate::command_query_builder::{CQAction, Command};
 use crate::components::wal::Wal;
-use crate::types::{LSN, WAL_FILE};
+use crate::types::{Lsn, WAL_FILE};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,7 @@ impl TruncateWalCommand {
 }
 
 impl Command for TruncateWalCommand {
-    fn execute(&self, lsn: LSN) -> Result<()> {
+    fn execute(&self, lsn: Lsn) -> Result<()> {
         let wal_path = self.target_path.join(WAL_FILE);
 
         fs::remove_file(&wal_path)?;
@@ -28,7 +28,7 @@ impl Command for TruncateWalCommand {
         Ok(())
     }
 
-    fn rollback(&self, lsn: LSN) -> Result<()> {
+    fn rollback(&self, lsn: Lsn) -> Result<()> {
         Ok(())
     }
 }
@@ -45,11 +45,11 @@ pub struct BulkInsertCommand {
 }
 
 impl Command for BulkInsertCommand {
-    fn execute(&self, lsn: LSN) -> Result<()> {
+    fn execute(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 
-    fn rollback(&self, lsn: LSN) -> Result<()> {
+    fn rollback(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 }
@@ -66,11 +66,11 @@ pub struct UpdateCommand {
 }
 
 impl Command for UpdateCommand {
-    fn execute(&self, lsn: LSN) -> Result<()> {
+    fn execute(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 
-    fn rollback(&self, lsn: LSN) -> Result<()> {
+    fn rollback(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 }
@@ -87,11 +87,11 @@ pub struct DeleteCommand {
 }
 
 impl Command for DeleteCommand {
-    fn execute(&self, lsn: LSN) -> Result<()> {
+    fn execute(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 
-    fn rollback(&self, lsn: LSN) -> Result<()> {
+    fn rollback(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 }
@@ -105,11 +105,11 @@ impl CQAction for DeleteCommand {
 pub struct ReindexCommand {}
 
 impl Command for ReindexCommand {
-    fn execute(&self, lsn: LSN) -> Result<()> {
+    fn execute(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 
-    fn rollback(&self, lsn: LSN) -> Result<()> {
+    fn rollback(&self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 }
