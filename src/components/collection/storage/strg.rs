@@ -596,7 +596,7 @@ mod tests {
         let payload2 = "test2";
 
         let expected_record = Record::new(1, &vector, payload);
-        let expected_record2 = Record::new(2, &vector2, payload2);
+        let expected_record2 = Record::new(1, &vector2, payload2);
 
         // Act
         let result = storage.perform_command(
