@@ -24,11 +24,7 @@ pub enum Error {
     },
 
     #[error("Incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
-    IncorrectChecksum {
-        record: Record,
-        expected: u64,
-        actual: u64,
-    },
+    IncorrectChecksum { expected: u64, actual: u64 },
 
     #[error(transparent)]
     Serialization(#[from] bincode::Error),

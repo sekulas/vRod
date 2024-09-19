@@ -41,6 +41,7 @@ pub enum StorageCommandResult {
     NotFound,
 }
 
+#[cfg_attr(test, derive(PartialEq, Debug))]
 pub enum StorageQueryResult {
     FoundRecord { record: Record },
     NotFound,

@@ -195,7 +195,7 @@ impl Collection {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::WAL_FILE;
+    use crate::{components::collection::storage::strg::Record, types::WAL_FILE};
 
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
@@ -232,7 +232,6 @@ mod tests {
 
         //Assert
         assert_eq!(col.path, path.join(collection_name));
-
         Ok(())
     }
 
@@ -247,22 +246,17 @@ mod tests {
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
+        let expected_record = Record::new(1, &vector, payload);
+
         //Act
         col.insert(&vector, payload, 1)?;
 
         //Assert
         let stored_vector = col.search(1)?;
-
-        match stored_vector {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-            }
-        }
-
+        assert_eq!(
+            stored_vector,
+            CollectionSearchResult::FoundRecord(expected_record)
+        );
         Ok(())
     }
 
@@ -277,35 +271,25 @@ mod tests {
         let vector = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(2, &vector, payload);
+
         //Act
         col.insert(&vector, payload, 1)?;
         col.insert(&vector, payload, 2)?;
 
         //Assert
         let stored_vector = col.search(1)?;
-
-        match stored_vector {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-            }
-        }
+        assert_eq!(
+            stored_vector,
+            CollectionSearchResult::FoundRecord(expected_record)
+        );
 
         let stored_vector2 = col.search(2)?;
-
-        match stored_vector2 {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(record.record_header.lsn, 2);
-                assert!(!record.record_header.deleted);
-            }
-        }
-
+        assert_eq!(
+            stored_vector2,
+            CollectionSearchResult::FoundRecord(expected_record2)
+        );
         Ok(())
     }
 
@@ -322,34 +306,24 @@ mod tests {
         let vector2 = vec![4.0, 5.0, 6.0];
         let payload2 = "test2";
 
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(1, &vector2, payload2);
+
         //Act
         col.bulk_insert(&[(&vector, payload), (&vector2, payload2)], 1)?;
 
         //Assert
         let stored_vector = col.search(1)?;
-
-        match stored_vector {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-            }
-        }
+        assert_eq!(
+            stored_vector,
+            CollectionSearchResult::FoundRecord(expected_record)
+        );
 
         let stored_vector2 = col.search(2)?;
-
-        match stored_vector2 {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector2);
-                assert_eq!(record.payload, payload2);
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-            }
-        }
-
+        assert_eq!(
+            stored_vector2,
+            CollectionSearchResult::FoundRecord(expected_record2)
+        );
         Ok(())
     }
 
@@ -366,10 +340,8 @@ mod tests {
         col.bulk_insert(&[], 1)?;
 
         //Assert
-        match col.search(1)? {
-            CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
-        }
+        assert_eq!(col.search(1)?, CollectionSearchResult::NotFound);
+        Ok(())
     }
 
     #[test]
@@ -384,20 +356,14 @@ mod tests {
         let payload = "test";
         col.insert(&vector, payload, 1)?;
 
+        let expected_record = Record::new(1, &vector, payload);
+
         //Act
         let record = col.search(1)?;
 
         //Assert
-        match record {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-                Ok(())
-            }
-        }
+        assert_eq!(record, CollectionSearchResult::FoundRecord(expected_record));
+        Ok(())
     }
 
     #[test]
@@ -416,10 +382,8 @@ mod tests {
         col.delete(1, 2)?;
 
         //Assert
-        match col.search(1)? {
-            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
-            CollectionSearchResult::NotFound => Ok(()),
-        }
+        assert_eq!(col.search(1)?, CollectionSearchResult::NotFound);
+        Ok(())
     }
 
     #[test]
@@ -435,10 +399,8 @@ mod tests {
         let record = col.search(1)?;
 
         //Assert
-        match record {
-            CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
-        }
+        assert_eq!(record, CollectionSearchResult::NotFound);
+        Ok(())
     }
 
     #[test]
@@ -459,18 +421,11 @@ mod tests {
         col.update(1, Some(&new_vector), Some(new_payload), 2)?;
 
         //Assert
+        let expected_record = Record::new(2, &new_vector, new_payload);
         let record = col.search(1)?;
 
-        match record {
-            CollectionSearchResult::NotFound => panic!("Record not found"),
-            CollectionSearchResult::FoundRecord(record) => {
-                assert_eq!(record.vector, new_vector);
-                assert_eq!(record.payload, new_payload);
-                assert_eq!(record.record_header.lsn, 2);
-                assert!(!record.record_header.deleted);
-                Ok(())
-            }
-        }
+        assert_eq!(record, CollectionSearchResult::FoundRecord(expected_record));
+        Ok(())
     }
 
     #[test]
@@ -491,10 +446,8 @@ mod tests {
         //Assert
         let record = col.search(1)?;
 
-        match record {
-            CollectionSearchResult::NotFound => Ok(()),
-            CollectionSearchResult::FoundRecord(_) => panic!("Record found"),
-        }
+        assert_eq!(record, CollectionSearchResult::NotFound);
+        Ok(())
     }
 
     #[test]

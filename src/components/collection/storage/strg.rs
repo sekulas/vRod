@@ -170,7 +170,8 @@ impl Default for StorageHeader {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
     pub record_header: RecordHeader,
     pub vector: Vec<Dim>,
@@ -178,7 +179,7 @@ pub struct Record {
 }
 
 impl Record {
-    fn new(lsn: u64, vector: &[Dim], payload: &str) -> Self {
+    pub fn new(lsn: u64, vector: &[Dim], payload: &str) -> Self {
         let mut record = Self {
             record_header: RecordHeader::new(lsn),
             vector: vector.to_owned(),
@@ -200,7 +201,6 @@ impl Record {
             Ok(())
         } else {
             Err(Error::IncorrectChecksum {
-                record: self.clone(),
                 expected: self.record_header.checksum,
                 actual: self.calculate_checksum(),
             })
@@ -221,7 +221,8 @@ impl Hash for Record {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RecordHeader {
     pub lsn: u64,
     pub deleted: bool,
@@ -465,6 +466,8 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
+        let expected_record = Record::new(1, &vector, payload);
+
         //Act
         let result = storage.perform_command(
             StorageCommand::Insert {
@@ -478,21 +481,17 @@ mod tests {
         match result {
             StorageCommandResult::Inserted { offset } => {
                 let query_result = storage.perform_query(StorageQuery::Search { offset })?;
-                match query_result {
-                    StorageQueryResult::FoundRecord { record } => {
-                        assert_eq!(record.record_header.lsn, 1);
-                        assert!(!record.record_header.deleted);
-                        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                        assert_eq!(record.vector, vector);
-                        assert_eq!(record.payload, payload);
-                        assert_eq!(storage.header.modification_lsn, 1);
-                        Ok(())
+
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
                     }
-                    _ => panic!("Expected SearchResult"),
-                }
+                );
             }
             _ => panic!("Expected Inserted result"),
         }
+        Ok(())
     }
 
     #[test]
@@ -505,6 +504,9 @@ mod tests {
 
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
+
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(2, &vector2, payload2);
 
         //Act
         let result = storage.perform_command(
@@ -528,35 +530,26 @@ mod tests {
                 StorageCommandResult::Inserted { offset },
                 StorageCommandResult::Inserted { offset: offset2 },
             ) => {
-                let query_result1 = storage.perform_query(StorageQuery::Search { offset })?;
+                let query_result = storage.perform_query(StorageQuery::Search { offset })?;
                 let query_result2 =
                     storage.perform_query(StorageQuery::Search { offset: offset2 })?;
 
-                match (query_result1, query_result2) {
-                    (
-                        StorageQueryResult::FoundRecord { record },
-                        StorageQueryResult::FoundRecord { record: record2 },
-                    ) => {
-                        assert_eq!(record.record_header.lsn, 1);
-                        assert!(!record.record_header.deleted);
-                        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                        assert_eq!(record.vector, vector);
-                        assert_eq!(record.payload, payload);
-
-                        assert_eq!(record2.record_header.lsn, 2);
-                        assert!(!record2.record_header.deleted);
-                        assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
-                        assert_eq!(record2.vector, vector2);
-                        assert_eq!(record2.payload, payload2);
-
-                        assert_eq!(storage.header.modification_lsn, 2);
-                        Ok(())
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
                     }
-                    _ => panic!("Expected SearchResult for both queries"),
-                }
+                );
+                assert_eq!(
+                    query_result2,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record2
+                    }
+                );
             }
             _ => panic!("Expected Inserted result for both commands"),
         }
+        Ok(())
     }
 
     #[test]
@@ -602,6 +595,9 @@ mod tests {
         let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
 
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(2, &vector2, payload2);
+
         // Act
         let result = storage.perform_command(
             StorageCommand::BulkInsert {
@@ -623,31 +619,22 @@ mod tests {
                 let query_result2 =
                     storage.perform_query(StorageQuery::Search { offset: offsets[1] })?;
 
-                match (query_result, query_result2) {
-                    (
-                        StorageQueryResult::FoundRecord { record },
-                        StorageQueryResult::FoundRecord { record: record2 },
-                    ) => {
-                        assert_eq!(record.record_header.lsn, 1);
-                        assert!(!record.record_header.deleted);
-                        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                        assert_eq!(record.vector, vector);
-                        assert_eq!(record.payload, payload);
-
-                        assert_eq!(record2.record_header.lsn, 1);
-                        assert!(!record2.record_header.deleted);
-                        assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
-                        assert_eq!(record2.vector, vector2);
-                        assert_eq!(record2.payload, payload2);
-
-                        assert_eq!(storage.header.modification_lsn, 1);
-                        Ok(())
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
                     }
-                    _ => panic!("Expected SearchResult for both queries"),
-                }
+                );
+                assert_eq!(
+                    query_result2,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record2
+                    }
+                );
             }
             _ => panic!("Expected BulkInserted result"),
         }
+        Ok(())
     }
 
     #[test]
@@ -683,6 +670,8 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
+        let expected_record = Record::new(1, &vector, payload);
+
         let insert_result = storage.perform_command(
             StorageCommand::Insert {
                 vector: &vector,
@@ -699,18 +688,13 @@ mod tests {
         let query_result = storage.perform_query(StorageQuery::Search { offset })?;
 
         //Assert
-        match query_result {
-            StorageQueryResult::FoundRecord { record } => {
-                assert_eq!(record.record_header.lsn, 1);
-                assert!(!record.record_header.deleted);
-                assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                assert_eq!(record.vector, vector);
-                assert_eq!(record.payload, payload);
-                assert_eq!(storage.header.modification_lsn, 1);
-                Ok(())
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: expected_record
             }
-            _ => panic!("Expected SearchResult with Some(record)"),
-        }
+        );
+        Ok(())
     }
 
     #[test]
@@ -789,16 +773,13 @@ mod tests {
         match delete_result {
             StorageCommandResult::Updated { new_offset: _ } => {
                 let query_result = storage.perform_query(StorageQuery::Search { offset })?;
-                match query_result {
-                    StorageQueryResult::NotFound => {
-                        assert_eq!(storage.header.modification_lsn, 2);
-                        Ok(())
-                    }
-                    _ => panic!("Expected SearchResult with None"),
-                }
+
+                assert_eq!(query_result, StorageQueryResult::NotFound);
+                assert_eq!(storage.header.modification_lsn, 2);
             }
             _ => panic!("Expected Updated result"),
         }
+        Ok(())
     }
 
     #[test]
@@ -810,6 +791,8 @@ mod tests {
         let payload = "test";
         let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let new_payload = "test2";
+
+        let expected_record = Record::new(2, &new_vector, new_payload);
 
         let insert_result = storage.perform_command(
             StorageCommand::Insert {
@@ -838,21 +821,18 @@ mod tests {
             StorageCommandResult::Updated { new_offset } => {
                 let query_result =
                     storage.perform_query(StorageQuery::Search { offset: new_offset })?;
-                match query_result {
-                    StorageQueryResult::FoundRecord { record } => {
-                        assert_eq!(record.record_header.lsn, 2);
-                        assert!(!record.record_header.deleted);
-                        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                        assert_eq!(record.vector, new_vector);
-                        assert_eq!(record.payload, new_payload);
-                        assert_eq!(storage.header.modification_lsn, 2);
-                        Ok(())
+
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
                     }
-                    _ => panic!("Expected SearchResult with Some(record)"),
-                }
+                );
+                assert_eq!(storage.header.modification_lsn, 2);
             }
             _ => panic!("Expected Updated result"),
         }
+        Ok(())
     }
 
     #[test]
