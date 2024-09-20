@@ -71,6 +71,7 @@ impl Index for BPTree {
 struct BPTreeHeader {
     branching_factor: u16,
     current_max_id: RecordId,
+    last_max_id: RecordId,
     modification_lsn: Lsn,
     checksum: u64,
     root_offset: Offset,
@@ -78,16 +79,24 @@ struct BPTreeHeader {
 }
 
 impl BPTreeHeader {
-    fn new(branching_factor: u16) -> Self {
-        let root_offset = mem::size_of::<BPTreeHeader>() as Offset;
-
-        Self {
+    fn new(branching_factor: u16) -> Result<Self> {
+        let mut header = Self {
             branching_factor,
             current_max_id: 0,
+            last_max_id: 0,
             modification_lsn: 0,
             checksum: 0,
-            root_offset,
-            last_root_offset: root_offset,
+            root_offset: 0,
+            last_root_offset: 0,
+        };
+
+        match serialized_size(&header) {
+            Ok(size) => {
+                header.root_offset = size as Offset;
+                header.last_root_offset = size as Offset;
+                Ok(header)
+            }
+            Err(_) => Err(Error::Unexpected("BTree: Cannot calculate size of header.")),
         }
     }
 
@@ -99,7 +108,7 @@ impl BPTreeHeader {
 
     fn define_header(file: &mut File) -> Result<Self> {
         //TODO: Find MAX_ID in tree
-        let mut header = BPTreeHeader::new(DEFAULT_BRANCHING_FACTOR);
+        let mut header = BPTreeHeader::new(DEFAULT_BRANCHING_FACTOR)?;
         let checksum = header.calculate_checksum();
         header.checksum = checksum;
 
@@ -114,6 +123,7 @@ impl Hash for BPTreeHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.branching_factor.hash(state);
         self.current_max_id.hash(state);
+        self.last_max_id.hash(state);
         self.modification_lsn.hash(state);
         self.root_offset.hash(state);
         self.last_root_offset.hash(state);
@@ -330,7 +340,7 @@ impl BPTree {
             .create(true)
             .open(file_path)?;
 
-        let header = BPTreeHeader::new(branching_factor);
+        let header = BPTreeHeader::new(branching_factor)?;
 
         let file_len = serialized_size(&header)?;
         file.set_len(file_len)?;
@@ -382,8 +392,7 @@ impl BPTree {
     }
 
     fn create_root(&mut self) -> Result<()> {
-        let mut root = Node::new(true, self.header.branching_factor);
-        root.checksum = root.calculate_checksum();
+        let root = Node::new(true, self.header.branching_factor);
 
         let root_offset = self.header.root_offset;
         self.file.write_node(&root, &root_offset)?;
