@@ -10,6 +10,7 @@ pub trait StorageInterface {
         lsn: Lsn,
     ) -> Result<StorageCommandResult>;
     fn perform_query(&mut self, query: StorageQuery) -> Result<StorageQueryResult>;
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()>;
 }
 pub enum StorageCommand<'a> {
     BulkInsert {

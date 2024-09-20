@@ -891,10 +891,143 @@ mod tests {
         let record = Record::new(1, &vector, payload);
 
         //Act
-        let result = record.validate_checksum();
+        record.validate_checksum()?;
 
         //Assert
-        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_update_should_rollback_update() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
+        let new_payload = "test2";
+
+        let record_before_update = Record::new(1, &vector, payload);
+
+        let offset = match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )? {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        match storage.perform_command(
+            StorageCommand::Update {
+                offset,
+                vector: Some(&new_vector),
+                payload: Some(new_payload),
+            },
+            2,
+        )? {
+            StorageCommandResult::Updated { new_offset: _ } => (),
+            _ => panic!("Expected Updated result"),
+        };
+
+        //Act
+        storage.perform_rollback(3)?;
+
+        //Assert
+        let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: record_before_update
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_delete_should_rollback_delete() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let record_before_delete = Record::new(1, &vector, payload);
+
+        let offset = match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )? {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        match storage.perform_command(StorageCommand::Delete { offset }, 2)? {
+            StorageCommandResult::Deleted => (),
+            _ => panic!("Expected Deleted result"),
+        };
+
+        //Act
+        storage.perform_rollback(3)?;
+
+        //Assert
+        let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: record_before_delete
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_should_throw_error_when_there_is_no_opeartions_performed() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+
+        //Act
+        let result = storage.perform_rollback(1);
+
+        //Assert
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_should_throw_error_when_trying_to_rollback_not_last_opeartion() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let lsn = 1;
+
+        match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            lsn,
+        )? {
+            StorageCommandResult::Inserted { offset: _ } => (),
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let result = storage.perform_rollback(lsn + 2);
+
+        //Assert
+        assert!(matches!(
+            result,
+            Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."))
+        ));
         Ok(())
     }
 }
