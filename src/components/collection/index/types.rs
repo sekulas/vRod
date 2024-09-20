@@ -21,6 +21,7 @@ pub const SERIALIZED_NODE_SIZE: usize = 8
 pub trait Index {
     fn perform_command(&mut self, command: IndexCommand, lsn: Lsn) -> Result<IndexCommandResult>;
     fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult>;
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()>;
 }
 
 pub enum IndexCommand {

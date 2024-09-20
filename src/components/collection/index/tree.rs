@@ -20,7 +20,6 @@ use std::{
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
-    mem,
     path::Path,
     vec,
 };
@@ -28,6 +27,7 @@ use std::{
 impl Index for BPTree {
     fn perform_command(&mut self, command: IndexCommand, lsn: Lsn) -> Result<IndexCommandResult> {
         let old_root = self.header.root_offset;
+        let old_max_id = self.header.current_max_id;
 
         let result = match command {
             IndexCommand::BulkInsert(values) => {
@@ -46,6 +46,7 @@ impl Index for BPTree {
 
         self.flush_modified_nodes()?;
 
+        self.header.last_max_id = old_max_id;
         self.header.last_root_offset = old_root;
         self.header.modification_lsn = lsn;
         self.update_header()?;
@@ -64,6 +65,19 @@ impl Index for BPTree {
                 Ok(IndexQueryResult::FoundKeysAndValues(ids_and_offsets))
             }
         }
+    }
+
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()> {
+        if lsn - 1 != self.header.modification_lsn {
+            return Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."));
+        }
+
+        self.header.modification_lsn -= 1;
+        self.header.root_offset = self.header.last_root_offset;
+        self.header.current_max_id = self.header.last_max_id;
+        self.update_header()?;
+
+        Ok(())
     }
 }
 
@@ -816,7 +830,7 @@ mod tests {
         assert_eq!(tree.header.current_max_id, 0);
         assert_eq!(
             tree.header.root_offset,
-            mem::size_of::<BPTreeHeader>() as Offset
+            serialized_size(&tree.header)? as Offset
         );
         assert!(root.is_leaf);
         assert_eq!(
