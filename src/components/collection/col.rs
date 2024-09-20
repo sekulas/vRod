@@ -164,24 +164,21 @@ impl Collection {
         }
     }
 
-    // pub fn rollback_insert(&mut self) -> Result<()> {
-    //     let record_id = self.index.get_highest_id_in_tree()?;
-    //     let query_result = self.index.perform_query(IndexQuery::Search(record_id))?;
+    pub fn rollback_insertion_like_command(&mut self, lsn: Lsn) -> Result<()> {
+        self.index.perform_rollback(lsn)?;
+        Ok(())
+    }
 
-    //     match query_result {
-    //         IndexQueryResult::SearchResult(offset) => {
-    //             self.storage.delete(offset, &OperationMode::RawOperation)?;
-    //             Ok(())
-    //         }
-    //         IndexQueryResult::NotFound => {
-    //             println!("Collection: Cannot rollback insert. No records to rollback.");
-    //             Ok(())
-    //         }
-    //         _ => Err(Error::UnexpectedError(
-    //             "Collection: Rollback insert returned unexpected result.",
-    //         )),
-    //     }
-    // }
+    pub fn rollback_update_command(&mut self, lsn: Lsn) -> Result<()> {
+        self.storage.perform_rollback(lsn)?;
+        self.index.perform_rollback(lsn)?;
+        Ok(())
+    }
+
+    pub fn rollback_delete_command(&mut self, lsn: Lsn) -> Result<()> {
+        self.storage.perform_rollback(lsn)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
