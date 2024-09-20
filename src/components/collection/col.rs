@@ -443,16 +443,96 @@ mod tests {
 
     #[test]
     fn rollback_insert_should_remove_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+
+        //Act
+        col.rollback_insertion_like_command(2)?;
+
+        //Assert
+        let record = col.search(1)?;
+
+        assert_eq!(record, CollectionSearchResult::NotFound);
         Ok(())
     }
 
     #[test]
-    fn rollback_delete_should_restore_record() -> Result<()> {
+    fn rollback_bulk_insert_should_remove_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test1";
+        let vector2 = vec![4.0, 5.0, 6.0];
+        let payload2 = "test2";
+        col.bulk_insert(&[(&vector, payload), (&vector2, payload2)], 1)?;
+
+        //Act
+        col.rollback_insertion_like_command(2)?;
+
+        //Assert
+        assert_eq!(col.search(1)?, CollectionSearchResult::NotFound);
+        assert_eq!(col.search(2)?, CollectionSearchResult::NotFound);
         Ok(())
     }
 
     #[test]
     fn rollback_update_should_restore_old_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+        let new_vector = vec![4.0, 5.0, 6.0];
+        let new_payload = "new_test";
+        col.update(1, Some(&new_vector), Some(new_payload), 2)?;
+
+        //Act
+        col.rollback_update_command(3)?; //TODO: Delete rollbacking needed? In this form.
+
+        //Assert
+        let expected_record = Record::new(1, &vector, payload);
+        let record = col.search(1)?;
+
+        assert_eq!(record, CollectionSearchResult::FoundRecord(expected_record));
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_delete_should_restore_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+        col.delete(1, 2)?;
+
+        //Act
+        col.rollback_delete_command(3)?;
+
+        //Assert
+        let expected_record = Record::new(1, &vector, payload);
+        let record = col.search(1)?;
+
+        assert_eq!(record, CollectionSearchResult::FoundRecord(expected_record));
         Ok(())
     }
 }
