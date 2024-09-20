@@ -1487,4 +1487,84 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn perform_rollback_after_bulk_insert_to_root_should_remove_records_from_index() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2];
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
+
+        //Act
+        tree.perform_rollback(2)?;
+
+        //Assert
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        assert_eq!(IndexQueryResult::FoundKeysAndValues(vec![]), result);
+        assert_eq!(tree.header.current_max_id, 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn perform_rollback_after_bulk_insert_in_3th_lvl_tree_should_remove_records_from_index(
+    ) -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3, 4];
+        let values2 = vec![5, 6, 7];
+
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
+        tree.perform_command(IndexCommand::BulkInsert(values2), 2)?;
+
+        //Act
+        tree.perform_rollback(3)?;
+
+        //Assert
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(vec![(4, 4), (3, 3), (2, 2), (1, 1)]),
+            result
+        );
+        assert_eq!(tree.header.current_max_id, 4);
+
+        Ok(())
+    }
+
+    #[test]
+    fn perform_rollback_after_update_should_return_to_previous_state() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let branching_factor = 3;
+        let mut tree = BPTree::create(path, branching_factor)?;
+
+        let values = vec![1, 2, 3, 4];
+        tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
+        tree.perform_command(IndexCommand::Update(3, 10), 2)?;
+
+        //Act
+        tree.perform_rollback(3)?;
+
+        //Assert
+        let result = tree.perform_query(IndexQuery::SearchAll)?;
+
+        assert_eq!(
+            IndexQueryResult::FoundKeysAndValues(vec![(4, 4), (3, 3), (2, 2), (1, 1)]),
+            result
+        );
+        assert_eq!(tree.header.current_max_id, 4);
+
+        Ok(())
+    }
 }
