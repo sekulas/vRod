@@ -26,6 +26,9 @@ pub enum Error {
     #[error("Incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
     IncorrectChecksum { expected: u64, actual: u64 },
 
+    #[error("Record not found for rollback. Offset: '{offset}'")]
+    RecordNotFoundForRollback { offset: u64 },
+
     #[error(transparent)]
     Serialization(#[from] bincode::Error),
 

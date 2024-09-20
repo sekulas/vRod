@@ -82,6 +82,19 @@ impl StorageInterface for Storage {
 
         Ok(result)
     }
+
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()> {
+        if lsn - 1 != self.header.modification_lsn {
+            return Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."));
+        }
+
+        self.rollback_last_ud_command()?;
+
+        self.header.modification_lsn -= 1;
+        self.update_header()?;
+
+        Ok(())
+    }
 }
 
 pub struct Storage {
@@ -95,6 +108,7 @@ struct StorageHeader {
     modification_lsn: u64,
     vector_dim_amount: u16,
     checksum: u64,
+    backup_offset: Offset,
 }
 
 impl StorageHeader {
@@ -103,6 +117,7 @@ impl StorageHeader {
             modification_lsn,
             vector_dim_amount,
             checksum: NONE,
+            backup_offset: NONE,
         };
 
         header.checksum = header.calculate_checksum();
@@ -153,6 +168,7 @@ impl Hash for StorageHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.modification_lsn.hash(state);
         self.vector_dim_amount.hash(state);
+        self.backup_offset.hash(state);
     }
 }
 
@@ -162,6 +178,7 @@ impl Default for StorageHeader {
             modification_lsn: 0,
             vector_dim_amount: 0,
             checksum: 0,
+            backup_offset: NONE,
         };
 
         header.checksum = header.calculate_checksum();
@@ -307,13 +324,22 @@ impl Storage {
     }
 
     fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
+        match self.search_with_deleted(offset)? {
+            Some(record) => {
+                if record.record_header.deleted {
+                    return Ok(None);
+                }
+                Ok(Some(record))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn search_with_deleted(&mut self, offset: Offset) -> Result<Option<Record>> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
             Ok(record) => {
                 record.validate_checksum()?;
-                if record.record_header.deleted {
-                    return Ok(None);
-                }
                 Ok(Some(record))
             }
             Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
@@ -328,6 +354,8 @@ impl Storage {
 
             self.file.seek(SeekFrom::Start(offset))?;
             serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
+
+            self.header.backup_offset = offset;
 
             Ok(StorageDeleteResult::Deleted)
         } else {
@@ -352,6 +380,8 @@ impl Storage {
             }
 
             self.delete(offset, lsn)?;
+
+            self.header.backup_offset = offset;
 
             let new_offset = self.insert(&record.vector, &record.payload, lsn)?;
 
@@ -390,6 +420,23 @@ impl Storage {
         }
 
         Ok(())
+    }
+
+    fn rollback_last_ud_command(&mut self) -> Result<()> {
+        if let Some(mut record) = self.search_with_deleted(self.header.backup_offset)? {
+            record.record_header.lsn -= 1;
+            record.record_header.deleted = false;
+            record.record_header.checksum = record.calculate_checksum();
+
+            self.file.seek(SeekFrom::Start(self.header.backup_offset))?;
+            serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
+
+            Ok(())
+        } else {
+            Err(Error::RecordNotFoundForRollback {
+                offset: self.header.backup_offset,
+            })
+        }
     }
 }
 
