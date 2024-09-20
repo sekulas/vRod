@@ -3,23 +3,101 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
     mem,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use super::{
-    types::{StorageDeleteResult, StorageUpdateResult},
+    types::{
+        StorageCommand, StorageCommandResult, StorageDeleteResult, StorageInterface, StorageQuery,
+        StorageQueryResult, StorageUpdateResult,
+    },
     Error, Result,
 };
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::types::{OperationMode, NONE, NOT_SET},
-    types::{Dim, Offset, STORAGE_FILE},
+    components::collection::types::{NONE, NOT_SET},
+    types::{Dim, Lsn, Offset, STORAGE_FILE},
 };
 
+impl StorageInterface for Storage {
+    fn perform_command(
+        &mut self,
+        command: StorageCommand,
+        lsn: Lsn,
+    ) -> Result<StorageCommandResult> {
+        let result = match command {
+            StorageCommand::BulkInsert {
+                vectors_and_payloads,
+            } => {
+                let offsets = self.bulk_insert(vectors_and_payloads, lsn)?;
+                StorageCommandResult::BulkInserted { offsets }
+            }
+            StorageCommand::Insert { vector, payload } => {
+                let offset = self.insert(vector, payload, lsn)?;
+                StorageCommandResult::Inserted { offset }
+            }
+            StorageCommand::Update {
+                offset,
+                vector,
+                payload,
+            } => {
+                let strg_update_result = self.update(offset, vector, payload, lsn)?;
+
+                match strg_update_result {
+                    StorageUpdateResult::NotFound => return Ok(StorageCommandResult::NotFound),
+                    StorageUpdateResult::Updated { new_offset } => {
+                        StorageCommandResult::Updated { new_offset }
+                    }
+                }
+            }
+            StorageCommand::Delete { offset } => {
+                let strg_delete_result = self.delete(offset, lsn)?;
+
+                match strg_delete_result {
+                    StorageDeleteResult::NotFound => return Ok(StorageCommandResult::NotFound),
+                    StorageDeleteResult::Deleted => StorageCommandResult::Deleted,
+                }
+            }
+        };
+
+        self.header.modification_lsn = lsn; //TODO:: Modification lsn updated even if no changes were made? Example: Insert [] empty array.
+        self.update_header()?;
+
+        Ok(result)
+    }
+
+    fn perform_query(&mut self, query: StorageQuery) -> Result<StorageQueryResult> {
+        let result = match query {
+            StorageQuery::Search { offset } => {
+                let record = self.search(offset)?;
+
+                match record {
+                    Some(record) => StorageQueryResult::FoundRecord { record },
+                    None => StorageQueryResult::NotFound,
+                }
+            }
+        };
+
+        Ok(result)
+    }
+
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()> {
+        if lsn - 1 != self.header.modification_lsn {
+            return Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."));
+        }
+
+        self.rollback_last_ud_command()?;
+
+        self.header.modification_lsn -= 1;
+        self.update_header()?;
+
+        Ok(())
+    }
+}
+
 pub struct Storage {
-    path: PathBuf,
     file: File,
     header: StorageHeader,
 }
@@ -27,17 +105,19 @@ pub struct Storage {
 //TODO: Offset backup for storing recently deleted record?
 #[derive(Serialize, Deserialize, Clone)]
 struct StorageHeader {
-    current_max_lsn: u64,
+    modification_lsn: u64,
     vector_dim_amount: u16,
     checksum: u64,
+    backup_offset: Offset,
 }
 
 impl StorageHeader {
-    fn new(current_max_lsn: u64, vector_dim_amount: u16) -> Self {
+    fn new(modification_lsn: u64, vector_dim_amount: u16) -> Self {
         let mut header = Self {
-            current_max_lsn,
+            modification_lsn,
             vector_dim_amount,
             checksum: NONE,
+            backup_offset: NONE,
         };
 
         header.checksum = header.calculate_checksum();
@@ -86,17 +166,19 @@ impl StorageHeader {
 
 impl Hash for StorageHeader {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.current_max_lsn.hash(state);
+        self.modification_lsn.hash(state);
         self.vector_dim_amount.hash(state);
+        self.backup_offset.hash(state);
     }
 }
 
 impl Default for StorageHeader {
     fn default() -> Self {
         let mut header = Self {
-            current_max_lsn: 0,
+            modification_lsn: 0,
             vector_dim_amount: 0,
             checksum: 0,
+            backup_offset: NONE,
         };
 
         header.checksum = header.calculate_checksum();
@@ -104,7 +186,8 @@ impl Default for StorageHeader {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
     pub record_header: RecordHeader,
     pub vector: Vec<Dim>,
@@ -112,7 +195,7 @@ pub struct Record {
 }
 
 impl Record {
-    fn new(lsn: u64, vector: &[Dim], payload: &str) -> Self {
+    pub fn new(lsn: u64, vector: &[Dim], payload: &str) -> Self {
         let mut record = Self {
             record_header: RecordHeader::new(lsn),
             vector: vector.to_owned(),
@@ -134,7 +217,6 @@ impl Record {
             Ok(())
         } else {
             Err(Error::IncorrectChecksum {
-                record: self.clone(),
                 expected: self.record_header.checksum,
                 actual: self.calculate_checksum(),
             })
@@ -155,7 +237,8 @@ impl Hash for Record {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RecordHeader {
     pub lsn: u64,
     pub deleted: bool,
@@ -180,14 +263,10 @@ impl Storage {
             .read(true)
             .write(true)
             .create(true)
-            .open(&file_path)?;
+            .open(file_path)?;
 
         let header = StorageHeader::default();
-        let mut storage = Self {
-            path: file_path,
-            file,
-            header,
-        };
+        let mut storage = Self { file, header };
         storage.update_header()?;
 
         Ok(storage)
@@ -216,82 +295,67 @@ impl Storage {
                 }
             };
 
-        let storage = Self {
-            path: path.to_owned(),
-            file,
-            header,
-        };
+        let storage = Self { file, header };
 
         Ok(storage)
     }
 
-    pub fn insert(
-        &mut self,
-        vector: &[Dim],
-        payload: &str,
-        mode: &OperationMode,
-    ) -> Result<Offset> {
+    fn insert(&mut self, vector: &[Dim], payload: &str, lsn: Lsn) -> Result<Offset> {
         self.validate_vector(vector)?;
-
-        if let OperationMode::RawOperation = mode {
-            self.header.current_max_lsn += 1;
-        }
 
         let record_offset = self.file.seek(SeekFrom::End(0))?;
 
-        let record = Record::new(self.header.current_max_lsn, vector, payload);
+        let record = Record::new(lsn, vector, payload);
 
         serialize_into(&mut BufWriter::new(&self.file), &record)?;
-        if let OperationMode::RawOperation = mode {
-            self.update_header()?;
-        }
 
         Ok(record_offset)
     }
 
-    pub fn batch_insert(&mut self, records: &[(&[Dim], &str)]) -> Result<Vec<Offset>> {
+    fn bulk_insert(&mut self, records: &[(&[Dim], &str)], lsn: Lsn) -> Result<Vec<Offset>> {
         let mut offsets = Vec::with_capacity(records.len());
-        self.header.current_max_lsn += 1; //TODO: Popping up lsn to collection?
 
         for (vector, payload) in records.iter() {
-            let offset = self.insert(vector, payload, &OperationMode::InOtherOperation)?;
+            let offset = self.insert(vector, payload, lsn)?;
             offsets.push(offset);
         }
 
-        self.update_header()?;
         Ok(offsets)
     }
 
-    pub fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
+    fn search(&mut self, offset: Offset) -> Result<Option<Record>> {
+        match self.search_with_deleted(offset)? {
+            Some(record) => {
+                if record.record_header.deleted {
+                    return Ok(None);
+                }
+                Ok(Some(record))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn search_with_deleted(&mut self, offset: Offset) -> Result<Option<Record>> {
         self.file.seek(SeekFrom::Start(offset))?;
         match deserialize_from::<_, Record>(&mut BufReader::new(&self.file)) {
             Ok(record) => {
                 record.validate_checksum()?;
-                if record.record_header.deleted {
-                    return Ok(None);
-                }
                 Ok(Some(record))
             }
             Err(e) => Err(Error::CannotDeserializeRecord { offset, source: e }),
         }
     }
 
-    pub fn delete(&mut self, offset: Offset, mode: &OperationMode) -> Result<StorageDeleteResult> {
+    fn delete(&mut self, offset: Offset, lsn: Lsn) -> Result<StorageDeleteResult> {
         if let Some(mut record) = self.search(offset)? {
-            if let OperationMode::RawOperation = mode {
-                self.header.current_max_lsn += 1;
-            }
-
-            record.record_header.lsn = self.header.current_max_lsn;
+            record.record_header.lsn = lsn;
             record.record_header.deleted = true;
             record.record_header.checksum = record.calculate_checksum();
 
             self.file.seek(SeekFrom::Start(offset))?;
             serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
 
-            if let OperationMode::RawOperation = mode {
-                self.update_header()?;
-            }
+            self.header.backup_offset = offset;
 
             Ok(StorageDeleteResult::Deleted)
         } else {
@@ -299,11 +363,12 @@ impl Storage {
         }
     }
 
-    pub fn update(
+    fn update(
         &mut self,
         offset: Offset,
         vector: Option<&[Dim]>,
         payload: Option<&str>,
+        lsn: Lsn,
     ) -> Result<StorageUpdateResult> {
         if let Some(mut record) = self.search(offset)? {
             if let Some(vector) = vector {
@@ -314,12 +379,11 @@ impl Storage {
                 record.payload = payload.to_owned();
             }
 
-            self.header.current_max_lsn += 1;
-            let mode = OperationMode::InOtherOperation;
+            self.delete(offset, lsn)?;
 
-            self.delete(offset, &mode)?;
+            self.header.backup_offset = offset;
 
-            let new_offset = self.insert(&record.vector, &record.payload, &mode)?;
+            let new_offset = self.insert(&record.vector, &record.payload, lsn)?;
 
             self.update_header()?;
 
@@ -357,6 +421,23 @@ impl Storage {
 
         Ok(())
     }
+
+    fn rollback_last_ud_command(&mut self) -> Result<()> {
+        if let Some(mut record) = self.search_with_deleted(self.header.backup_offset)? {
+            record.record_header.lsn -= 1;
+            record.record_header.deleted = false;
+            record.record_header.checksum = record.calculate_checksum();
+
+            self.file.seek(SeekFrom::Start(self.header.backup_offset))?;
+            serialize_into(&mut BufWriter::new(&self.file), &record.record_header)?;
+
+            Ok(())
+        } else {
+            Err(Error::RecordNotFoundForRollback {
+                offset: self.header.backup_offset,
+            })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -367,6 +448,56 @@ mod tests {
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
+    #[ignore = "Not sure if it will be needed."]
+    fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path().join(STORAGE_FILE);
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let _ = storage.insert(&vector, payload, 1)?;
+        let checksum = storage.header.checksum;
+
+        let mut file = File::open(&path)?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut writer = BufWriter::new(&file);
+        writer.write_all(b"corrupted data")?;
+
+        //Act
+        let storage = Storage::load(&path)?;
+
+        //Assert
+        assert_eq!(storage.header.modification_lsn, 1); //TODO: Should it somehow get the max lsn? How?
+        assert_eq!(storage.header.vector_dim_amount, 3); //TODO: Maybe make it readonly instead of defining it?
+        assert_eq!(storage.header.checksum, checksum);
+        Ok(())
+    }
+
+    #[test]
+    fn load_should_define_header_with_default_values_when_no_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path().join(STORAGE_FILE);
+        let storage = Storage::create(temp_dir.path())?;
+        let checksum = storage.header.checksum;
+
+        let mut file = File::open(&path)?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut writer = BufWriter::new(&file);
+        writer.write_all(b"corrupted data")?;
+
+        //Act
+        let storage = Storage::load(&path)?;
+
+        //Assert
+        assert_eq!(storage.header.modification_lsn, 0);
+        assert_eq!(storage.header.vector_dim_amount, 0);
+        assert_eq!(storage.header.checksum, checksum);
+        Ok(())
+    }
+
     #[test]
     fn insert_should_store_record_and_return_offset() -> Result<()> {
         //Arrange
@@ -375,19 +506,31 @@ mod tests {
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
+        let expected_record = Record::new(1, &vector, payload);
+
         //Act
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
 
         //Assert
-        let mut file = File::open(storage.path)?;
-        file.seek(SeekFrom::Start(offset))?;
-        let record: Record = deserialize_from(&mut BufReader::new(&file))?;
+        match result {
+            StorageCommandResult::Inserted { offset } => {
+                let query_result = storage.perform_query(StorageQuery::Search { offset })?;
 
-        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
-        assert!(!record.record_header.deleted);
-        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-        assert_eq!(record.vector, vector);
-        assert_eq!(record.payload, payload);
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
+                    }
+                );
+            }
+            _ => panic!("Expected Inserted result"),
+        }
         Ok(())
     }
 
@@ -402,183 +545,51 @@ mod tests {
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0];
         let payload2 = "test2";
 
-        //Act
-        let offset1 = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let offset2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation)?;
-
-        //Assert
-        let mut file = File::open(storage.path)?;
-        file.seek(SeekFrom::Start(offset1))?;
-        let record1: Record = deserialize_from(&mut BufReader::new(&file))?;
-
-        assert!(!record1.record_header.deleted);
-        assert_eq!(record1.record_header.checksum, record1.calculate_checksum());
-        assert_eq!(record1.vector, vector);
-        assert_eq!(record1.payload, payload);
-
-        file.seek(SeekFrom::Start(offset2))?;
-        let record2: Record = deserialize_from(&mut BufReader::new(&file))?;
-
-        assert!(!record2.record_header.deleted);
-        assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
-        assert_eq!(record2.vector, vector2);
-        assert_eq!(record2.payload, payload2);
-
-        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
-        Ok(())
-    }
-
-    #[test]
-    fn batch_insert_two_records_should_store_two_record() -> Result<()> {
-        // Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-        let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
-        let payload2 = "test2";
-
-        // Act
-        let offsets = storage
-            .batch_insert(&[(vector.as_slice(), payload), (vector2.as_slice(), payload2)])?;
-
-        // Assert
-        let record = storage.search(offsets[0])?;
-        assert!(record.is_some());
-        let record = record.unwrap();
-        assert!(!record.record_header.deleted);
-        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-        assert_eq!(record.vector, vector);
-        assert_eq!(record.payload, payload);
-
-        let record2 = storage.search(offsets[1])?;
-        assert!(record2.is_some());
-        let record2 = record2.unwrap();
-        assert!(!record2.record_header.deleted);
-        assert_eq!(record2.record_header.checksum, record2.calculate_checksum());
-        assert_eq!(record2.vector, vector2);
-        assert_eq!(record2.payload, payload2);
-        assert_eq!(storage.header.current_max_lsn, record2.record_header.lsn);
-
-        Ok(())
-    }
-
-    #[test]
-    fn batch_insert_empty_array_should_return_empty_offsets() -> Result<()> {
-        // Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-
-        // Act
-        let offsets = storage.batch_insert(&[])?;
-
-        // Assert
-        assert!(offsets.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn search_record_should_return_record() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(2, &vector2, payload2);
 
         //Act
-        let record = storage.search(offset)?;
+        let result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let result2 = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector2,
+                payload: payload2,
+            },
+            2,
+        )?;
 
         //Assert
-        assert!(record.is_some());
-        let record = record.unwrap();
-        assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
-        assert!(!record.record_header.deleted);
-        assert_eq!(record.record_header.checksum, record.calculate_checksum());
-        assert_eq!(record.vector, vector);
-        assert_eq!(record.payload, payload);
+        match (result, result2) {
+            (
+                StorageCommandResult::Inserted { offset },
+                StorageCommandResult::Inserted { offset: offset2 },
+            ) => {
+                let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+                let query_result2 =
+                    storage.perform_query(StorageQuery::Search { offset: offset2 })?;
 
-        Ok(())
-    }
-
-    #[test]
-    fn search_record_should_return_error_when_offset_does_not_exist() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-
-        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-
-        let record = storage.search(offset)?;
-        let invalid_offset = offset - serialized_size(&record)? - 1;
-
-        //Act
-        let result = storage.search(invalid_offset);
-
-        //Assert
-        assert!(result.is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn delete_record_should_delete_record() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-
-        //Act
-        storage.delete(offset, &OperationMode::RawOperation)?;
-
-        //Assert
-        let record = storage.search(offset)?;
-        assert!(record.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn update_record_should_update_record() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-        let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
-        let new_payload = "test2";
-
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-
-        //Act
-        let update_result = storage.update(offset, Some(&new_vector), Some(new_payload))?;
-
-        //Assert
-        let old_record = storage.search(offset)?;
-
-        assert!(old_record.is_none());
-
-        match update_result {
-            StorageUpdateResult::Updated { new_offset } => {
-                let record = storage.search(new_offset)?;
-
-                assert!(record.is_some());
-                let record = record.unwrap();
-                assert_eq!(record.record_header.lsn, storage.header.current_max_lsn);
-                assert!(!record.record_header.deleted);
-                assert_eq!(record.record_header.checksum, record.calculate_checksum());
-                assert_eq!(record.vector, new_vector);
-                assert_eq!(record.payload, new_payload);
-                Ok(())
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
+                    }
+                );
+                assert_eq!(
+                    query_result2,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record2
+                    }
+                );
             }
-            _ => panic!("Expected 'StorageUpdateResult::Updated'"),
+            _ => panic!("Expected Inserted result for both commands"),
         }
+        Ok(())
     }
 
     #[test]
@@ -592,12 +603,275 @@ mod tests {
         let payload2 = "test2";
 
         //Act
-        let result = storage.insert(&vector, payload, &OperationMode::RawOperation);
-        let result2 = storage.insert(&vector2, payload2, &OperationMode::RawOperation);
+        let result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        );
+        let result2 = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector2,
+                payload: payload2,
+            },
+            2,
+        );
 
         //Assert
         assert!(result.is_ok());
         assert!(result2.is_err());
+        assert_eq!(storage.header.modification_lsn, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_two_records_should_store_two_record() -> Result<()> {
+        // Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
+        let payload2 = "test2";
+
+        let expected_record = Record::new(1, &vector, payload);
+        let expected_record2 = Record::new(1, &vector2, payload2);
+
+        // Act
+        let result = storage.perform_command(
+            StorageCommand::BulkInsert {
+                vectors_and_payloads: &[
+                    (vector.as_slice(), payload),
+                    (vector2.as_slice(), payload2),
+                ],
+            },
+            1,
+        )?;
+
+        // Assert
+        match result {
+            StorageCommandResult::BulkInserted { offsets } => {
+                assert_eq!(offsets.len(), 2);
+
+                let query_result =
+                    storage.perform_query(StorageQuery::Search { offset: offsets[0] })?;
+                let query_result2 =
+                    storage.perform_query(StorageQuery::Search { offset: offsets[1] })?;
+
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
+                    }
+                );
+                assert_eq!(
+                    query_result2,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record2
+                    }
+                );
+            }
+            _ => panic!("Expected BulkInserted result"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_empty_array_should_return_empty_offsets() -> Result<()> {
+        // Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+
+        // Act
+        let result = storage.perform_command(
+            StorageCommand::BulkInsert {
+                vectors_and_payloads: &[],
+            },
+            1,
+        )?;
+
+        // Assert
+        match result {
+            StorageCommandResult::BulkInserted { offsets } => {
+                assert!(offsets.is_empty());
+                assert_eq!(storage.header.modification_lsn, 1);
+                Ok(())
+            }
+            _ => panic!("Expected BulkInserted result"),
+        }
+    }
+
+    #[test]
+    fn search_record_should_return_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let expected_record = Record::new(1, &vector, payload);
+
+        let insert_result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let offset = match insert_result {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+
+        //Assert
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: expected_record
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn search_record_should_return_error_when_record_with_given_offset_does_not_exist() -> Result<()>
+    {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let record = Record::new(2, &vector, payload);
+
+        let _ = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let insert_result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            2,
+        )?;
+
+        let offset = match insert_result {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let invalid_offset = offset - serialized_size(&record)? - 1;
+        let result = storage.perform_query(StorageQuery::Search {
+            offset: invalid_offset,
+        });
+
+        //Assert
+        assert!(result.is_err());
+        assert_eq!(storage.header.modification_lsn, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn delete_record_should_delete_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let insert_result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let offset = match insert_result {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let delete_result = storage.perform_command(
+            StorageCommand::Update {
+                offset,
+                vector: None,
+                payload: None,
+            },
+            2,
+        )?;
+
+        //Assert
+        match delete_result {
+            StorageCommandResult::Updated { new_offset: _ } => {
+                let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+
+                assert_eq!(query_result, StorageQueryResult::NotFound);
+                assert_eq!(storage.header.modification_lsn, 2);
+            }
+            _ => panic!("Expected Updated result"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn update_record_should_update_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
+        let new_payload = "test2";
+
+        let expected_record = Record::new(2, &new_vector, new_payload);
+
+        let insert_result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let offset = match insert_result {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let update_result = storage.perform_command(
+            StorageCommand::Update {
+                offset,
+                vector: Some(&new_vector),
+                payload: Some(new_payload),
+            },
+            2,
+        )?;
+
+        //Assert
+        match update_result {
+            StorageCommandResult::Updated { new_offset } => {
+                let query_result =
+                    storage.perform_query(StorageQuery::Search { offset: new_offset })?;
+
+                assert_eq!(
+                    query_result,
+                    StorageQueryResult::FoundRecord {
+                        record: expected_record
+                    }
+                );
+                assert_eq!(storage.header.modification_lsn, 2);
+            }
+            _ => panic!("Expected Updated result"),
+        }
         Ok(())
     }
 
@@ -610,60 +884,31 @@ mod tests {
         let payload = "test";
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
 
+        let insert_result = storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )?;
+        let offset = match insert_result {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
         //Act
-        let offset = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let result = storage.update(offset, Some(&vector2), None);
+        let result = storage.perform_command(
+            StorageCommand::Update {
+                offset,
+                vector: Some(&vector2),
+                payload: None,
+            },
+            2,
+        );
 
         //Assert
         assert!(result.is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-
-        let _ = storage.insert(&vector, payload, &OperationMode::RawOperation)?;
-        let checksum = storage.header.checksum;
-
-        let mut file = File::open(&storage.path)?;
-        file.seek(SeekFrom::Start(0))?;
-        let mut writer = BufWriter::new(&file);
-        writer.write_all(b"corrupted data")?;
-
-        //Act
-        let storage = Storage::load(&storage.path)?;
-
-        //Assert
-        assert_eq!(storage.header.current_max_lsn, 1);
-        assert_eq!(storage.header.vector_dim_amount, 3);
-        assert_eq!(storage.header.checksum, checksum);
-        Ok(())
-    }
-
-    #[test]
-    fn load_should_define_header_with_default_values_when_no_records() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let storage = Storage::create(temp_dir.path())?;
-        let checksum = storage.header.checksum;
-
-        let mut file = File::open(&storage.path)?;
-        file.seek(SeekFrom::Start(0))?;
-        let mut writer = BufWriter::new(&file);
-        writer.write_all(b"corrupted data")?;
-
-        //Act
-        let storage = Storage::load(&storage.path)?;
-
-        //Assert
-        assert_eq!(storage.header.current_max_lsn, 0);
-        assert_eq!(storage.header.vector_dim_amount, 0);
-        assert_eq!(storage.header.checksum, checksum);
+        assert_eq!(storage.header.modification_lsn, 1);
         Ok(())
     }
 
@@ -693,10 +938,143 @@ mod tests {
         let record = Record::new(1, &vector, payload);
 
         //Act
-        let result = record.validate_checksum();
+        record.validate_checksum()?;
 
         //Assert
-        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_update_should_rollback_update() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
+        let new_payload = "test2";
+
+        let record_before_update = Record::new(1, &vector, payload);
+
+        let offset = match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )? {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        match storage.perform_command(
+            StorageCommand::Update {
+                offset,
+                vector: Some(&new_vector),
+                payload: Some(new_payload),
+            },
+            2,
+        )? {
+            StorageCommandResult::Updated { new_offset: _ } => (),
+            _ => panic!("Expected Updated result"),
+        };
+
+        //Act
+        storage.perform_rollback(3)?;
+
+        //Assert
+        let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: record_before_update
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_delete_should_rollback_delete() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+
+        let record_before_delete = Record::new(1, &vector, payload);
+
+        let offset = match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            1,
+        )? {
+            StorageCommandResult::Inserted { offset } => offset,
+            _ => panic!("Expected Inserted result"),
+        };
+
+        match storage.perform_command(StorageCommand::Delete { offset }, 2)? {
+            StorageCommandResult::Deleted => (),
+            _ => panic!("Expected Deleted result"),
+        };
+
+        //Act
+        storage.perform_rollback(3)?;
+
+        //Assert
+        let query_result = storage.perform_query(StorageQuery::Search { offset })?;
+        assert_eq!(
+            query_result,
+            StorageQueryResult::FoundRecord {
+                record: record_before_delete
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_should_throw_error_when_there_is_no_opeartions_performed() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+
+        //Act
+        let result = storage.perform_rollback(1);
+
+        //Assert
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_should_throw_error_when_trying_to_rollback_not_last_opeartion() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut storage = Storage::create(temp_dir.path())?;
+        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        let lsn = 1;
+
+        match storage.perform_command(
+            StorageCommand::Insert {
+                vector: &vector,
+                payload,
+            },
+            lsn,
+        )? {
+            StorageCommandResult::Inserted { offset: _ } => (),
+            _ => panic!("Expected Inserted result"),
+        };
+
+        //Act
+        let result = storage.perform_rollback(lsn + 2);
+
+        //Assert
+        assert!(matches!(
+            result,
+            Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."))
+        ));
         Ok(())
     }
 }

@@ -2,7 +2,7 @@ use super::Result;
 use crate::{
     command_query_builder::{CQAction, Command},
     database::DbConfig,
-    types::DB_CONFIG,
+    types::{Lsn, DB_CONFIG},
 };
 use std::{
     fs,
@@ -24,7 +24,7 @@ impl DropCollectionCommand {
 }
 
 impl Command for DropCollectionCommand {
-    fn execute(&self) -> Result<()> {
+    fn execute(&self, _: Lsn) -> Result<()> {
         let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
         db_config.remove_collection(&self.collection_name)?;
 
@@ -37,7 +37,7 @@ impl Command for DropCollectionCommand {
         Ok(())
     }
 
-    fn rollback(&self) -> Result<()> {
+    fn rollback(&self, _: Lsn) -> Result<()> {
         Ok(())
     }
 }

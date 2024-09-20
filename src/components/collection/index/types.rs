@@ -1,7 +1,7 @@
 use std::mem;
 
 use super::Result;
-use crate::types::{Offset, RecordId};
+use crate::types::{Lsn, Offset, RecordId};
 
 //TODO: Change DEFAULT_BRANCHING_FACTOR;
 pub type NodeIdx = u16;
@@ -19,14 +19,23 @@ pub const SERIALIZED_NODE_SIZE: usize = 8
     + 2;
 
 pub trait Index {
-    fn perform_command(&mut self, command: IndexCommand) -> Result<()>;
+    fn perform_command(&mut self, command: IndexCommand, lsn: Lsn) -> Result<IndexCommandResult>;
     fn perform_query(&mut self, query: IndexQuery) -> Result<IndexQueryResult>;
+    fn perform_rollback(&mut self, lsn: Lsn) -> Result<()>;
 }
 
 pub enum IndexCommand {
     BulkInsert(Vec<Offset>),
     Insert(Offset),
     Update(RecordId, Offset),
+}
+
+#[cfg_attr(test, derive(PartialEq, Debug))]
+pub enum IndexCommandResult {
+    BulkInserted,
+    Inserted,
+    Updated,
+    NotFound,
 }
 
 pub enum IndexQuery {
@@ -36,8 +45,13 @@ pub enum IndexQuery {
 
 #[derive(PartialEq, Debug)]
 pub enum IndexQueryResult {
-    SearchAll(Vec<(RecordId, Offset)>),
-    SearchResult(Offset),
+    FoundKeysAndValues(Vec<(RecordId, Offset)>),
+    FoundValue(Offset),
+    NotFound,
+}
+
+pub enum IndexUpdateResult {
+    Updated,
     NotFound,
 }
 

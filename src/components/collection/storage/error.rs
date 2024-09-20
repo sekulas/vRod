@@ -24,11 +24,10 @@ pub enum Error {
     },
 
     #[error("Incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
-    IncorrectChecksum {
-        record: Record,
-        expected: u64,
-        actual: u64,
-    },
+    IncorrectChecksum { expected: u64, actual: u64 },
+
+    #[error("Record not found for rollback. Offset: '{offset}'")]
+    RecordNotFoundForRollback { offset: u64 },
 
     #[error(transparent)]
     Serialization(#[from] bincode::Error),
@@ -40,5 +39,5 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Unexpected error: {0}")]
-    UnexpectedError(&'static str),
+    Unexpected(&'static str),
 }
