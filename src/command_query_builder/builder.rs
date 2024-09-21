@@ -144,12 +144,11 @@ fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Re
         description: e.to_string(),
     })?;
 
-    if vec_n_payload.is_none() {
-        return Err(Error::MissingArgument);
+    match vec_n_payload {
+        Some(data) => {
+            let insert_command = InsertCommand::new(collection, data);
+            Ok(CQType::Command(Box::new(insert_command)))
+        }
+        None => Err(Error::MissingArgument),
     }
-
-    let insert_command =
-        InsertCommand::new(Rc::new(RefCell::new(collection)), vec_n_payload.unwrap());
-
-    Ok(CQType::Command(Box::new(insert_command)))
 }

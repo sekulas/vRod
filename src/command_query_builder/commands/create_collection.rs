@@ -25,7 +25,7 @@ impl CreateCollectionCommand {
 }
 
 impl Command for CreateCollectionCommand {
-    fn execute(&self, _: Lsn) -> Result<()> {
+    fn execute(&mut self, _: Lsn) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
         let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
 
@@ -40,7 +40,7 @@ impl Command for CreateCollectionCommand {
         Ok(())
     }
 
-    fn rollback(&self, _: Lsn) -> Result<()> {
+    fn rollback(&mut self, _: Lsn) -> Result<()> {
         let collection_path = self.path.join(&self.collection_name);
 
         if collection_path.exists() {

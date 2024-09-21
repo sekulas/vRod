@@ -5,31 +5,28 @@ use crate::{
     command_query_builder::{CQAction, Command},
     components::collection::Collection,
 };
-use std::{cell::RefCell, rc::Rc};
 
 pub struct InsertCommand {
-    pub collection: Rc<RefCell<Collection>>,
-    pub data: String,
+    collection: Collection,
+    data: String,
 }
 
 impl InsertCommand {
-    pub fn new(collection: Rc<RefCell<Collection>>, data: String) -> Self {
+    pub fn new(collection: Collection, data: String) -> Self {
         Self { collection, data }
     }
 }
 
 impl Command for InsertCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
+    fn execute(&mut self, lsn: Lsn) -> Result<()> {
         let (vector, payload) = parse_vec_n_payload(&self.data)?;
-
-        let mut collection = self.collection.borrow_mut();
-        collection.insert(&vector, &payload, lsn)?;
-
+        self.collection.insert(&vector, &payload, lsn)?;
         Ok(())
     }
 
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
+    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
+        self.collection.rollback_insertion_like_command(lsn)?;
+        Ok(())
     }
 }
 

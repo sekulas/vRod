@@ -24,7 +24,7 @@ impl DropCollectionCommand {
 }
 
 impl Command for DropCollectionCommand {
-    fn execute(&self, _: Lsn) -> Result<()> {
+    fn execute(&mut self, _: Lsn) -> Result<()> {
         let mut db_config: DbConfig = DbConfig::load(&self.path.join(DB_CONFIG))?;
         db_config.remove_collection(&self.collection_name)?;
 
@@ -37,7 +37,7 @@ impl Command for DropCollectionCommand {
         Ok(())
     }
 
-    fn rollback(&self, _: Lsn) -> Result<()> {
+    fn rollback(&mut self, _: Lsn) -> Result<()> {
         Ok(())
     }
 }

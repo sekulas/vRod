@@ -126,7 +126,7 @@ fn redo_last_command(
     command: String,
     arg: Option<String>,
 ) -> Result<()> {
-    if let CQType::Command(last_command) = CQBuilder::build(target_path, command, arg)? {
+    if let CQType::Command(mut last_command) = CQBuilder::build(target_path, command, arg)? {
         let stringified_last_command = last_command.to_string();
         println!("Redoing last command: {:?}", stringified_last_command);
 
@@ -141,7 +141,7 @@ fn redo_last_command(
     Ok(())
 }
 
-fn execute_command(wal: &mut Wal, command: Box<dyn Command>) -> Result<()> {
+fn execute_command(wal: &mut Wal, mut command: Box<dyn Command>) -> Result<()> {
     let lsn = wal.append(command.to_string())?;
     command.execute(lsn)?;
     wal.commit()?;
