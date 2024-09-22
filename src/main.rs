@@ -371,8 +371,6 @@ mod tests {
         let db_name = "test_db";
         let collection_name = "test_col";
         let inserted_data = "1.0,2.0,3.0;test_payload";
-        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data)?;
-        let expected_record_id = "1";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -382,8 +380,55 @@ mod tests {
 
         //Assert
         result.success();
-        // let search_result = search(&temp_dir, db_name, collection_name, expected_record_id)?;
-        // search_result.success();
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_embedding_should_return_embedding_when_it_exists() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data)?;
+        let expected_record_id = "1";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = search(&temp_dir, db_name, collection_name, expected_record_id)?;
+
+        //Assert
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains(format!("{:?}", expected_vector)))
+            .stdout(predicates::str::contains(expected_payload));
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_embedding_should_fail_when_embedding_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = search(&temp_dir, db_name, collection_name, "2")?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("not found"));
 
         Ok(())
     }
