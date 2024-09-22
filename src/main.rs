@@ -311,9 +311,11 @@ mod tests {
         let result = init_database(&temp_dir, db_name)?;
 
         //Assert
-        result
-            .success()
-            .stderr(predicates::str::contains("already exists"));
+        let specified_path_str = temp_dir.path().join(db_name);
+
+        result.success().stderr(predicates::str::contains(
+            database::Error::DirectoryExists(specified_path_str).to_string(),
+        ));
 
         Ok(())
     }
@@ -323,15 +325,14 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut cmd = Command::cargo_bin(BINARY)?;
-        let err = Error::MissingInitDatabaseName;
 
         //Act
         let result = cmd.arg("--init-database").arg(temp_dir.path()).assert();
 
         //Assert
-        result
-            .success()
-            .stderr(predicates::str::contains(err.to_string()));
+        result.success().stderr(predicates::str::contains(
+            Error::MissingInitDatabaseName.to_string(),
+        ));
 
         Ok(())
     }
@@ -379,9 +380,12 @@ mod tests {
         let result = create_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result
-            .success()
-            .stderr(predicates::str::contains("already exists"));
+        result.success().stderr(predicates::str::contains(
+            command_query_builder::Error::CollectionAlreadyExists {
+                collection_name: collection_name.to_owned(),
+            }
+            .to_string(),
+        ));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -484,17 +488,21 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
+        let collection_name = "non_existent_col";
         let inserted_data = "1.0,2.0,3.0;test_payload";
 
         init_database(&temp_dir, db_name)?;
 
         //Act
-        let result = search(&temp_dir, db_name, "non_existent_col", inserted_data)?;
+        let result = search(&temp_dir, db_name, collection_name, inserted_data)?;
 
         //Assert
-        result
-            .success()
-            .stderr(predicates::str::contains("Collection does not exist"));
+        result.success().stderr(predicates::str::contains(
+            command_query_builder::Error::CollectionDoesNotExist {
+                collection_name: collection_name.to_owned(),
+            }
+            .to_string(),
+        ));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
