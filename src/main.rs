@@ -478,4 +478,42 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn search_embedding_should_fail_when_collection_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        let result = search(&temp_dir, db_name, "non_existent_col", inserted_data)?;
+
+        //Assert
+        result
+            .success()
+            .stderr(predicates::str::contains("Collection does not exist"));
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_embedding_should_fail_when_database_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+
+        //Act
+        let result = search(&temp_dir, "non_existent_db", "non_existent_col", "1")?;
+
+        //Assert
+        result
+            .success()
+            .stderr(predicates::str::contains("Database does not exist"));
+
+        Ok(())
+    }
 }
