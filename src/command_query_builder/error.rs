@@ -41,5 +41,8 @@ pub enum Error {
     Collection { description: String },
 
     #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 }

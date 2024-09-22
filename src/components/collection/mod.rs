@@ -4,4 +4,4 @@ mod error;
 pub use error::{Error, Result};
 mod index;
 mod storage;
-mod types;
+pub mod types;

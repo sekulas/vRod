@@ -25,6 +25,7 @@ impl Builder for CQBuilder {
                 target: collection, // If the target is not provided, truncate the databases WAL
             })) */
             "INSERT" => build_insert_command(target_path, arg),
+            "SEARCH" => build_search_query(target_path, arg),
             "BULKINSERT" => todo!(),
             /* Ok(Box::new(BulkInsertCommand {
                 db,
@@ -39,12 +40,6 @@ impl Builder for CQBuilder {
             })) */
             "DELETE" => todo!(),
             /* Ok(Box::new(DeleteCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
-            "SEARCH" => todo!(),
-            /* Ok(Box::new(SearchCommand {
                 db,
                 collection_name: collection,
                 arg,
@@ -146,6 +141,40 @@ fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Re
         Some(data) => {
             let insert_command = InsertCommand::new(collection, data);
             Ok(CQType::Command(Box::new(insert_command)))
+        }
+        None => Err(Error::MissingArgument),
+    }
+}
+
+fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
+    let collection_name = target_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let database_path = target_path.parent().map(|path| path.to_path_buf());
+
+    if database_path.is_none() || collection_name.is_none() {
+        return Err(Error::CannotDetermineCollectionPath {
+            database_path,
+            collection_name,
+        });
+    }
+
+    let database_path = database_path.unwrap();
+    let collection_name = collection_name.unwrap();
+
+    if !collection_exists(&database_path, &collection_name)? {
+        return Err(Error::CollectionDoesNotExist { collection_name });
+    }
+
+    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
+        description: e.to_string(),
+    })?;
+
+    match record_id_str {
+        Some(record_id_str) => {
+            let record_id = record_id_str.parse()?;
+            let search_command = SearchQuery::new(collection, record_id);
+            Ok(CQType::Query(Box::new(search_command)))
         }
         None => Err(Error::MissingArgument),
     }
