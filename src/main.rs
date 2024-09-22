@@ -198,6 +198,22 @@ mod tests {
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
 
+    fn is_wal_consistent(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        col_name: Option<&str>,
+    ) -> Result<bool> {
+        let mut wal_path = temp_dir.path().join(db_name);
+        if let Some(col) = col_name {
+            wal_path = wal_path.join(col);
+        }
+        let wal = Wal::load(&wal_path.join(WAL_FILE))?;
+        if let WalType::Uncommited { .. } = wal {
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
     fn init_database(temp_dir: &tempfile::TempDir, db_name: &str) -> Result<Assert> {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
@@ -341,6 +357,12 @@ mod tests {
         assert!(collection_path.join(STORAGE_FILE).exists());
         assert!(collection_path.join(INDEX_FILE).exists());
 
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
         Ok(())
     }
 
@@ -361,6 +383,12 @@ mod tests {
             .success()
             .stderr(predicates::str::contains("already exists"));
 
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
         Ok(())
     }
 
@@ -380,6 +408,12 @@ mod tests {
 
         //Assert
         result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
 
         Ok(())
     }
@@ -407,6 +441,12 @@ mod tests {
             .stdout(predicates::str::contains(format!("{:?}", expected_vector)))
             .stdout(predicates::str::contains(expected_payload));
 
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
         Ok(())
     }
 
@@ -429,6 +469,12 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("not found"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
 
         Ok(())
     }
