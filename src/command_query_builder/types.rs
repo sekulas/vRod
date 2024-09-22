@@ -18,5 +18,5 @@ pub trait Command: CQAction {
 }
 
 pub trait Query: CQAction {
-    fn execute(&self) -> QueryResult<()>;
+    fn execute(&mut self) -> QueryResult<()>;
 }

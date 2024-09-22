@@ -112,7 +112,7 @@ fn execute_cq_action(cq_action: CQType, mut wal: Wal) -> Result<()> {
             println!("Executing command: {:?}", command.to_string());
             execute_command(&mut wal, command)?
         }
-        CQType::Query(query) => {
+        CQType::Query(mut query) => {
             println!("Executing query: {:?}", query.to_string());
             query.execute()?
         }

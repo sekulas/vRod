@@ -10,8 +10,8 @@ use std::{
 };
 
 pub struct DropCollectionCommand {
-    pub path: PathBuf,
-    pub collection_name: String,
+    path: PathBuf,
+    collection_name: String,
 }
 
 impl DropCollectionCommand {
