@@ -188,3 +188,203 @@ fn validate_collection(database_path: &Path, collection_name: &str) -> Result<()
         false => Err(Error::CollectionDoesNotExist(collection_name.to_string())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_cmd::{assert::Assert, Command};
+    use command_query_builder::parsing_ops::parse_vec_n_payload;
+    use types::{INDEX_FILE, STORAGE_FILE};
+    type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
+    const BINARY: &str = "vrod";
+
+    fn init_database(temp_dir: &tempfile::TempDir, db_name: &str) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--init-database")
+            .arg(temp_dir.path())
+            .arg("--init-database-name")
+            .arg(db_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn create_collection(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("CREATE")
+            .arg("--command-arg")
+            .arg(collection_name)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .assert();
+        Ok(result)
+    }
+
+    fn insert(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        data: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("INSERT")
+            .arg("--command-arg")
+            .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn search(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        data: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("SEARCH")
+            .arg("--command-arg")
+            .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    #[test]
+    fn init_database_success() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+
+        //Act
+        let result = init_database(&temp_dir, db_name)?;
+
+        //Assert
+        result.success();
+
+        let db_path = temp_dir.path().join(db_name);
+        assert!(db_path.exists());
+        assert!(db_path.join(DB_CONFIG).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn init_database_fail_when_db_already_exists() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        let result = init_database(&temp_dir, db_name)?;
+
+        //Assert
+        result
+            .success()
+            .stderr(predicates::str::contains("already exists"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn init_database_missing_name() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let err = Error::MissingInitDatabaseName;
+
+        //Act
+        let result = cmd.arg("--init-database").arg(temp_dir.path()).assert();
+
+        //Assert
+        result
+            .success()
+            .stderr(predicates::str::contains(err.to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_collection_should_create_collection() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        let result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success();
+        let db_path = temp_dir.path().join(db_name);
+        let collection_path = db_path.join(collection_name);
+
+        assert!(collection_path.exists());
+        assert!(collection_path.join(WAL_FILE).exists());
+        assert!(collection_path.join(STORAGE_FILE).exists());
+        assert!(collection_path.join(INDEX_FILE).exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_collection_should_fail_when_collection_already_exists() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result
+            .success()
+            .stderr(predicates::str::contains("already exists"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_embedding_should_store_embedding_in_collection() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data)?;
+        let expected_record_id = "1";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Assert
+        result.success();
+        // let search_result = search(&temp_dir, db_name, collection_name, expected_record_id)?;
+        // search_result.success();
+
+        Ok(())
+    }
+}
