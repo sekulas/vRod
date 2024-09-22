@@ -1,7 +1,5 @@
 use crate::{components::wal, types::Dim};
 
-use super::strg::Record;
-
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]

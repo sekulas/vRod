@@ -21,6 +21,7 @@ impl Command for InsertCommand {
     fn execute(&mut self, lsn: Lsn) -> Result<()> {
         let (vector, payload) = parse_vec_n_payload(&self.data)?;
         self.collection.insert(&vector, &payload, lsn)?;
+        println!("Embedding inserted successfully");
         Ok(())
     }
 
@@ -32,6 +33,6 @@ impl Command for InsertCommand {
 
 impl CQAction for InsertCommand {
     fn to_string(&self) -> String {
-        todo!();
+        format!("INSERT {}", self.data)
     }
 }
