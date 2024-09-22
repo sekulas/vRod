@@ -242,6 +242,23 @@ mod tests {
         Ok(result)
     }
 
+    fn drop_collection(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("DROP")
+            .arg("--command-arg")
+            .arg(collection_name)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .assert();
+        Ok(result)
+    }
+
     fn insert(
         temp_dir: &tempfile::TempDir,
         db_name: &str,
@@ -392,6 +409,138 @@ mod tests {
             db_name,
             Some(collection_name)
         )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_collection_should_fail_when_database_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "non_existent_db";
+        let collection_name = "test_col";
+
+        //Act
+        let result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        let specified_path_str = temp_dir
+            .path()
+            .join("non_existent_db")
+            .to_string_lossy()
+            .to_string();
+
+        result.success().stderr(predicates::str::contains(
+            Error::DatabaseDoesNotExist(specified_path_str).to_string(),
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn drop_collection_should_remove_collection() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = drop_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success();
+        let db_path = temp_dir.path().join(db_name);
+        assert!(db_path.exists());
+
+        let collection_path = db_path.join(collection_name);
+        assert!(!collection_path.exists());
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn drop_collection_should_fail_when_collection_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        let result = drop_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success().stderr(predicates::str::contains(
+            command_query_builder::Error::CollectionDoesNotExist {
+                collection_name: collection_name.to_owned(),
+            }
+            .to_string(),
+        ));
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn drop_collection_does_not_drop_col_twice() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        drop_collection(&temp_dir, db_name, collection_name)?;
+        let result = drop_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success().stderr(predicates::str::contains(
+            command_query_builder::Error::CollectionDoesNotExist {
+                collection_name: collection_name.to_owned(),
+            }
+            .to_string(),
+        ));
+
+        let db_path = temp_dir.path().join(db_name);
+        assert!(db_path.exists());
+
+        let collection_path = db_path.join(collection_name);
+        assert!(!collection_path.exists());
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_collection_should_create_collection_after_dropping() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        create_collection(&temp_dir, db_name, collection_name)?;
+        drop_collection(&temp_dir, db_name, collection_name)?;
+        let result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success();
+
+        let db_path = temp_dir.path().join(db_name);
+        assert!(db_path.exists());
+
+        let collection_path = db_path.join(collection_name);
+        assert!(collection_path.exists());
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
     }
