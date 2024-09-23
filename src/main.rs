@@ -5,6 +5,7 @@ mod error;
 mod types;
 mod utils;
 
+use crate::error::{Error, Result};
 use crate::types::WAL_FILE;
 use clap::Parser;
 use command_query_builder::{Builder, CQBuilder, CQType, Command};
@@ -13,8 +14,6 @@ use database::{Database, DbConfig};
 use std::path::{Path, PathBuf};
 use types::DB_CONFIG;
 use utils::embeddings::process_embeddings;
-
-use crate::error::{Error, Result};
 
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
@@ -617,6 +616,30 @@ mod tests {
     }
 
     #[test]
+    fn insert_should_not_insert_vec_with_different_dimensions() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+        let incorrect_data = "1.0,2.0,3.0,4.0;test_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = insert(&temp_dir, db_name, collection_name, incorrect_data)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("different dimension"));
+
+        Ok(())
+    }
+
+    #[test]
     fn search_should_return_embedding_when_it_exists() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -753,6 +776,102 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn update_should_not_update_when_record_does_not_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let update_arg = "2;4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("not found"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_update_when_only_id_and_payload_provided() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "1;;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result.success();
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("updated_payload"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_update_when_only_id_and_vec_provided() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "1;4.0,5.0,6.0;";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result.success();
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("payload"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
     //TODO: Czy testy wygenerowane przez Copilota to problem? Jeden napisałem ,a potem generowały się same.
     #[test]
     fn update_should_not_update_record_2_args_provided() -> Result<()> {
@@ -852,6 +971,30 @@ mod tests {
         result
             .failure()
             .stderr(predicates::str::contains("ParseFloatError"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_not_update_if_different_vec_dimension_provided() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "1;4.0,5.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("different dimension"));
 
         Ok(())
     }
