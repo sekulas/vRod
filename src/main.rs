@@ -196,7 +196,9 @@ fn validate_collection(database_path: &Path, collection_name: &str) -> Result<()
 mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
-    use command_query_builder::parsing_ops::parse_vec_n_payload;
+    use command_query_builder::parsing_ops::{
+        parse_vec_n_payload, EXPECTED_3_ARG_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M,
+    };
     use types::{INDEX_FILE, STORAGE_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
@@ -292,6 +294,26 @@ mod tests {
         let result = cmd
             .arg("--execute")
             .arg("SEARCH")
+            .arg("--command-arg")
+            .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn update(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        data: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("UPDATE")
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -659,17 +681,157 @@ mod tests {
     }
 
     #[test]
-    fn search_embedding_should_fail_when_database_does_not_exist() -> Result<()> {
+    fn search_should_fail_when_database_does_not_exist() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
+        let db_name = "non_existent_db";
 
         //Act
-        let result = search(&temp_dir, "non_existent_db", "non_existent_col", "1")?;
+        let result = search(&temp_dir, db_name, "non_existent_col", "1")?;
+
+        //Assert
+        let specified_path_str = temp_dir.path().join(db_name).to_string_lossy().to_string();
+
+        result.failure().stderr(predicates::str::contains(
+            Error::DatabaseDoesNotExist(specified_path_str).to_string(),
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_update_record_when_it_exists() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "1;4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result.success();
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?; //TODO: FIND THE PROBLEM
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("updated_payload"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    //TODO: Czy testy wygenerowane przez Copilota to problem? Jeden napisałem ,a potem generowały się same.
+    #[test]
+    fn update_should_not_update_record_2_args_provided() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result.failure().stderr(predicates::str::contains(
+            command_query_builder::Error::InvalidDataFormat {
+                description: EXPECTED_3_ARG_FORMAT_ERR_M.to_owned(),
+            }
+            .to_string(),
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_not_update_if_id_has_not_been_provided() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = ";4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result.failure().stderr(predicates::str::contains(
+            command_query_builder::Error::InvalidDataFormat {
+                description: NO_RECORD_ID_PROVIDED_ERR_M.to_owned(),
+            }
+            .to_string(),
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_not_update_if_id_is_not_a_number() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "a;4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
 
         //Assert
         result
-            .success()
-            .stderr(predicates::str::contains("Database does not exist"));
+            .failure()
+            .stderr(predicates::str::contains("ParseIntError"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_should_not_update_if_vector_has_letters() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let update_arg = "1;a,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = update(&temp_dir, db_name, collection_name, update_arg)?;
+
+        //Assert
+        result
+            .failure()
+            .stderr(predicates::str::contains("ParseFloatError"));
 
         Ok(())
     }
