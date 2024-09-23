@@ -32,7 +32,7 @@ impl Command for DeleteCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
+    fn rollback(&mut self, _: Lsn) -> Result<()> {
         Ok(())
     }
 }

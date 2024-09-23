@@ -24,7 +24,7 @@ struct Args {
     #[arg(short = 'n', long, value_name = "NAME")]
     init_database_name: Option<String>,
 
-    #[arg(short, long, value_name = "DIR")]
+    #[arg(short, long, value_name = "PATH")]
     database: Option<PathBuf>,
 
     #[arg(short, long, value_name = "COLLECTION_NAME")]
@@ -35,6 +35,9 @@ struct Args {
 
     #[arg(short = 'a', long, value_name = "COMMAND_ARG")]
     command_arg: Option<String>,
+
+    #[arg(short = 'f', long, value_name = "PATH")]
+    file_path: Option<PathBuf>,
 
     //TODO To remove / for developmnet only
     #[arg(short, long, value_name = "AMOUNT")]
@@ -86,7 +89,7 @@ fn run() -> Result<()> {
 
     let target_path = specify_target_path(args.database, args.collection)?;
 
-    let cq_action = CQBuilder::build(&target_path, command_text, args.command_arg)?;
+    let cq_action = CQBuilder::build(&target_path, command_text, args.command_arg, args.file_path)?;
 
     let wal_path = target_path.join(WAL_FILE);
     let wal_type = Wal::load(&wal_path)?;
@@ -100,7 +103,7 @@ fn run() -> Result<()> {
             uncommited_command,
             arg,
         } => {
-            redo_last_command(&target_path, &mut wal, uncommited_command, arg)?;
+            redo_last_command(&target_path, &mut wal, uncommited_command, arg, None)?;
             execute_cq_action(cq_action, wal)?;
         }
     }
@@ -127,8 +130,11 @@ fn redo_last_command(
     wal: &mut Wal,
     command: String,
     arg: Option<String>,
+    file_path: Option<PathBuf>,
 ) -> Result<()> {
-    if let CQType::Command(mut last_command) = CQBuilder::build(target_path, command, arg)? {
+    if let CQType::Command(mut last_command) =
+        CQBuilder::build(target_path, command, arg, file_path)?
+    {
         let stringified_last_command = last_command.to_string();
         println!("Redoing last command: {:?}", stringified_last_command);
 
@@ -196,7 +202,8 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use command_query_builder::parsing_ops::{
-        parse_vec_n_payload, EXPECTED_3_ARG_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M,
+        parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M,
+        NO_RECORD_ID_PROVIDED_ERR_M,
     };
     use types::{INDEX_FILE, STORAGE_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
@@ -275,6 +282,46 @@ mod tests {
             .arg("INSERT")
             .arg("--command-arg")
             .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn bulk_insert_arg(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        data: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("BULKINSERT")
+            .arg("--command-arg")
+            .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn bulk_insert_file(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        file_path: PathBuf,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("BULKINSERT")
+            .arg("--file-path")
+            .arg(file_path)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")

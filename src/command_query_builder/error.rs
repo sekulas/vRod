@@ -25,8 +25,11 @@ pub enum Error {
     #[error("Missing argument for the given command. {description}")]
     MissingArgument { description: String },
 
-    #[error("Cannot parse: {description}")]
+    #[error("Invalid data format: {description}")]
     InvalidDataFormat { description: String },
+
+    #[error("No data in the source.")]
+    NoDataInSource,
 
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
