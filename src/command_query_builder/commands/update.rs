@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     command_query_builder::{parsing_ops::parse_string_from_vector_option, CQAction, Command},
-    components::collection::Collection,
+    components::collection::{types::CollectionUpdateResult, Collection},
     types::{Dim, Lsn, RecordId},
 };
 
@@ -29,13 +29,22 @@ impl UpdateCommand {
 }
 impl Command for UpdateCommand {
     fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        self.collection.update(
+        match self.collection.update(
             self.record_id,
             self.vector.as_deref(),
             self.payload.as_deref(),
             lsn,
-        )?;
-        println!("Record updated successfully");
+        )? {
+            CollectionUpdateResult::Updated => {
+                println!("Embedding updated successfully.");
+            }
+            CollectionUpdateResult::NotFound => {
+                println!("Embedding to update has been not found.");
+            }
+            CollectionUpdateResult::NotUpdated { description } => {
+                println!("Embedding not updated: {}", description);
+            }
+        }
         Ok(())
     }
 

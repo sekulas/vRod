@@ -12,7 +12,7 @@ pub enum Error {
     },
 
     #[error(
-        "Provided vector has incorrect dimension. Expected: '{expected}', Actural: '{actual}'.\
+        "Provided vector has different dimension. Expected: '{expected}', Actural: '{actual}'.\
     Vector: '{vector:?}'"
     )]
     InvalidVectorDim {

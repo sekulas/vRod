@@ -5,9 +5,15 @@ use super::index::types::{
 use super::storage::types::{
     StorageCommand, StorageCommandResult, StorageInterface, StorageQuery, StorageQueryResult,
 };
-use super::types::{CollectionDeleteResult, CollectionSearchResult, CollectionUpdateResult};
+use super::types::{
+    CollectionDeleteResult, CollectionInsertResult, CollectionSearchResult, CollectionUpdateResult,
+};
 use super::Error;
-use super::{index::tree::BPTree, storage::Storage, Result};
+use super::{
+    index::tree::BPTree,
+    storage::{Error as StorageError, Storage},
+    Result,
+};
 use crate::components::wal::Wal;
 use crate::types::{Dim, Lsn, RecordId, INDEX_FILE, STORAGE_FILE};
 use std::{fs, path::Path};
@@ -40,16 +46,37 @@ impl Collection {
         Ok(Self { storage, index })
     }
 
-    pub fn insert(&mut self, vector: &[Dim], payload: &str, lsn: Lsn) -> Result<()> {
+    pub fn insert(
+        &mut self,
+        vector: &[Dim],
+        payload: &str,
+        lsn: Lsn,
+    ) -> Result<CollectionInsertResult> {
         let storage_insert_result = self
             .storage
-            .perform_command(StorageCommand::Insert { vector, payload }, lsn)?;
+            .perform_command(StorageCommand::Insert { vector, payload }, lsn);
 
-        match storage_insert_result {
+        if let Err(StorageError::InvalidVectorDim {
+            expected,
+            actual,
+            vector,
+        }) = storage_insert_result
+        {
+            return Ok(CollectionInsertResult::NotInserted {
+                description: StorageError::InvalidVectorDim {
+                    expected,
+                    actual,
+                    vector,
+                }
+                .to_string(),
+            });
+        }
+
+        match storage_insert_result? {
             StorageCommandResult::Inserted { offset } => {
                 self.index
                     .perform_command(IndexCommand::Insert(offset), lsn)?;
-                Ok(())
+                Ok(CollectionInsertResult::Inserted)
             }
             _ => Err(Error::Unexpected(
                 "Collection: Insert returned unexpected result.",
@@ -118,9 +145,25 @@ impl Collection {
                         payload,
                     },
                     lsn,
-                )?;
+                );
 
-                match update_result {
+                if let Err(StorageError::InvalidVectorDim {
+                    expected,
+                    actual,
+                    vector,
+                }) = update_result
+                {
+                    return Ok(CollectionUpdateResult::NotUpdated {
+                        description: StorageError::InvalidVectorDim {
+                            expected,
+                            actual,
+                            vector,
+                        }
+                        .to_string(),
+                    });
+                }
+
+                match update_result? {
                     StorageCommandResult::Updated { new_offset } => {
                         let update_result = self
                             .index
@@ -132,6 +175,7 @@ impl Collection {
                             )),
                         }
                     }
+                    StorageCommandResult::NotFound => Ok(CollectionUpdateResult::NotFound),
                     _ => Err(Error::Unexpected(
                         "Collection: update - post storage update returned unexpected result.",
                     )),

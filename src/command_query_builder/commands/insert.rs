@@ -1,5 +1,6 @@
 use super::Result;
 use crate::command_query_builder::parsing_ops::parse_string_from_vector_option;
+use crate::components::collection::types::CollectionInsertResult;
 use crate::types::{Dim, Lsn};
 use crate::{
     command_query_builder::{CQAction, Command},
@@ -24,8 +25,14 @@ impl InsertCommand {
 
 impl Command for InsertCommand {
     fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        self.collection.insert(&self.vector, &self.payload, lsn)?;
-        println!("Embedding inserted successfully");
+        match self.collection.insert(&self.vector, &self.payload, lsn)? {
+            CollectionInsertResult::Inserted => {
+                println!("Embedding inserted successfully");
+            }
+            CollectionInsertResult::NotInserted { description } => {
+                println!("Embedding not inserted: {}", description);
+            }
+        }
         Ok(())
     }
 
