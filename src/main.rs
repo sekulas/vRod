@@ -333,7 +333,7 @@ mod tests {
         //Assert
         let specified_path_str = temp_dir.path().join(db_name);
 
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             database::Error::DirectoryExists(specified_path_str).to_string(),
         ));
 
@@ -350,7 +350,7 @@ mod tests {
         let result = cmd.arg("--init-database").arg(temp_dir.path()).assert();
 
         //Assert
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             Error::MissingInitDatabaseName.to_string(),
         ));
 
@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn create_collection_should_create_collection() -> Result<()> {
+    fn create_should_create_collection() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -388,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn create_collection_should_fail_when_collection_already_exists() -> Result<()> {
+    fn create_should_fail_when_collection_already_exists() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -400,7 +400,7 @@ mod tests {
         let result = create_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             command_query_builder::Error::CollectionAlreadyExists {
                 collection_name: collection_name.to_owned(),
             }
@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn create_collection_should_fail_when_database_does_not_exist() -> Result<()> {
+    fn create_should_fail_when_database_does_not_exist() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "non_existent_db";
@@ -433,7 +433,7 @@ mod tests {
             .to_string_lossy()
             .to_string();
 
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             Error::DatabaseDoesNotExist(specified_path_str).to_string(),
         ));
 
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn drop_collection_should_remove_collection() -> Result<()> {
+    fn drop_should_remove_collection() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -466,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn drop_collection_should_fail_when_collection_does_not_exist() -> Result<()> {
+    fn drop_should_fail_when_collection_does_not_exist() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -477,7 +477,7 @@ mod tests {
         let result = drop_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             command_query_builder::Error::CollectionDoesNotExist {
                 collection_name: collection_name.to_owned(),
             }
@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn drop_collection_does_not_drop_col_twice() -> Result<()> {
+    fn drop_does_not_drop_col_twice() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -503,7 +503,7 @@ mod tests {
         let result = drop_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.success().stderr(predicates::str::contains(
+        result.failure().stderr(predicates::str::contains(
             command_query_builder::Error::CollectionDoesNotExist {
                 collection_name: collection_name.to_owned(),
             }
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn create_collection_should_create_collection_after_dropping() -> Result<()> {
+    fn create_should_create_collection_after_dropping() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -549,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_embedding_should_store_embedding_in_collection() -> Result<()> {
+    fn insert_should_store_embedding_in_collection() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -575,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn search_embedding_should_return_embedding_when_it_exists() -> Result<()> {
+    fn search_should_return_embedding_when_it_exists() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -607,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn search_embedding_should_fail_when_embedding_does_not_exist() -> Result<()> {
+    fn search_should_fail_when_embedding_does_not_exist() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -636,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn search_embedding_should_fail_when_collection_does_not_exist() -> Result<()> {
+    fn search_should_fail_when_collection_does_not_exist() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
@@ -649,11 +649,8 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, inserted_data)?;
 
         //Assert
-        result.success().stderr(predicates::str::contains(
-            command_query_builder::Error::CollectionDoesNotExist {
-                collection_name: collection_name.to_owned(),
-            }
-            .to_string(),
+        result.failure().stderr(predicates::str::contains(
+            Error::CollectionDoesNotExist(collection_name.to_owned()).to_string(),
         ));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
