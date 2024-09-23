@@ -48,7 +48,10 @@ struct Args {
 fn main() {
     match run() {
         Ok(_) => {}
-        Err(e) => eprintln!("ERROR: {:?}: {}", e, e),
+        Err(e) => {
+            eprintln!("ERROR: {:?}: {}", e, e);
+            std::process::exit(1);
+        }
     }
 }
 
