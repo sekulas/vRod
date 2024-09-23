@@ -835,4 +835,64 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn delete_should_remove_record_when_it_exists() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let record_id = "1";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+
+        //Act
+        let result = delete(&temp_dir, db_name, collection_name, record_id)?;
+
+        //Assert
+        result.success();
+
+        let query_result = search(&temp_dir, db_name, collection_name, record_id)?;
+        query_result
+            .success()
+            .stdout(predicates::str::contains("not found"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn delete_should_not_delete_deleted_record() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = delete(&temp_dir, db_name, collection_name, "10")?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("not found"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
 }
