@@ -1,6 +1,6 @@
 use super::Result;
-use crate::command_query_builder::parsing_ops::parse_vec_n_payload;
-use crate::types::Lsn;
+use crate::command_query_builder::parsing_ops::parse_string_from_vector_option;
+use crate::types::{Dim, Lsn};
 use crate::{
     command_query_builder::{CQAction, Command},
     components::collection::Collection,
@@ -8,19 +8,23 @@ use crate::{
 
 pub struct InsertCommand {
     collection: Collection,
-    data: String,
+    vector: Vec<Dim>,
+    payload: String,
 }
 
 impl InsertCommand {
-    pub fn new(collection: Collection, data: String) -> Self {
-        Self { collection, data }
+    pub fn new(collection: Collection, vector: Vec<Dim>, payload: String) -> Self {
+        Self {
+            collection,
+            vector,
+            payload,
+        }
     }
 }
 
 impl Command for InsertCommand {
     fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        let (vector, payload) = parse_vec_n_payload(&self.data)?;
-        self.collection.insert(&vector, &payload, lsn)?;
+        self.collection.insert(&self.vector, &self.payload, lsn)?;
         println!("Embedding inserted successfully");
         Ok(())
     }
@@ -33,6 +37,10 @@ impl Command for InsertCommand {
 
 impl CQAction for InsertCommand {
     fn to_string(&self) -> String {
-        format!("INSERT {}", self.data)
+        format!(
+            "INSERT {};{}",
+            parse_string_from_vector_option(Some(&self.vector)),
+            self.payload
+        )
     }
 }
