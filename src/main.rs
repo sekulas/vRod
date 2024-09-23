@@ -640,6 +640,112 @@ mod tests {
     }
 
     #[test]
+    fn bulk_insert_should_insert_multiple_embeddings_from_file() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let file_path = "test_data.txt";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+        let inserted_data_2 = "4.0,5.0,6.0;test_payload_2";
+        let file_content = format!("{}\n{}\n", inserted_data, inserted_data_2);
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        let file_path = temp_dir.path().join(file_path);
+        std::fs::write(&file_path, file_content)?;
+
+        //Act
+        let result = bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("test_payload"));
+
+        let result = search(&temp_dir, db_name, collection_name, "2")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("test_payload_2"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_should_insert_multiple_embeddings_from_arg() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;test_payload";
+        let inserted_data_2 = "4.0,5.0,6.0;test_payload_2";
+        let data = format!("{} {}", inserted_data, inserted_data_2);
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = bulk_insert_arg(&temp_dir, db_name, collection_name, &data)?;
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("test_payload"));
+
+        let result = search(&temp_dir, db_name, collection_name, "2")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("test_payload_2"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_insert_should_fail_when_incorrect_data_format() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let incorrect_data = "1.0,2.0,3.0;test_payload;extra_data";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = bulk_insert_arg(&temp_dir, db_name, collection_name, incorrect_data)?;
+
+        //Assert
+        result
+            .failure()
+            .stderr(predicates::str::contains(EXPECTED_2_ARG_FORMAT_ERR_M));
+
+        Ok(())
+    }
+
+    #[test]
     fn search_should_return_embedding_when_it_exists() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
