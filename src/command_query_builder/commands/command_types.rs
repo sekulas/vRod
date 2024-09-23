@@ -60,28 +60,6 @@ impl CQAction for BulkInsertCommand {
     }
 }
 
-
-pub struct DeleteCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for DeleteCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for DeleteCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
 pub struct ReindexCommand {}
 
 impl Command for ReindexCommand {

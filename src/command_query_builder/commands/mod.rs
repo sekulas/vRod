@@ -10,3 +10,5 @@ mod insert;
 pub(super) use insert::*;
 mod update;
 pub(super) use update::*;
+mod delete;
+pub(super) use delete::*;

@@ -153,6 +153,7 @@ impl Collection {
                 .perform_command(StorageCommand::Delete { offset }, lsn)?
             {
                 StorageCommandResult::Deleted => Ok(CollectionDeleteResult::Deleted),
+                StorageCommandResult::NotFound => Ok(CollectionDeleteResult::NotFound),
                 _ => Err(Error::Unexpected(
                     "Collection: Delete - post storage delete returned unexpected result.",
                 )),

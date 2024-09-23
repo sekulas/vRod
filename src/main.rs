@@ -324,6 +324,26 @@ mod tests {
         Ok(result)
     }
 
+    fn delete(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        data: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("DELETE")
+            .arg("--command-arg")
+            .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
     #[test]
     fn init_database_success() -> Result<()> {
         //Arrange

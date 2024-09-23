@@ -25,10 +25,10 @@ impl Builder for CQBuilder {
             "INSERT" => build_insert_command(target_path, arg),
             "SEARCH" => build_search_query(target_path, arg),
             "UPDATE" => build_update_command(target_path, arg),
-            "BULKINSERT" => todo!(),
-            "DELETE" => todo!(),
-            "SEARCHSIMILAR" => todo!(),
-            "REINDEX" => todo!(),
+            "DELETE" => build_delete_command(target_path, arg),
+            "BULKINSERT" => todo!("NOT IMPLEMENTED bulk insert"),
+            "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"),
+            "REINDEX" => todo!("NOT IMPLEMENTED reindex"),
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
@@ -189,5 +189,41 @@ fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> R
         }
         None => Err(Error::MissingArgument{ 
             description: "UPDATE command requires to pass id, embedding and payload in following format '<record_id>;[vector];[payload].".to_string()}),
+    }
+}
+
+fn build_delete_command(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
+    let collection_name = target_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let database_path = target_path.parent().map(|path| path.to_path_buf());
+
+    if database_path.is_none() || collection_name.is_none() {
+        return Err(Error::CannotDetermineCollectionPath {
+            database_path,
+            collection_name,
+        });
+    }
+
+    let database_path = database_path.unwrap();
+    let collection_name = collection_name.unwrap();
+
+    if !collection_exists(&database_path, &collection_name)? {
+        return Err(Error::CollectionDoesNotExist { collection_name });
+    }
+
+    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
+        description: e.to_string(),
+    })?;
+
+    match record_id_str {
+        Some(record_id_str) => {
+            let record_id = record_id_str.parse()?;
+            let delete_command = DeleteCommand::new(collection, record_id);
+            Ok(CQType::Command(Box::new(delete_command)))
+        }
+        None => Err(Error::MissingArgument {
+            description: "DELETE command requires to pass record id.".to_string(),
+        }),
     }
 }
