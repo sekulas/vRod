@@ -1,7 +1,12 @@
 use crate::types::{Dim, RecordId};
 
 use super::{Error, Result};
-use std::num::ParseFloatError;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    num::ParseFloatError,
+    path::Path,
+};
 
 pub const EXPECTED_2_ARG_FORMAT_ERR_M: &str = "Expected format: <vector>;<payload>";
 pub const NO_EMBEDDING_PROVIDED_ERR_M: &str =
@@ -11,6 +16,7 @@ pub const NO_PAYLOAD_PROVIDED_ERR_M: &str =
 pub const EXPECTED_3_ARG_FORMAT_ERR_M: &str = "Expected format: <record_id>;[vector];[payload]";
 pub const NO_RECORD_ID_PROVIDED_ERR_M: &str =
     "No record id provided. Expected format: <record_id>;[vector];[payload]";
+pub const DIFFERENT_DIMENSIONS_ERR_M: &str = "All vectors must have the same number of dimensions.";
 
 pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
     let splitted_data = data.split(';').collect::<Vec<&str>>();
@@ -40,6 +46,33 @@ pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
 
 fn parse_vector(data: &str) -> std::result::Result<Vec<Dim>, ParseFloatError> {
     data.split(',').map(|s| s.trim().parse::<Dim>()).collect()
+}
+
+pub fn parse_vecs_and_payloads_from_file(file_path: &Path) -> Result<Vec<(Vec<Dim>, String)>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut vecs_and_payloads = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let (vector, payload) = parse_vec_n_payload(&line)?;
+        vecs_and_payloads.push((vector, payload));
+    }
+
+    validate_vecs_and_payloads(&vecs_and_payloads)?;
+
+    Ok(vecs_and_payloads)
+}
+
+pub fn parse_vecs_and_payloads_from_string(data: &str) -> Result<Vec<(Vec<Dim>, String)>> {
+    let vecs_and_payloads: Vec<(Vec<Dim>, String)> = data
+        .split_whitespace()
+        .map(parse_vec_n_payload)
+        .collect::<Result<Vec<(Vec<Dim>, String)>>>()?;
+
+    validate_vecs_and_payloads(&vecs_and_payloads)?;
+
+    Ok(vecs_and_payloads)
 }
 
 pub fn parse_string_from_vector_option(data: Option<&[Dim]>) -> String {
@@ -86,8 +119,28 @@ pub fn parse_id_and_optional_vec_payload(
     Ok((record_id, vector, payload))
 }
 
+fn validate_vecs_and_payloads(vecs_and_payloads: &[(Vec<Dim>, String)]) -> Result<()> {
+    if vecs_and_payloads.is_empty() {
+        return Err(Error::NoDataInSource);
+    }
+
+    let first_vec_len = vecs_and_payloads[0].0.len();
+
+    for (vec, _) in vecs_and_payloads.iter() {
+        if vec.len() != first_vec_len {
+            return Err(Error::InvalidDataFormat {
+                description: DIFFERENT_DIMENSIONS_ERR_M.to_owned(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -126,6 +179,108 @@ mod tests {
         let result = parse_vec_n_payload(&data);
 
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_file_should_return_vec_of_vecs_and_payloads() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let file_path = temp_dir.path().join("test.txt");
+        let mut file = File::create(&file_path)?;
+        file.write_all(b"1.0,2.0,3.0;payload\n4.0,5.0,6.0;another_payload")?;
+
+        //Act
+        let result = parse_vecs_and_payloads_from_file(&file_path)?;
+
+        //Assert
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], (vec![1.0, 2.0, 3.0], "payload".to_string()));
+        assert_eq!(
+            result[1],
+            (vec![4.0, 5.0, 6.0], "another_payload".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_file_should_return_err_when_file_does_not_exist() -> Result<()>
+    {
+        //Arrange
+        let file_path = Path::new("non_existent_file.txt");
+
+        //Act
+        let result = parse_vecs_and_payloads_from_file(file_path);
+
+        //Assert
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_file_should_return_error_if_no_data_in_file() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let file_path = temp_dir.path().join("test.txt");
+        File::create(&file_path)?;
+
+        //Act
+        let result = parse_vecs_and_payloads_from_file(&file_path);
+
+        //Assert
+        assert!(matches!(result, Err(Error::NoDataInSource)));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_file_should_return_error_for_vecs_with_different_dims(
+    ) -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let file_path = temp_dir.path().join("test.txt");
+        let mut file = File::create(&file_path)?;
+        file.write_all(b"1.0,2.0,3.0;payload\n4.0,5.0,6.0,7.0;another_payload")?;
+
+        //Act
+        let result = parse_vecs_and_payloads_from_file(&file_path);
+
+        //Assert
+        assert!(matches!(result, Err(Error::InvalidDataFormat { .. })));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_string_should_return_vec_of_vecs_and_payloads() -> Result<()> {
+        let data = "1.0,2.0,3.0;payload 4.0,5.0,6.0;another_payload";
+        let result = parse_vecs_and_payloads_from_string(data)?;
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], (vec![1.0, 2.0, 3.0], "payload".to_string()));
+        assert_eq!(
+            result[1],
+            (vec![4.0, 5.0, 6.0], "another_payload".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_string_should_return_error_for_no_data() -> Result<()> {
+        let data = "";
+        let result = parse_vecs_and_payloads_from_string(data);
+
+        assert!(matches!(result, Err(Error::NoDataInSource)));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_vecs_and_payloads_from_string_should_return_error_for_vecs_with_different_dims(
+    ) -> Result<()> {
+        let data = "1.0,2.0,3.0;payload 4.0,5.0,6.0,7.0;another_payload";
+        let result = parse_vecs_and_payloads_from_string(data);
+
+        assert!(matches!(result, Err(Error::InvalidDataFormat { .. })));
         Ok(())
     }
 
