@@ -1,6 +1,8 @@
 use std::path::Path;
 
 use super::commands::*;
+use super::parsing_ops::parse_id_and_optional_vec_payload;
+use super::parsing_ops::parse_vec_n_payload;
 use super::queries::*;
 use super::CQType;
 use crate::command_query_builder::{Error, Result};
@@ -20,42 +22,14 @@ impl Builder for CQBuilder {
             "DROP" => build_drop_collection_command(target_path, arg),
             "LISTCOLLECTIONS" => build_list_collections_query(target_path),
             "TRUNCATEWAL" => build_truncate_wal_command(target_path),
-            /* Ok(Box::new(TruncateWalCommand {
-                db,
-                target: collection, // If the target is not provided, truncate the databases WAL
-            })) */
             "INSERT" => build_insert_command(target_path, arg),
             "SEARCH" => build_search_query(target_path, arg),
+            "UPDATE" => build_update_command(target_path, arg),
             "BULKINSERT" => todo!(),
-            /* Ok(Box::new(BulkInsertCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
-            "UPDATE" => todo!(),
-            /* Ok(Box::new(UpdateCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
             "DELETE" => todo!(),
-            /* Ok(Box::new(DeleteCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
             "SEARCHSIMILAR" => todo!(),
-            /* Ok(Box::new(SearchSimilarCommand {
-                db,
-                collection_name: collection,
-                arg,
-            })) */
             "REINDEX" => todo!(),
-            /* Ok(Box::new(ReindexCommand {
-                db,
-                collection_name: collection,
-            })) */
-            _ => Err(Error::UnrecognizedCommand(cq_action.to_string())),
+            _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
 }
@@ -139,10 +113,11 @@ fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Re
 
     match vec_n_payload {
         Some(data) => {
-            let insert_command = InsertCommand::new(collection, data);
+            let (vector, payload) = parse_vec_n_payload(&data)?;
+            let insert_command = InsertCommand::new(collection, vector, payload);
             Ok(CQType::Command(Box::new(insert_command)))
         }
-        None => Err(Error::MissingArgument),
+        None => Err(Error::MissingArgument { description: "INSERT command requires to pass vector and payload in following format '[vector];[payload]'".to_string() }),
     }
 }
 
@@ -176,6 +151,43 @@ fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Resu
             let search_command = SearchQuery::new(collection, record_id);
             Ok(CQType::Query(Box::new(search_command)))
         }
-        None => Err(Error::MissingArgument),
+        None => Err(Error::MissingArgument {
+            description: "SEARCH command requires to pass record id.".to_string(),
+        }),
+    }
+}
+
+fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> Result<CQType> {
+    let collection_name = target_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let database_path = target_path.parent().map(|path| path.to_path_buf());
+
+    if database_path.is_none() || collection_name.is_none() {
+        return Err(Error::CannotDetermineCollectionPath {
+            database_path,
+            collection_name,
+        });
+    }
+
+    let database_path = database_path.unwrap();
+    let collection_name = collection_name.unwrap();
+
+    if !collection_exists(&database_path, &collection_name)? {
+        return Err(Error::CollectionDoesNotExist { collection_name }); //TODO: Is that trully needed?
+    }
+
+    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
+        description: e.to_string(),
+    })?;
+
+    match id_vec_payload {
+        Some(data) => {
+            let (record_id, vector, payload) = parse_id_and_optional_vec_payload(&data)?;
+            let update_command = UpdateCommand::new(collection, record_id, vector, payload);
+            Ok(CQType::Command(Box::new(update_command)))
+        }
+        None => Err(Error::MissingArgument{ 
+            description: "UPDATE command requires to pass id, embedding and payload in following format '<record_id>;[vector];[payload].".to_string()}),
     }
 }

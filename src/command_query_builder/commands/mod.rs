@@ -8,3 +8,5 @@ mod drop_collection;
 pub(super) use drop_collection::*;
 mod insert;
 pub(super) use insert::*;
+mod update;
+pub(super) use update::*;

@@ -60,26 +60,6 @@ impl CQAction for BulkInsertCommand {
     }
 }
 
-pub struct UpdateCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for UpdateCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for UpdateCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
 
 pub struct DeleteCommand {
     pub collection_name: Option<String>,
