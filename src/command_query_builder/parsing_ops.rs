@@ -143,12 +143,15 @@ mod tests {
 
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
-
     #[test]
     fn parse_vec_n_payload_should_return_vector_and_payload() -> Result<()> {
+        //Arrange
         let data = "1.0,2.0,3.0;payload".to_string();
+
+        //Act
         let (vector, payload) = parse_vec_n_payload(&data)?;
 
+        //Assert
         assert_eq!(vector, vec![1.0, 2.0, 3.0]);
         assert_eq!(payload, "payload");
 
@@ -157,27 +160,39 @@ mod tests {
 
     #[test]
     fn parse_vec_n_payload_should_return_err_when_no_vec() -> Result<()> {
+        //Arrange
         let data = ";payload".to_string();
+
+        //Act
         let result = parse_vec_n_payload(&data);
 
+        //Assert
         assert!(result.is_err());
         Ok(())
     }
 
     #[test]
     fn parse_vec_n_payload_should_return_err_when_no_payload() -> Result<()> {
+        //Arrange
         let data = "1.0,2.0,3.0;".to_string();
+
+        //Act
         let result = parse_vec_n_payload(&data);
 
+        //Assert
         assert!(result.is_err());
         Ok(())
     }
 
     #[test]
     fn parse_vec_n_payload_should_return_err_when_no_data_provided() -> Result<()> {
+        //Arrange
         let data = ";".to_string();
+
+        //Act
         let result = parse_vec_n_payload(&data);
 
+        //Assert
         assert!(result.is_err());
         Ok(())
     }
@@ -252,9 +267,13 @@ mod tests {
 
     #[test]
     fn parse_vecs_and_payloads_from_string_should_return_vec_of_vecs_and_payloads() -> Result<()> {
+        //Arrange
         let data = "1.0,2.0,3.0;payload 4.0,5.0,6.0;another_payload";
+
+        //Act
         let result = parse_vecs_and_payloads_from_string(data)?;
 
+        //Assert
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], (vec![1.0, 2.0, 3.0], "payload".to_string()));
         assert_eq!(
@@ -267,9 +286,13 @@ mod tests {
 
     #[test]
     fn parse_vecs_and_payloads_from_string_should_return_error_for_no_data() -> Result<()> {
+        //Arrange
         let data = "";
+
+        //Act
         let result = parse_vecs_and_payloads_from_string(data);
 
+        //Assert
         assert!(matches!(result, Err(Error::NoDataInSource)));
         Ok(())
     }
@@ -277,9 +300,13 @@ mod tests {
     #[test]
     fn parse_vecs_and_payloads_from_string_should_return_error_for_vecs_with_different_dims(
     ) -> Result<()> {
+        //Arrange
         let data = "1.0,2.0,3.0;payload 4.0,5.0,6.0,7.0;another_payload";
+
+        //Act
         let result = parse_vecs_and_payloads_from_string(data);
 
+        //Assert
         assert!(matches!(result, Err(Error::InvalidDataFormat { .. })));
         Ok(())
     }
@@ -287,9 +314,13 @@ mod tests {
     #[test]
     fn parse_id_and_optional_vec_payload_should_return_record_id_vector_and_payload() -> Result<()>
     {
+        //Arrange
         let data = "1;1.0,2.0,3.0;payload".to_string();
+
+        //Act
         let (record_id, vector, payload) = parse_id_and_optional_vec_payload(&data)?;
 
+        //Assert
         assert_eq!(record_id, 1);
         assert_eq!(vector, Some(vec![1.0, 2.0, 3.0]));
         assert_eq!(payload, Some("payload".to_string()));
@@ -299,46 +330,67 @@ mod tests {
 
     #[test]
     fn parse_id_and_optional_vec_payload_should_return_err_when_no_record_id() -> Result<()> {
+        //Arrange
         let data = ";1.0,2.0,3.0;payload".to_string();
+
+        //Act
         let result = parse_id_and_optional_vec_payload(&data);
 
+        //Assert
         assert!(result.is_err());
         Ok(())
     }
 
     #[test]
     fn parse_id_and_optional_vec_payload_should_return_passed_2_args() -> Result<()> {
+        //Arrange
         let data = "1;;payload".to_string();
+
+        //Act
         let (result_id, result_vec, result_payload) = parse_id_and_optional_vec_payload(&data)?;
 
+        //Assert
         assert_eq!(result_id, 1);
         assert_eq!(result_vec, None);
         assert_eq!(result_payload, Some("payload".to_string()));
+
         Ok(())
     }
 
     #[test]
     fn parse_id_and_optional_vec_payload_should_return_err_when_no_data_provided() -> Result<()> {
+        //Arrange
         let data = ";".to_string();
+
+        //Act
         let result = parse_id_and_optional_vec_payload(&data);
 
+        //Assert
         assert!(result.is_err());
         Ok(())
     }
 
     #[test]
     fn parse_string_from_vector_option_should_return_string() {
+        //Arrange
         let data: Option<&[Dim]> = Some(&[1.0, 2.0, 3.0]);
+
+        //Act
         let result = parse_string_from_vector_option(data);
 
+        //Assert
         assert_eq!(result, "1,2,3".to_string());
     }
 
     #[test]
     fn parse_string_from_vector_option_should_return_empty_string() {
+        //Arrange
         let data = None;
+
+        //Act
         let result = parse_string_from_vector_option(data);
 
+        //Assert
         assert_eq!(result, "".to_string());
     }
 }
