@@ -29,8 +29,8 @@ impl Collection {
 
         fs::create_dir(&collection_path)?;
         Wal::create(&collection_path)?;
-        Storage::create(&collection_path)?;
-        BPTree::create(&collection_path, DEFAULT_BRANCHING_FACTOR)?;
+        Storage::create(&collection_path, None)?;
+        BPTree::create(&collection_path, None)?;
 
         println!("Collection created at: {:?}", collection_path);
 
