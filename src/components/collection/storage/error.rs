@@ -1,7 +1,5 @@
 use crate::{components::wal, types::Dim};
 
-use super::strg::Record;
-
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -14,7 +12,7 @@ pub enum Error {
     },
 
     #[error(
-        "Provided vector has incorrect dimension. Expected: '{expected}', Actural: '{actual}'.\
+        "Provided vector has different dimension. Expected: '{expected}', Actural: '{actual}'.\
     Vector: '{vector:?}'"
     )]
     InvalidVectorDim {

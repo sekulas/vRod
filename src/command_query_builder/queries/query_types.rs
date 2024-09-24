@@ -19,7 +19,7 @@ impl ListCollectionsQuery {
 }
 
 impl Query for ListCollectionsQuery {
-    fn execute(&self) -> Result<()> {
+    fn execute(&mut self) -> Result<()> {
         let entries = fs::read_dir(&self.db_path)?;
         let mut any_collections: bool = false;
 
@@ -52,30 +52,13 @@ impl CQAction for ListCollectionsQuery {
     }
 }
 
-pub struct SearchQuery {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Query for SearchQuery {
-    fn execute(&self) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for SearchQuery {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
 pub struct SearchSimilarQuery {
     pub collection_name: Option<String>,
     pub arg: Option<String>,
 }
 
 impl Query for SearchSimilarQuery {
-    fn execute(&self) -> Result<()> {
+    fn execute(&mut self) -> Result<()> {
         todo!("Not implemented.")
     }
 }

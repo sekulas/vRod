@@ -13,10 +13,10 @@ pub trait CQAction {
 }
 
 pub trait Command: CQAction {
-    fn execute(&self, lsn: Lsn) -> CommandResult<()>;
-    fn rollback(&self, lsn: Lsn) -> CommandResult<()>;
+    fn execute(&mut self, lsn: Lsn) -> CommandResult<()>;
+    fn rollback(&mut self, lsn: Lsn) -> CommandResult<()>;
 }
 
 pub trait Query: CQAction {
-    fn execute(&self) -> QueryResult<()>;
+    fn execute(&mut self) -> QueryResult<()>;
 }

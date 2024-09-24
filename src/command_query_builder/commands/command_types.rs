@@ -18,7 +18,7 @@ impl TruncateWalCommand {
 }
 
 impl Command for TruncateWalCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
+    fn execute(&mut self, lsn: Lsn) -> Result<()> {
         let wal_path = self.target_path.join(WAL_FILE);
 
         fs::remove_file(&wal_path)?;
@@ -28,7 +28,7 @@ impl Command for TruncateWalCommand {
         Ok(())
     }
 
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
+    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
         Ok(())
     }
 }
@@ -39,77 +39,14 @@ impl CQAction for TruncateWalCommand {
     }
 }
 
-pub struct BulkInsertCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for BulkInsertCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for BulkInsertCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
-pub struct UpdateCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for UpdateCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for UpdateCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
-pub struct DeleteCommand {
-    pub collection_name: Option<String>,
-    pub arg: Option<String>,
-}
-
-impl Command for DeleteCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for DeleteCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}
-
 pub struct ReindexCommand {}
 
 impl Command for ReindexCommand {
-    fn execute(&self, lsn: Lsn) -> Result<()> {
+    fn execute(&mut self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 
-    fn rollback(&self, lsn: Lsn) -> Result<()> {
+    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
         todo!("Not implemented.")
     }
 }

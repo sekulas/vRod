@@ -46,6 +46,7 @@ impl DbConfig {
     }
 
     pub fn add_collection(&mut self, collection_name: &str) -> Result<(), io::Error> {
+        //TODO: Change this if possible.
         if self.collections.contains(&collection_name.to_owned()) {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,

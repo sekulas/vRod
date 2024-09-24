@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
@@ -234,6 +235,16 @@ impl Hash for Record {
         }
 
         self.payload.hash(state);
+    }
+}
+
+impl Display for Record {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Record:\nembedding: {:?},\npayload: {}",
+            self.vector, self.payload
+        )
     }
 }
 
