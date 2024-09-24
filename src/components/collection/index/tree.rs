@@ -10,7 +10,7 @@ use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::{index::types::UpdateResult, types::NONE},
+    components::collection::{get_file_name_from_path, index::types::UpdateResult, types::NONE},
     types::{Lsn, Offset, RecordId, INDEX_FILE},
 };
 
@@ -270,14 +270,16 @@ impl Hash for Node {
 }
 
 struct BTreeFile {
+    file_name: String,
     file: File,
     last_node_offset: Offset,
 }
 
 impl BTreeFile {
-    fn new(mut file: File) -> Result<Self> {
+    fn new(mut file: File, file_name: String) -> Result<Self> {
         let last_node_offset = file.seek(SeekFrom::End(0))?;
         Ok(Self {
+            file_name,
             file,
             last_node_offset,
         })
@@ -371,11 +373,13 @@ impl BPTree {
             .read(true)
             .write(true)
             .create(true)
-            .open(file_path)?;
+            .open(&file_path)?;
 
         let file_len = serialized_size(&header)?;
         file.set_len(file_len)?;
-        let file = BTreeFile::new(file)?;
+        let file_name: String = get_file_name_from_path(&file_path)?;
+
+        let file = BTreeFile::new(file, file_name)?;
 
         let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
@@ -410,7 +414,8 @@ impl BPTree {
                 }
             };
 
-        let file = BTreeFile::new(file)?;
+        let file_name = get_file_name_from_path(path)?;
+        let file = BTreeFile::new(file, file_name)?;
         let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
         let tree = Self {
@@ -823,6 +828,15 @@ impl BPTree {
         self.header.checksum = self.header.calculate_checksum();
         self.file.update_header(&self.header)
     }
+
+    pub fn get_creation_settings(&self) -> BPTreeCreationSettings {
+        BPTreeCreationSettings {
+            name: self.file.file_name.clone(),
+            branching_factor: self.header.branching_factor,
+            current_max_id: self.header.current_max_id,
+            modification_lsn: self.header.modification_lsn,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -880,7 +894,7 @@ mod tests {
 
         //Assert
         let root_offset = tree.header.root_offset;
-        let root = tree.file.read_node(&root_offset)?;
+        let root: Node = tree.file.read_node(&root_offset)?;
 
         assert_eq!(tree.header.current_max_id, 10);
         assert_eq!(tree.header.branching_factor, 3);

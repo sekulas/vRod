@@ -18,7 +18,10 @@ use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::types::{NONE, NOT_SET},
+    components::collection::{
+        get_file_name_from_path,
+        types::{NONE, NOT_SET},
+    },
     types::{Dim, Lsn, Offset, STORAGE_FILE},
 };
 
@@ -99,6 +102,7 @@ impl StorageInterface for Storage {
 }
 
 pub struct Storage {
+    file_name: String,
     file: File,
     header: StorageHeader,
 }
@@ -268,19 +272,19 @@ impl RecordHeader {
 
 impl Storage {
     pub fn create(path: &Path, custom_settings: Option<StorageCreationSettings>) -> Result<Self> {
-        let (file_path, header) = match custom_settings {
+        let (file_name, header) = match custom_settings {
             Some(settings) => {
-                let file_path = path.join(&settings.name);
                 let header =
                     StorageHeader::new(settings.modification_lsn, settings.vector_dim_amount);
-                (file_path, header)
+                (settings.name, header)
             }
             None => {
-                let file_path = path.join(STORAGE_FILE);
                 let header = StorageHeader::default();
-                (file_path, header)
+                (STORAGE_FILE.to_owned(), header)
             }
         };
+
+        let file_path = path.join(&file_name);
 
         let file = OpenOptions::new()
             .read(true)
@@ -288,7 +292,11 @@ impl Storage {
             .create(true)
             .open(file_path)?;
 
-        let mut storage = Self { file, header };
+        let mut storage = Self {
+            file_name,
+            file,
+            header,
+        };
         storage.update_header()?;
 
         Ok(storage)
@@ -317,7 +325,13 @@ impl Storage {
                 }
             };
 
-        let storage = Self { file, header };
+        let file_name = get_file_name_from_path(path)?;
+
+        let storage = Self {
+            file_name,
+            file,
+            header,
+        };
 
         Ok(storage)
     }
@@ -458,6 +472,14 @@ impl Storage {
             Err(Error::RecordNotFoundForRollback {
                 offset: self.header.backup_offset,
             })
+        }
+    }
+
+    pub fn get_creation_settings(&self) -> StorageCreationSettings {
+        StorageCreationSettings {
+            name: self.file_name.clone(),
+            modification_lsn: self.header.modification_lsn,
+            vector_dim_amount: self.header.vector_dim_amount,
         }
     }
 }
