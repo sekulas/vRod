@@ -1140,4 +1140,26 @@ mod tests {
         ));
         Ok(())
     }
+
+    #[test]
+    fn get_creation_settings_should_return_creation_settings() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let settings = StorageCreationSettings {
+            name: "custom_storage".to_string(),
+            modification_lsn: 1,
+            vector_dim_amount: 3,
+        };
+
+        let storage = Storage::create(temp_dir.path(), Some(settings))?;
+
+        //Act
+        let result = storage.get_creation_settings();
+
+        //Assert
+        assert_eq!(result.name, "custom_storage");
+        assert_eq!(result.modification_lsn, 1);
+        assert_eq!(result.vector_dim_amount, 3);
+        Ok(())
+    }
 }
