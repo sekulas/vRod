@@ -142,6 +142,8 @@ fn redo_last_command(
         last_command.rollback(lsn)?;
         wal.commit()?;
 
+        //TODO: Isn't REDO too much dangerous? Won't it be better to rollback and give the information
+        //about not performed command?
         execute_command(wal, last_command)?;
     }
     Ok(())
