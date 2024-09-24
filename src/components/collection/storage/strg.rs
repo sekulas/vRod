@@ -9,8 +9,8 @@ use std::{
 
 use super::{
     types::{
-        StorageCommand, StorageCommandResult, StorageDeleteResult, StorageInterface, StorageQuery,
-        StorageQueryResult, StorageUpdateResult,
+        StorageCommand, StorageCommandResult, StorageCreationSettings, StorageDeleteResult,
+        StorageInterface, StorageQuery, StorageQueryResult, StorageUpdateResult,
     },
     Error, Result,
 };
@@ -106,7 +106,7 @@ pub struct Storage {
 //TODO: Offset backup for storing recently deleted record?
 #[derive(Serialize, Deserialize, Clone)]
 struct StorageHeader {
-    modification_lsn: u64,
+    modification_lsn: Lsn,
     vector_dim_amount: u16,
     checksum: u64,
     backup_offset: Offset,
@@ -267,8 +267,20 @@ impl RecordHeader {
 }
 
 impl Storage {
-    pub fn create(path: &Path) -> Result<Self> {
-        let file_path = path.join(STORAGE_FILE);
+    pub fn create(path: &Path, custom_settings: Option<StorageCreationSettings>) -> Result<Self> {
+        let (file_path, header) = match custom_settings {
+            Some(settings) => {
+                let file_path = path.join(&settings.name);
+                let header =
+                    StorageHeader::new(settings.modification_lsn, settings.vector_dim_amount);
+                (file_path, header)
+            }
+            None => {
+                let file_path = path.join(STORAGE_FILE);
+                let header = StorageHeader::default();
+                (file_path, header)
+            }
+        };
 
         let file = OpenOptions::new()
             .read(true)
@@ -276,7 +288,6 @@ impl Storage {
             .create(true)
             .open(file_path)?;
 
-        let header = StorageHeader::default();
         let mut storage = Self { file, header };
         storage.update_header()?;
 
@@ -464,7 +475,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path().join(STORAGE_FILE);
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -487,11 +498,30 @@ mod tests {
     }
 
     #[test]
+    fn create_with_custom_settings_should_create_storage_with_custom_settings() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let settings = StorageCreationSettings {
+            name: "custom_storage".to_string(),
+            modification_lsn: 1,
+            vector_dim_amount: 3,
+        };
+
+        //Act
+        let storage = Storage::create(temp_dir.path(), Some(settings))?;
+
+        //Assert
+        assert_eq!(storage.header.modification_lsn, 1);
+        assert_eq!(storage.header.vector_dim_amount, 3);
+        Ok(())
+    }
+
+    #[test]
     fn load_should_define_header_with_default_values_when_no_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path().join(STORAGE_FILE);
-        let storage = Storage::create(temp_dir.path())?;
+        let storage = Storage::create(temp_dir.path(), None)?;
         let checksum = storage.header.checksum;
 
         let mut file = File::open(&path)?;
@@ -513,7 +543,7 @@ mod tests {
     fn insert_should_store_record_and_return_offset() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -549,7 +579,7 @@ mod tests {
     fn insert_two_records_should_store_two_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -607,7 +637,7 @@ mod tests {
     fn inserting_vecs_with_different_dim_amounts_should_return_error() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
@@ -640,7 +670,7 @@ mod tests {
     fn bulk_insert_two_records_should_store_two_record() -> Result<()> {
         // Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<f32> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let vector2: Vec<f32> = vec![2.0, 3.0, 4.0];
@@ -692,7 +722,7 @@ mod tests {
     fn bulk_insert_empty_array_should_return_empty_offsets() -> Result<()> {
         // Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
 
         // Act
         let result = storage.perform_command(
@@ -717,7 +747,7 @@ mod tests {
     fn search_record_should_return_record() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -753,7 +783,7 @@ mod tests {
     {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let record = Record::new(2, &vector, payload);
@@ -794,7 +824,7 @@ mod tests {
     fn delete_record_should_delete_record() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -837,7 +867,7 @@ mod tests {
     fn update_record_should_update_record() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
@@ -890,7 +920,7 @@ mod tests {
     fn updating_vec_to_different_dim_amount_should_return_error() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let vector2: Vec<Dim> = vec![2.0, 3.0, 4.0, 5.0];
@@ -959,7 +989,7 @@ mod tests {
     fn rollback_update_should_rollback_update() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let new_vector: Vec<Dim> = vec![2.0, 3.0, 4.0];
@@ -1008,7 +1038,7 @@ mod tests {
     fn rollback_delete_should_rollback_delete() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
 
@@ -1048,7 +1078,7 @@ mod tests {
     fn rollback_should_throw_error_when_there_is_no_opeartions_performed() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
 
         //Act
         let result = storage.perform_rollback(1);
@@ -1062,7 +1092,7 @@ mod tests {
     fn rollback_should_throw_error_when_trying_to_rollback_not_last_opeartion() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut storage = Storage::create(temp_dir.path())?;
+        let mut storage = Storage::create(temp_dir.path(), None)?;
         let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
         let payload = "test";
         let lsn = 1;
