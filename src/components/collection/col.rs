@@ -577,4 +577,84 @@ mod tests {
         assert_eq!(record, CollectionSearchResult::FoundRecord(expected_record));
         Ok(())
     }
+
+    #[test]
+    fn reindex_should_make_idx_empty_if_all_records_deleted() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+        col.delete(1, 2)?;
+
+        //Act
+        col.reindex(3)?;
+
+        //Assert
+        let records = col.search_all()?;
+        assert_eq!(records.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn reindex_should_reindex_all_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+        let vector2 = vec![4.0, 5.0, 6.0];
+        let payload2 = "test2";
+        col.insert(&vector2, payload2, 2)?;
+
+        //Act
+        col.reindex(3)?;
+
+        //Assert
+        let records = col.search_all()?;
+        assert_eq!(records.len(), 2);
+        assert!(records
+            .iter()
+            .any(|(_, record)| record.vector == vector && record.payload == payload));
+        assert!(records
+            .iter()
+            .any(|(_, record)| record.vector == vector2 && record.payload == payload2));
+        Ok(())
+    }
+
+    #[test]
+    fn reindex_should_leave_only_not_deleted_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let collection_name = "test";
+        Collection::create(path, collection_name)?;
+        let mut col = Collection::load(&path.join(collection_name))?;
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = "test";
+        col.insert(&vector, payload, 1)?;
+        let vector2 = vec![4.0, 5.0, 6.0];
+        let payload2 = "test2";
+        col.insert(&vector2, payload2, 2)?;
+        col.delete(1, 3)?;
+
+        //Act
+        col.reindex(4)?;
+
+        //Assert
+        let records = col.search_all()?;
+        assert_eq!(records.len(), 1);
+        assert!(records
+            .iter()
+            .any(|(_, record)| record.vector == vector2 && record.payload == payload2));
+        Ok(())
+    }
 }
