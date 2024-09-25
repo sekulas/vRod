@@ -350,6 +350,23 @@ mod tests {
         Ok(result)
     }
 
+    fn search_all(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("SEARCHALL")
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
     fn update(
         temp_dir: &tempfile::TempDir,
         db_name: &str,
@@ -894,6 +911,33 @@ mod tests {
             Error::DatabaseDoesNotExist(specified_path_str).to_string(),
         ));
 
+        Ok(())
+    }
+
+    #[test]
+    fn search_all_should_return_all_embeddings_from_collection() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let inserted_data_2 = "4.0,5.0,6.0;payload2";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data_2)?;
+
+        //Act
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("payload"))
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("payload2"));
         Ok(())
     }
 

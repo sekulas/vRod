@@ -1,8 +1,7 @@
 use super::Result;
 use crate::{
-    command_query_builder::{CQAction, Query},
-    components::collection::types::CollectionSearchResult,
-    components::collection::Collection,
+    command_query_builder::{queries::dto::RecordDTO, CQAction, Query},
+    components::collection::{types::CollectionSearchResult, Collection},
     types::RecordId,
 };
 
@@ -26,7 +25,7 @@ impl Query for SearchQuery {
 
         match result {
             CollectionSearchResult::FoundRecord(record) => {
-                println!("{}", record);
+                println!("{}", RecordDTO(&self.record_id, &record));
             }
             CollectionSearchResult::NotFound => {
                 println!("Record not found.");

@@ -6,6 +6,7 @@ mod error;
 pub use error::{Error, Result};
 mod index;
 mod storage;
+pub use storage::strg::Record;
 pub mod types;
 
 pub fn get_file_name_from_path(path: &Path) -> std::io::Result<String> {

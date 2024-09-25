@@ -242,16 +242,6 @@ impl Hash for Record {
     }
 }
 
-impl Display for Record {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Record:\nembedding: {:?},\npayload: {}",
-            self.vector, self.payload
-        )
-    }
-}
-
 #[cfg_attr(test, derive(PartialEq, Debug))]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RecordHeader {

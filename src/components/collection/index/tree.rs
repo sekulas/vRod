@@ -301,10 +301,11 @@ impl BTreeFile {
         Ok(())
     }
 
+    //TODO: ### Leaves are not next to each other is that okay?
     pub fn write_nodes(&mut self, nodes: &HashMap<Offset, Node>) -> Result<()> {
         self.alloc_space_for_nodes()?;
 
-        //TODO: ### Good to iterate over in desc order? Or sort by offset?
+        //TODO: ### Good to iterate over in desc order when writing to disc? Or sort by offset?
         let mut offsets: Vec<&Offset> = nodes.keys().collect();
         offsets.sort();
 
