@@ -38,21 +38,3 @@ impl CQAction for TruncateWalCommand {
         "TRUNCATEWAL".to_string()
     }
 }
-
-pub struct ReindexCommand {}
-
-impl Command for ReindexCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
-    }
-}
-
-impl CQAction for ReindexCommand {
-    fn to_string(&self) -> String {
-        todo!();
-    }
-}

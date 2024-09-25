@@ -205,6 +205,7 @@ mod tests {
         parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M,
         NO_RECORD_ID_PROVIDED_ERR_M,
     };
+    use predicates::prelude::PredicateBooleanExt;
     use types::{INDEX_FILE, STORAGE_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
@@ -399,6 +400,23 @@ mod tests {
             .arg("DELETE")
             .arg("--command-arg")
             .arg(data)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
+    }
+
+    fn reindex(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("REINDEX")
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")
@@ -1254,6 +1272,36 @@ mod tests {
             db_name,
             Some(collection_name)
         )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reindex_should_remove_deleted_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, "1.0,2.0,3.0;payload")?;
+        insert(&temp_dir, db_name, collection_name, "4.0,5.0,6.0;payload2")?;
+        delete(&temp_dir, db_name, collection_name, "2")?;
+
+        //Act
+        let result = reindex(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success();
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("payload"))
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0").not())
+            .stdout(predicates::str::contains("payload2").not());
 
         Ok(())
     }
