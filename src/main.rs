@@ -142,7 +142,7 @@ fn redo_last_command(
         last_command.rollback(lsn)?;
         wal.commit()?;
 
-        //TODO: Isn't REDO too much dangerous? Won't it be better to rollback and give the information
+        //TODO: ### Isn't REDO too much dangerous? Won't it be better to rollback and give the information
         //about not performed command?
         execute_command(wal, last_command)?;
     }
@@ -792,6 +792,8 @@ mod tests {
         Ok(())
     }
 
+    //TODO: Large BulkInsert tests.
+
     #[test]
     fn search_should_return_embedding_when_it_exists() -> Result<()> {
         //Arrange
@@ -914,7 +916,7 @@ mod tests {
         //Assert
         result.success();
 
-        let result = search(&temp_dir, db_name, collection_name, "1")?; //TODO: FIND THE PROBLEM
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
             .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
@@ -1025,7 +1027,7 @@ mod tests {
         Ok(())
     }
 
-    //TODO: Czy testy wygenerowane przez Copilota to problem? Jeden napisałem ,a potem generowały się same.
+    //TODO: ### Czy testy wygenerowane przez Copilota to problem? Jeden napisałem ,a potem generowały się same.
     #[test]
     fn update_should_not_update_record_2_args_provided() -> Result<()> {
         //Arrange

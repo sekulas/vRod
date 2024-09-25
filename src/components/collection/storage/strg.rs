@@ -102,7 +102,7 @@ impl StorageInterface for Storage {
 }
 
 pub struct Storage {
-    file_name: String,
+    pub file_name: String,
     file: File,
     header: StorageHeader,
 }

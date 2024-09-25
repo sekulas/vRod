@@ -150,7 +150,7 @@ impl Hash for BPTreeHeader {
 
 pub struct BPTree {
     header: BPTreeHeader,
-    file: BTreeFile,
+    pub file: BTreeFile,
     modified_nodes: HashMap<Offset, Node>,
 }
 
@@ -269,8 +269,8 @@ impl Hash for Node {
     }
 }
 
-struct BTreeFile {
-    file_name: String,
+pub struct BTreeFile {
+    pub file_name: String,
     file: File,
     last_node_offset: Offset,
 }
@@ -304,7 +304,7 @@ impl BTreeFile {
     pub fn write_nodes(&mut self, nodes: &HashMap<Offset, Node>) -> Result<()> {
         self.alloc_space_for_nodes()?;
 
-        //TODO: Good to iterate over in desc order? Or sort by offset?
+        //TODO: ### Good to iterate over in desc order? Or sort by offset?
         let mut offsets: Vec<&Offset> = nodes.keys().collect();
         offsets.sort();
 

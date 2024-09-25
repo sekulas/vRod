@@ -103,7 +103,7 @@ impl Wal {
         let header: WalHeader = match deserialize_from(&mut BufReader::new(&file)) {
             Ok(header) => header,
             Err(_) => {
-                let wal = Wal::recreate_wal(path)?; //TODO: Cannot deserialize header -> Read only state of collection or Database?
+                let wal = Wal::recreate_wal(path)?; //TODO: ### Cannot deserialize header -> Read only state of collection or Database?
                 return Ok(WalType::Consistent(wal));
             }
         };

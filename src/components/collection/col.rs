@@ -1,7 +1,6 @@
-use super::index::types::{
-    Index, IndexCommand, IndexCommandResult, IndexQuery, IndexQueryResult, DEFAULT_BRANCHING_FACTOR,
-};
+use super::index::types::{Index, IndexCommand, IndexCommandResult, IndexQuery, IndexQueryResult};
 
+use super::storage::strg::Record;
 use super::storage::types::{
     StorageCommand, StorageCommandResult, StorageInterface, StorageQuery, StorageQueryResult,
 };
@@ -16,9 +15,11 @@ use super::{
 };
 use crate::components::wal::Wal;
 use crate::types::{Dim, Lsn, RecordId, INDEX_FILE, STORAGE_FILE};
+use std::path::PathBuf;
 use std::{fs, path::Path};
 
 pub struct Collection {
+    collection_path: PathBuf,
     storage: Storage,
     index: BPTree,
 }
@@ -43,7 +44,11 @@ impl Collection {
         let storage = Storage::load(&collection_path.join(STORAGE_FILE))?;
         let index = BPTree::load(&collection_path.join(INDEX_FILE))?;
 
-        Ok(Self { storage, index })
+        Ok(Self {
+            collection_path,
+            storage,
+            index,
+        })
     }
 
     pub fn insert(
@@ -123,6 +128,31 @@ impl Collection {
             IndexQueryResult::NotFound => Ok(CollectionSearchResult::NotFound),
             _ => Err(Error::Unexpected(
                 "Collection: Search returned unexpected result.",
+            )),
+        }
+    }
+
+    pub fn search_all(&mut self) -> Result<Vec<(RecordId, Record)>> {
+        let query_result = self.index.perform_query(IndexQuery::SearchAll)?;
+
+        match query_result {
+            IndexQueryResult::FoundKeysAndValues(keys_and_values) => {
+                let mut records = Vec::with_capacity(keys_and_values.len());
+
+                for (record_id, offset) in keys_and_values {
+                    let record = self
+                        .storage
+                        .perform_query(StorageQuery::Search { offset })?;
+
+                    if let StorageQueryResult::FoundRecord { record } = record {
+                        records.push((record_id, record));
+                    }
+                }
+
+                Ok(records)
+            }
+            _ => Err(Error::Unexpected(
+                "Collection: Search all returned unexpected result.",
             )),
         }
     }
@@ -222,6 +252,86 @@ impl Collection {
 
     pub fn rollback_delete_command(&mut self, lsn: Lsn) -> Result<()> {
         self.storage.perform_rollback(lsn)?;
+        Ok(())
+    }
+
+    pub fn reindex(&mut self, lsn: Lsn) -> Result<()> {
+        let records = self.search_all()?;
+
+        let (mut new_storage, mut new_index) = self.prepare_new_storage_and_index(lsn)?;
+
+        let vecs_and_payloads_refs: Vec<(&[Dim], &str)> = records
+            .iter()
+            .map(|(_, record)| (record.vector.as_slice(), record.payload.as_str()))
+            .collect();
+
+        let strg_result = new_storage.perform_command(
+            StorageCommand::BulkInsert {
+                vectors_and_payloads: &vecs_and_payloads_refs,
+            },
+            lsn,
+        )?;
+
+        let new_offsets =
+            match strg_result {
+                StorageCommandResult::BulkInserted { offsets } => offsets,
+                _ => return Err(Error::Unexpected(
+                    "Collection: Reindex - insertion to new storage returned unexpected result.",
+                )),
+            };
+
+        let idx_result = new_index.perform_command(IndexCommand::BulkInsert(new_offsets), lsn)?;
+
+        match idx_result {
+            IndexCommandResult::BulkInserted => {
+                self.swap_storage_and_index(new_storage, new_index)?;
+            }
+            _ => {
+                return Err(Error::Unexpected(
+                    "Collection: Reindex - insertion to new index returned unexpected result.",
+                ))
+            }
+        }
+
+        Ok(())
+    }
+
+    fn prepare_new_storage_and_index(&self, lsn: Lsn) -> Result<(Storage, BPTree)> {
+        let storage_name = format!("{STORAGE_FILE}_{}", lsn);
+        let mut storage_settings = self.storage.get_creation_settings();
+        storage_settings.name = storage_name;
+        let new_storage: Storage = Storage::create(&self.collection_path, Some(storage_settings))?;
+
+        let index_name = format!("{INDEX_FILE}_{}", lsn);
+        let mut index_settings = self.index.get_creation_settings();
+        index_settings.name = index_name;
+        let new_index = BPTree::create(&self.collection_path, Some(index_settings))?;
+
+        Ok((new_storage, new_index))
+    }
+
+    fn swap_storage_and_index(&mut self, new_storage: Storage, new_index: BPTree) -> Result<()> {
+        let cur_strg_path = self.collection_path.join(STORAGE_FILE);
+        let cur_idx_path = self.collection_path.join(INDEX_FILE);
+
+        let bak_strg_path = self.collection_path.join(format!("{STORAGE_FILE}.bak"));
+        let bak_idx_path = self.collection_path.join(format!("{INDEX_FILE}.bak"));
+
+        let new_strg_path = self.collection_path.join(&new_storage.file_name);
+        let new_idx_path = self.collection_path.join(&new_index.file.file_name);
+
+        fs::rename(&cur_strg_path, &bak_strg_path)?;
+        fs::rename(&cur_idx_path, &bak_idx_path)?;
+
+        fs::rename(new_strg_path, &cur_strg_path)?;
+        fs::rename(new_idx_path, &cur_idx_path)?;
+
+        fs::remove_file(&bak_strg_path)?;
+        fs::remove_file(&bak_idx_path)?;
+
+        self.storage = new_storage;
+        self.index = new_index;
+
         Ok(())
     }
 }
