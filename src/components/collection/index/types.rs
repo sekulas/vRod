@@ -24,6 +24,13 @@ pub trait Index {
     fn perform_rollback(&mut self, lsn: Lsn) -> Result<()>;
 }
 
+pub struct BPTreeCreationSettings {
+    pub name: String,
+    pub branching_factor: NodeIdx,
+    pub modification_lsn: Lsn,
+    pub current_max_id: RecordId,
+}
+
 pub enum IndexCommand {
     BulkInsert(Vec<Offset>),
     Insert(Offset),

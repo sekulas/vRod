@@ -12,6 +12,11 @@ pub trait StorageInterface {
     fn perform_query(&mut self, query: StorageQuery) -> Result<StorageQueryResult>;
     fn perform_rollback(&mut self, lsn: Lsn) -> Result<()>;
 }
+pub struct StorageCreationSettings {
+    pub name: String,
+    pub modification_lsn: Lsn,
+    pub vector_dim_amount: u16,
+}
 pub enum StorageCommand<'a> {
     BulkInsert {
         vectors_and_payloads: &'a [(&'a [Dim], &'a str)],

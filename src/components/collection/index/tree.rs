@@ -1,8 +1,8 @@
 use super::{
     types::{
-        FindKeyResult, Index, IndexCommand, IndexCommandResult, IndexQuery, IndexQueryResult,
-        IndexUpdateResult, InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR, EMPTY_CHILD_SLOT,
-        EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
+        BPTreeCreationSettings, FindKeyResult, Index, IndexCommand, IndexCommandResult, IndexQuery,
+        IndexQueryResult, IndexUpdateResult, InsertionResult, NodeIdx, DEFAULT_BRANCHING_FACTOR,
+        EMPTY_CHILD_SLOT, EMPTY_KEY_SLOT, FIRST_VALUE_SLOT, HIGHEST_KEY_SLOT, SERIALIZED_NODE_SIZE,
     },
     Error, Result,
 };
@@ -10,7 +10,7 @@ use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::{index::types::UpdateResult, types::NONE},
+    components::collection::{get_file_name_from_path, index::types::UpdateResult, types::NONE},
     types::{Lsn, Offset, RecordId, INDEX_FILE},
 };
 
@@ -93,12 +93,12 @@ struct BPTreeHeader {
 }
 
 impl BPTreeHeader {
-    fn new(branching_factor: u16) -> Result<Self> {
+    fn new(branching_factor: u16, current_max_id: RecordId, modification_lsn: Lsn) -> Result<Self> {
         let mut header = Self {
             branching_factor,
-            current_max_id: 0,
-            last_max_id: 0,
-            modification_lsn: 0,
+            current_max_id,
+            last_max_id: current_max_id,
+            modification_lsn,
             checksum: 0,
             root_offset: 0,
             last_root_offset: 0,
@@ -114,6 +114,10 @@ impl BPTreeHeader {
         }
     }
 
+    fn default() -> Result<Self> {
+        Self::new(DEFAULT_BRANCHING_FACTOR, 0, 0)
+    }
+
     fn calculate_checksum(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -122,7 +126,7 @@ impl BPTreeHeader {
 
     fn define_header(file: &mut File) -> Result<Self> {
         //TODO: Find MAX_ID in tree
-        let mut header = BPTreeHeader::new(DEFAULT_BRANCHING_FACTOR)?;
+        let mut header = BPTreeHeader::default()?;
         let checksum = header.calculate_checksum();
         header.checksum = checksum;
 
@@ -146,7 +150,7 @@ impl Hash for BPTreeHeader {
 
 pub struct BPTree {
     header: BPTreeHeader,
-    file: BTreeFile,
+    pub file: BTreeFile,
     modified_nodes: HashMap<Offset, Node>,
 }
 
@@ -265,15 +269,17 @@ impl Hash for Node {
     }
 }
 
-struct BTreeFile {
+pub struct BTreeFile {
+    pub file_name: String,
     file: File,
     last_node_offset: Offset,
 }
 
 impl BTreeFile {
-    fn new(mut file: File) -> Result<Self> {
+    fn new(mut file: File, file_name: String) -> Result<Self> {
         let last_node_offset = file.seek(SeekFrom::End(0))?;
         Ok(Self {
+            file_name,
             file,
             last_node_offset,
         })
@@ -295,10 +301,11 @@ impl BTreeFile {
         Ok(())
     }
 
+    //TODO: ### Leaves are not next to each other is that okay?
     pub fn write_nodes(&mut self, nodes: &HashMap<Offset, Node>) -> Result<()> {
         self.alloc_space_for_nodes()?;
 
-        //TODO: Good to iterate over in desc order? Or sort by offset?
+        //TODO: ### Good to iterate over in desc order when writing to disc? Or sort by offset?
         let mut offsets: Vec<&Offset> = nodes.keys().collect();
         offsets.sort();
 
@@ -345,20 +352,35 @@ impl BTreeFile {
 }
 
 impl BPTree {
-    pub fn create(path: &Path, branching_factor: u16) -> Result<Self> {
-        let file_path = path.join(INDEX_FILE);
+    pub fn create(path: &Path, custom_settings: Option<BPTreeCreationSettings>) -> Result<Self> {
+        let (file_path, header) = match custom_settings {
+            Some(settings) => {
+                let file_path = path.join(&settings.name);
+                let header = BPTreeHeader::new(
+                    settings.branching_factor,
+                    settings.current_max_id,
+                    settings.modification_lsn,
+                )?;
+                (file_path, header)
+            }
+            None => {
+                let file_path = path.join(INDEX_FILE);
+                let header = BPTreeHeader::default()?;
+                (file_path, header)
+            }
+        };
 
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(file_path)?;
-
-        let header = BPTreeHeader::new(branching_factor)?;
+            .open(&file_path)?;
 
         let file_len = serialized_size(&header)?;
         file.set_len(file_len)?;
-        let file = BTreeFile::new(file)?;
+        let file_name: String = get_file_name_from_path(&file_path)?;
+
+        let file = BTreeFile::new(file, file_name)?;
 
         let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
@@ -393,7 +415,8 @@ impl BPTree {
                 }
             };
 
-        let file = BTreeFile::new(file)?;
+        let file_name = get_file_name_from_path(path)?;
+        let file = BTreeFile::new(file, file_name)?;
         let modified_nodes: HashMap<Offset, Node> = HashMap::new();
 
         let tree = Self {
@@ -806,6 +829,15 @@ impl BPTree {
         self.header.checksum = self.header.calculate_checksum();
         self.file.update_header(&self.header)
     }
+
+    pub fn get_creation_settings(&self) -> BPTreeCreationSettings {
+        BPTreeCreationSettings {
+            name: self.file.file_name.clone(),
+            branching_factor: self.header.branching_factor,
+            current_max_id: self.header.current_max_id,
+            modification_lsn: self.header.modification_lsn,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -818,10 +850,9 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
 
         //Act
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         //Assert
         let root_offset = tree.header.root_offset;
@@ -846,12 +877,50 @@ mod tests {
     }
 
     #[test]
+    fn create_with_custom_settings_should_create_tree_with_custom_settings() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let custom_settings = BPTreeCreationSettings {
+            name: "custom_tree".to_string(),
+            branching_factor: 3,
+            current_max_id: 10,
+            modification_lsn: 5,
+        };
+
+        //Act
+        let mut tree = BPTree::create(path, Some(custom_settings))?;
+
+        //Assert
+        let root_offset = tree.header.root_offset;
+        let root: Node = tree.file.read_node(&root_offset)?;
+
+        assert_eq!(tree.header.current_max_id, 10);
+        assert_eq!(tree.header.branching_factor, 3);
+        assert_eq!(tree.header.modification_lsn, 5);
+        assert_eq!(
+            tree.header.root_offset,
+            serialized_size(&tree.header)? as Offset
+        );
+        assert!(root.is_leaf);
+        assert_eq!(
+            root.keys,
+            vec![EMPTY_KEY_SLOT; (tree.header.branching_factor - 1) as usize]
+        );
+        assert_eq!(
+            root.values,
+            vec![EMPTY_CHILD_SLOT; tree.header.branching_factor as usize]
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn load_should_load_tree_correctly() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let tree = BPTree::create(path, branching_factor)?;
+        let tree = BPTree::create(path, None)?;
 
         //Act
         let loaded_tree = BPTree::load(&path.join(INDEX_FILE))?;
@@ -883,8 +952,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         tree.perform_command(IndexCommand::Insert(1), 1)?;
         tree.perform_command(IndexCommand::Insert(2), 2)?;
@@ -916,8 +984,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let value = 123;
 
         //Act
@@ -954,8 +1021,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let expected_value = 1234;
 
         for value in [1, 2, 3, 4, 5, expected_value, 7] {
@@ -976,8 +1042,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let expected_value = 1234;
 
         for value in [expected_value, 2, 3, 4, 5, 6, 7] {
@@ -998,8 +1063,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         for value in 1..=7 {
             tree.perform_command(IndexCommand::Insert(value), value)?;
@@ -1019,8 +1083,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         //Act
         tree.perform_command(IndexCommand::Insert(1), 1)?;
@@ -1036,8 +1099,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         //Act
         tree.perform_command(IndexCommand::Insert(1), 1)?;
@@ -1054,8 +1116,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let old_root_offset = tree.header.root_offset;
 
         //Act
@@ -1098,8 +1159,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         //Act
         for value in 1..=7 {
@@ -1145,8 +1205,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let old_root_offset = tree.header.root_offset;
         let values = vec![1, 2, 3];
 
@@ -1188,8 +1247,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         let values = vec![1, 2, 3, 4, 5, 6, 7];
 
         //Act
@@ -1236,15 +1294,14 @@ mod tests {
 
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
         for &value in &values {
             tree.perform_command(IndexCommand::Insert(value), 1)?;
         }
 
         let temp_dir_bulk = tempfile::tempdir()?;
         let path_bulk = temp_dir_bulk.path();
-        let mut tree_bulk = BPTree::create(path_bulk, branching_factor)?;
+        let mut tree_bulk = BPTree::create(path_bulk, None)?;
 
         //Act
         tree_bulk.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1263,8 +1320,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         tree.perform_command(IndexCommand::Insert(1), 1)?;
         tree.perform_command(IndexCommand::Insert(2), 2)?;
@@ -1285,8 +1341,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         tree.perform_command(IndexCommand::Insert(1), 1)?;
         tree.perform_command(IndexCommand::Insert(2), 2)?;
@@ -1305,8 +1360,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1331,8 +1385,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1357,8 +1410,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1383,8 +1435,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         //Act
         let result = tree.perform_query(IndexQuery::SearchAll)?;
@@ -1400,8 +1451,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1425,8 +1475,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1450,8 +1499,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4, 5, 6, 7];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1479,8 +1527,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1507,8 +1554,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1531,8 +1577,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4];
         let values2 = vec![5, 6, 7];
@@ -1560,8 +1605,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.path();
-        let branching_factor = 3;
-        let mut tree = BPTree::create(path, branching_factor)?;
+        let mut tree = BPTree::create(path, None)?;
 
         let values = vec![1, 2, 3, 4];
         tree.perform_command(IndexCommand::BulkInsert(values), 1)?;
@@ -1579,6 +1623,30 @@ mod tests {
         );
         assert_eq!(tree.header.current_max_id, 4);
 
+        Ok(())
+    }
+
+    #[test]
+    fn get_creation_settings_should_return_settings_of_tree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let settings = BPTreeCreationSettings {
+            name: "test_tree".to_string(),
+            branching_factor: 3,
+            current_max_id: 10,
+            modification_lsn: 5,
+        };
+        let tree = BPTree::create(path, Some(settings))?;
+
+        //Act
+        let result = tree.get_creation_settings();
+
+        //Assert
+        assert_eq!(result.name, "test_tree");
+        assert_eq!(result.branching_factor, 3);
+        assert_eq!(result.current_max_id, 10);
+        assert_eq!(result.modification_lsn, 5);
         Ok(())
     }
 }
