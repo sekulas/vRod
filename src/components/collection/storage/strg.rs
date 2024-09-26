@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},

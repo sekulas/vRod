@@ -827,8 +827,6 @@ mod tests {
         Ok(())
     }
 
-    //TODO: Large BulkInsert tests.
-
     #[test]
     fn search_should_return_embedding_when_it_exists() -> Result<()> {
         //Arrange
@@ -1302,6 +1300,278 @@ mod tests {
             .stdout(predicates::str::contains("payload"))
             .stdout(predicates::str::contains("4.0, 5.0, 6.0").not())
             .stdout(predicates::str::contains("payload2").not());
+
+        Ok(())
+    }
+
+    //Load tests
+
+    #[cfg(feature = "load_tests")]
+    fn prepare_data_file(
+        temp_dir: &tempfile::TempDir,
+        records_count: usize,
+        dimensions: usize,
+    ) -> Result<PathBuf> {
+        let mut file_content = String::new();
+        for i in 0..records_count {
+            let data = format!(
+                "{};test_payload\n",
+                vec![i as f32; dimensions]
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            file_content.push_str(&data);
+        }
+        let file_path = temp_dir
+            .path()
+            .join(format!("test_data_{}_{}.txt", records_count, dimensions));
+        std::fs::write(&file_path, file_content)?;
+        Ok(file_path)
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn bulk_insert_file_1k_dense_384_dim_vectos_should_success() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 1000, 384)?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in bulk_insert_file_1k_dense_384_dim_vectos_should_success",
+            duration
+        );
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let start = std::time::Instant::now();
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!("---search time {:?} s for 1k records", duration);
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 1000"));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn bulk_insert_file_10k_dense_384_dim_vectors_should_success() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 10_000, 384)?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in bulk_insert_file_10k_dense_384_dim_vectors_should_success",
+            duration
+        );
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let start = std::time::Instant::now();
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!("---search time {:?} s for 10k records", duration,);
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 10000"));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn bulk_insert_file_100k_dense_384_dim_vectors_should_success() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 100_000, 384)?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in bulk_insert_file_100k_dense_384_dim_vectors_should_success",
+            duration
+        );
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let start = std::time::Instant::now();
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!("---search time {:?} s for 100k records", duration);
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 100000"));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn reindex_should_correctly_reindex_1k_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 1000, 384)?;
+
+        bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        delete(&temp_dir, db_name, collection_name, "2")?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = reindex(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in reindex_should_correctly_reindex_1k_records",
+            duration
+        );
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 999"));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn reindex_should_correctly_reindex_10k_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 10_000, 384)?;
+
+        bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        delete(&temp_dir, db_name, collection_name, "2")?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = reindex(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in reindex_should_correctly_reindex_10k_records",
+            duration
+        );
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 9999"));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "load_tests")]
+    #[test]
+    fn reindex_should_correctly_reindex_100k_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        let file_path = prepare_data_file(&temp_dir, 100_000, 384)?;
+
+        bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
+        delete(&temp_dir, db_name, collection_name, "2")?;
+
+        //Act
+        let start = std::time::Instant::now();
+        let result = reindex(&temp_dir, db_name, collection_name)?;
+        let duration = start.elapsed().as_secs();
+        println!(
+            "---act time {:?} s in reindex_should_correctly_reindex_100k_records",
+            duration
+        );
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        result
+            .success()
+            .stdout(predicates::str::contains("Found 99999"));
 
         Ok(())
     }
