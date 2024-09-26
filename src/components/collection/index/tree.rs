@@ -517,6 +517,7 @@ impl BPTree {
         }
     }
 
+    //TODO: ### Implement bulk insert in a faster way?
     fn bulk_insert(&mut self, values: &[Offset]) -> Result<()> {
         for value in values {
             self.insert(*value)?;
