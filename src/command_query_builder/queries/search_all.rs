@@ -16,6 +16,7 @@ impl SearchAllQuery {
 impl Query for SearchAllQuery {
     fn execute(&mut self) -> Result<()> {
         let result = self.collection.search_all()?;
+        println!("Found {} records.", result.len());
         println!("{}", RecordDTOList(result));
         Ok(())
     }
