@@ -34,7 +34,8 @@ impl Command for BulkInsertCommand {
     }
 
     fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        todo!("Not implemented.")
+        self.collection.rollback_insertion_like_command(lsn)?;
+        Ok(())
     }
 }
 

@@ -1,10 +1,7 @@
-use std::fmt;
-
 use super::Result;
 use crate::{
     command_query_builder::{queries::dto::RecordDTOList, CQAction, Query},
-    components::collection::{Collection, Record},
-    types::RecordId,
+    components::collection::Collection,
 };
 pub struct SearchAllQuery {
     collection: Collection,

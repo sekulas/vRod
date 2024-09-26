@@ -24,7 +24,7 @@ impl Builder for CQBuilder {
             "CREATE" => build_create_collection_command(target_path, arg),
             "DROP" => build_drop_collection_command(target_path, arg),
             "LISTCOLLECTIONS" => build_list_collections_query(target_path),
-            "TRUNCATEWAL" => build_truncate_wal_command(target_path),
+            // "TRUNCATEWAL" => build_truncate_wal_command(target_path),
             "INSERT" => build_insert_command(target_path, arg),
             "SEARCH" => build_search_query(target_path, arg),
             "SEARCHALL" => build_search_all_query(target_path),
@@ -85,11 +85,11 @@ fn build_list_collections_query(target_path: &Path) -> Result<CQType> {
     ))))
 }
 
-fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
-    Ok(CQType::Command(Box::new(TruncateWalCommand::new(
-        target_path,
-    ))))
-}
+// fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
+//     Ok(CQType::Command(Box::new(TruncateWalCommand::new(
+//         target_path,
+//     ))))
+// }
 
 fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Result<CQType> {
     let collection_name = target_path
