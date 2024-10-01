@@ -425,6 +425,25 @@ mod tests {
         Ok(result)
     }
 
+    fn truncatewal(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: Option<&str>,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("TRUNCATEWAL")
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name));
+
+        if let Some(collection_name) = collection_name {
+            result.arg("--collection").arg(collection_name);
+        }
+
+        Ok(result.assert())
+    }
+
     #[test]
     fn init_database_success() -> Result<()> {
         //Arrange
@@ -1304,6 +1323,55 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn truncate_databases_wal_should_result_in_consistant_wal() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, "test_col")?;
+        create_collection(&temp_dir, db_name, "test_col2")?;
+
+        //Act
+        let result = truncatewal(&temp_dir, db_name, None)?;
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn truncate_collections_wal_should_result_in_consistant_wal() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, "1.0,2.0,3.0;payload")?;
+        insert(&temp_dir, db_name, collection_name, "4.0,5.0,6.0;payload2")?;
+        delete(&temp_dir, db_name, collection_name, "2")?;
+
+        //Act
+        let result = truncatewal(&temp_dir, db_name, Some(collection_name))?;
+
+        //Assert
+        result.success();
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
     //Load tests
 
     #[cfg(feature = "load_tests")]
@@ -1351,6 +1419,7 @@ mod tests {
             "---act time {:?} s in bulk_insert_file_1k_dense_384_dim_vectos_should_success",
             duration
         );
+
         //Assert
         result.success();
 
@@ -1367,7 +1436,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 1000"));
-
         Ok(())
     }
 
@@ -1408,7 +1476,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 10000"));
-
         Ok(())
     }
 
@@ -1419,7 +1486,6 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
         let file_path = prepare_data_file(&temp_dir, 100_000, 384)?;
@@ -1449,7 +1515,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 100000"));
-
         Ok(())
     }
 
@@ -1464,7 +1529,6 @@ mod tests {
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
         let file_path = prepare_data_file(&temp_dir, 1000, 384)?;
-
         bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
         delete(&temp_dir, db_name, collection_name, "2")?;
 
@@ -1490,7 +1554,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 999"));
-
         Ok(())
     }
 
@@ -1505,7 +1568,6 @@ mod tests {
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
         let file_path = prepare_data_file(&temp_dir, 10_000, 384)?;
-
         bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
         delete(&temp_dir, db_name, collection_name, "2")?;
 
@@ -1531,7 +1593,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 9999"));
-
         Ok(())
     }
 
@@ -1546,7 +1607,6 @@ mod tests {
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
         let file_path = prepare_data_file(&temp_dir, 100_000, 384)?;
-
         bulk_insert_file(&temp_dir, db_name, collection_name, file_path)?;
         delete(&temp_dir, db_name, collection_name, "2")?;
 
@@ -1572,7 +1632,6 @@ mod tests {
         result
             .success()
             .stdout(predicates::str::contains("Found 99999"));
-
         Ok(())
     }
 }
