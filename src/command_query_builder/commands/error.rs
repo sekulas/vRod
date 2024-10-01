@@ -16,4 +16,7 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("Unexpected error: {description}")]
+    Unexpected { description: String },
 }

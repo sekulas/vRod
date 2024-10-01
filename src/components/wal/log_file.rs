@@ -1,4 +1,5 @@
 use crate::types::{Lsn, WAL_FILE};
+use crate::utils::common::get_file_name_from_path;
 
 use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
@@ -18,7 +19,8 @@ pub enum WalType {
 }
 
 pub struct Wal {
-    path: PathBuf,
+    file_name: String,
+    parent_path: PathBuf,
     file: File,
     header: WalHeader,
 }
@@ -28,6 +30,15 @@ pub struct Wal {
 pub struct WalHeader {
     last_entry_offset: u64,
     current_max_lsn: u64,
+}
+
+impl WalHeader {
+    pub fn new(current_max_lsn: Lsn) -> Self {
+        Self {
+            last_entry_offset: mem::size_of::<WalHeader>() as u64,
+            current_max_lsn,
+        }
+    }
 }
 
 impl Default for WalHeader {
@@ -72,9 +83,25 @@ impl WalEntry {
     }
 }
 
+pub struct WalCreationSettings {
+    pub name: String,
+    pub current_max_lsn: Lsn,
+}
+
 impl Wal {
-    pub fn create(path: &Path) -> Result<Self> {
-        let file_path = path.join(WAL_FILE);
+    pub fn create(path: &Path, custom_settings: Option<WalCreationSettings>) -> Result<Self> {
+        let (file_name, header) = match custom_settings {
+            Some(settings) => {
+                let header = WalHeader::new(settings.current_max_lsn);
+                (settings.name, header)
+            }
+            None => {
+                let header = WalHeader::default();
+                (WAL_FILE.to_owned(), header)
+            }
+        };
+
+        let file_path = path.join(&file_name);
 
         let file = OpenOptions::new()
             .read(true)
@@ -82,9 +109,9 @@ impl Wal {
             .create(true)
             .open(&file_path)?;
 
-        let header = WalHeader::default();
         let mut wal = Self {
-            path: file_path,
+            file_name,
+            parent_path: path.to_owned(),
             file,
             header,
         };
@@ -108,8 +135,16 @@ impl Wal {
             }
         };
 
+        let file_name = get_file_name_from_path(path)?;
+
+        let path = path.to_owned();
+        let parent_path = path.parent().ok_or(Error::Unexpected {
+            description: "Cannot get wal file parent's path.".to_owned(),
+        })?;
+
         let wal = Self {
-            path: path.to_owned(),
+            file_name,
+            parent_path: parent_path.to_owned(),
             file,
             header,
         };
@@ -154,7 +189,9 @@ impl Wal {
                 })
             }
             Ok(_) => Ok(WalType::Consistent(self)),
-            Err(_) => Ok(WalType::Consistent(Wal::recreate_wal(&self.path)?)),
+            Err(_) => Ok(WalType::Consistent(Wal::recreate_wal(
+                &self.parent_path.join(self.file_name),
+            )?)),
         }
     }
 
@@ -178,10 +215,32 @@ impl Wal {
         Ok(())
     }
 
+    pub fn truncate(self, lsn: Lsn) -> Result<Self> {
+        let new_wal_name = format!("new_{WAL_FILE}");
+        let cur_wal_path = self.parent_path.join(&self.file_name);
+        let new_wal_path = self.parent_path.join(&new_wal_name);
+        let bak_wal_path = self.parent_path.join(format!("{WAL_FILE}.bak"));
+
+        let wal_settings = WalCreationSettings {
+            name: new_wal_name,
+            current_max_lsn: lsn,
+        };
+
+        let new_wal = Wal::create(&self.parent_path, Some(wal_settings))?;
+
+        fs::rename(&cur_wal_path, &bak_wal_path)?;
+
+        fs::rename(new_wal_path, &cur_wal_path)?;
+
+        fs::remove_file(&bak_wal_path)?;
+
+        Ok(new_wal)
+    }
+
     fn recreate_wal(path: &Path) -> Result<Self> {
         fs::remove_file(path)?;
 
-        let wal = Wal::create(path)?;
+        let wal = Wal::create(path, None)?;
         //TODO when other files will exist, we have to check header lsn and create wal with highest lsn
 
         Ok(wal)
@@ -195,23 +254,23 @@ mod tests {
 
     #[test]
     fn append_should_append_uncommited_entry() -> Result<()> {
-//Arrange
+        //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut wal = Wal::create(temp_dir.path(), None)?;
 
         let data = "Hello, World!".to_string();
 
-//Act
-        let lsn =         wal.append(data.clone())?;
+        //Act
+        let lsn = wal.append(data.clone())?;
 
-//Assert
+        //Assert
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data);
-assert_eq!(entry.lsn, lsn);
+        assert_eq!(entry.lsn, lsn);
         assert!(!entry.commited);
 
-Ok(())
+        Ok(())
     }
 
     #[test]
@@ -226,7 +285,7 @@ Ok(())
         //Act
         wal.commit()?;
 
-//Assert
+        //Assert
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert!(entry.commited);
@@ -236,7 +295,7 @@ Ok(())
 
     #[test]
     fn flush_header_changes_lsn_value() -> Result<()> {
-//Arrange
+        //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut wal = Wal::create(temp_dir.path(), None)?;
         wal.header.current_max_lsn = 10;
@@ -244,7 +303,7 @@ Ok(())
         //Act
         wal.flush_header()?;
 
-//Assert
+        //Assert
         let wal = Wal::load(&temp_dir.path().join(WAL_FILE))?;
 
         let wal = match wal {
@@ -259,14 +318,14 @@ Ok(())
 
     #[test]
     fn get_last_entry_should_return_none_if_no_entries() -> Result<()> {
-//Arrange
+        //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut wal = Wal::create(temp_dir.path(), None)?;
 
-//Act
+        //Act
         let entry = wal.get_last_entry()?;
 
-//Assert
+        //Assert
         assert!(entry.is_none());
 
         Ok(())
@@ -274,18 +333,18 @@ Ok(())
 
     #[test]
     fn get_last_entry_should_return_last_entry_when_many_entries() -> Result<()> {
-//Arrange
+        //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut wal = Wal::create(temp_dir.path(), None)?;
 
         let data1 = "Hello, World!".to_string();
-                let data2 = "2World, Hello!2".to_string();
+        let data2 = "2World, Hello!2".to_string();
 
         //Act
         wal.append(data1.clone())?;
         wal.append(data2.clone())?;
 
-//Assert
+        //Assert
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data2);

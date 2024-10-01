@@ -1,33 +1,48 @@
-// pub struct TruncateWalCommand {
-//     pub target_path: PathBuf,
-// }
+use super::{Error, Result};
+use std::path::{Path, PathBuf};
 
-// impl TruncateWalCommand {
-//     pub fn new(target_path: &Path) -> Self {
-//         TruncateWalCommand {
-//             target_path: target_path.to_owned(),
-//         }
-//     }
-// }
+use crate::{
+    command_query_builder::{CQAction, Command},
+    components::wal::{Wal, WalType},
+    types::{Lsn, WAL_FILE},
+};
 
-// impl Command for TruncateWalCommand {
-//     fn execute(&mut self, lsn: Lsn) -> Result<()> {
-//         let wal_path = self.target_path.join(WAL_FILE);
+pub struct TruncateWalCommand {
+    pub wal_parent_path: PathBuf,
+}
 
-//         fs::remove_file(&wal_path)?;
+impl TruncateWalCommand {
+    pub fn new(target_path: &Path) -> Self {
+        TruncateWalCommand {
+            wal_parent_path: target_path.to_owned(),
+        }
+    }
+}
 
-//         Wal::create(&wal_path)?;
+impl Command for TruncateWalCommand {
+    fn execute(&mut self, lsn: Lsn) -> Result<()> {
+        let wal_path = self.wal_parent_path.join(WAL_FILE);
+        let wal = Wal::load(&wal_path)?;
 
-//         Ok(())
-//     }
+        match wal {
+            WalType::Consistent(wal) => {
+                wal.truncate(lsn)?;
+                println!("WAL truncated successfully.");
+                Ok(())
+            }
+            _ => Err(Error::Unexpected {
+                description: "Cannot truncate WAL when it is not in consistent state".to_string(),
+            }),
+        }
+    }
 
-//     fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-//         Ok(())
-//     }
-// }
+    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
+        Ok(())
+    }
+}
 
-// impl CQAction for TruncateWalCommand {
-//     fn to_string(&self) -> String {
-//         "TRUNCATEWAL".to_string()
-//     }
-// }
+impl CQAction for TruncateWalCommand {
+    fn to_string(&self) -> String {
+        "TRUNCATEWAL".to_string()
+    }
+}
