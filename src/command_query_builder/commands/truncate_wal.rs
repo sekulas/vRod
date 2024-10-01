@@ -25,13 +25,23 @@ impl Command for TruncateWalCommand {
         let wal = Wal::load(&wal_path)?;
 
         match wal {
-            WalType::Consistent(wal) => {
+            WalType::Uncommited {
+                wal,
+                uncommited_command,
+                arg: _,
+            } => {
+                if uncommited_command != self.to_string() {
+                    return Err(Error::Unexpected {
+                        description: "Last command should be TRUNCATEWAL.".to_string(),
+                    });
+                }
                 wal.truncate(lsn)?;
                 println!("WAL truncated successfully.");
                 Ok(())
             }
             _ => Err(Error::Unexpected {
-                description: "Cannot truncate WAL when it is not in consistent state".to_string(),
+                description: "Wal during command execution should be in not consistent state."
+                    .to_string(),
             }),
         }
     }
