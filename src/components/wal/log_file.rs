@@ -194,23 +194,40 @@ mod tests {
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn append_and_commit_should_commit_last_entry() -> Result<()> {
+    fn append_should_append_uncommited_entry() -> Result<()> {
+//Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut wal = Wal::create(temp_dir.path())?;
+        let mut wal = Wal::create(temp_dir.path(), None)?;
 
         let data = "Hello, World!".to_string();
 
-        wal.append(data.clone())?;
+//Act
+        let lsn =         wal.append(data.clone())?;
 
+//Assert
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data);
-
+assert_eq!(entry.lsn, lsn);
         assert!(!entry.commited);
 
+Ok(())
+    }
+
+    #[test]
+    fn commit_should_mark_last_entry_as_committed() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let mut wal = Wal::create(temp_dir.path(), None)?;
+
+        let data = "Hello, World!".to_string();
+        wal.append(data.clone())?;
+
+        //Act
         wal.commit()?;
 
-        let entry = wal.get_last_entry().unwrap().unwrap();
+//Assert
+        let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert!(entry.commited);
 
@@ -219,12 +236,15 @@ mod tests {
 
     #[test]
     fn flush_header_changes_lsn_value() -> Result<()> {
+//Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut wal = Wal::create(temp_dir.path())?;
-
+        let mut wal = Wal::create(temp_dir.path(), None)?;
         wal.header.current_max_lsn = 10;
+
+        //Act
         wal.flush_header()?;
 
+//Assert
         let wal = Wal::load(&temp_dir.path().join(WAL_FILE))?;
 
         let wal = match wal {
@@ -238,32 +258,70 @@ mod tests {
     }
 
     #[test]
-    fn get_last_entry_returns_none_if_no_entries() -> Result<()> {
+    fn get_last_entry_should_return_none_if_no_entries() -> Result<()> {
+//Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut wal = Wal::create(temp_dir.path())?;
+        let mut wal = Wal::create(temp_dir.path(), None)?;
 
+//Act
         let entry = wal.get_last_entry()?;
 
+//Assert
         assert!(entry.is_none());
 
         Ok(())
     }
 
     #[test]
-    fn get_last_entry_returns_last_entry_after_header_update() -> Result<()> {
+    fn get_last_entry_should_return_last_entry_when_many_entries() -> Result<()> {
+//Arrange
         let temp_dir = tempfile::tempdir()?;
-        let mut wal = Wal::create(temp_dir.path())?;
+        let mut wal = Wal::create(temp_dir.path(), None)?;
 
         let data1 = "Hello, World!".to_string();
-        wal.append(data1.clone())?;
+                let data2 = "2World, Hello!2".to_string();
 
-        let data2 = "2World, Hello!2".to_string();
+        //Act
+        wal.append(data1.clone())?;
         wal.append(data2.clone())?;
 
+//Assert
         let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
 
         assert_eq!(entry.data, data2);
         assert_eq!(entry.lsn, 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn truncate_should_leave_wal_trucated_with_same_options() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let wal_name = "test_wal".to_string();
+
+        let settings = WalCreationSettings {
+            name: wal_name.clone(),
+            current_max_lsn: 24,
+        };
+
+        let mut wal = Wal::create(temp_dir.path(), Some(settings))?;
+        let last_lsn = wal.append("Hello, World!".to_string())?;
+
+        let truncate_lsn = last_lsn + 1;
+
+        //Act
+        wal.truncate(truncate_lsn)?;
+
+        //Assert
+        let mut new_wal = match Wal::load(&temp_dir.path().join(&wal_name))? {
+            WalType::Consistent(wal) => wal,
+            WalType::Uncommited { .. } => return Err("WAL is inconsistent.".into()),
+        };
+
+        assert!(new_wal.get_last_entry()?.is_none());
+        assert!(new_wal.header.current_max_lsn == truncate_lsn);
+        assert!(new_wal.file_name == wal_name);
 
         Ok(())
     }
