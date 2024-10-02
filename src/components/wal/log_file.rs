@@ -107,7 +107,7 @@ impl Wal {
             .read(true)
             .write(true)
             .create(true)
-            .open(&file_path)?;
+            .open(file_path)?;
 
         let mut wal = Self {
             file_name,
