@@ -101,4 +101,8 @@ impl DbConfig {
     pub fn collection_exists(&self, collection_name: &str) -> bool {
         self.collections.contains(&collection_name.to_owned())
     }
+
+    pub fn get_collections(&self) -> &[String] {
+        &self.collections
+    }
 }

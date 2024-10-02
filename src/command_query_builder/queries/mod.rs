@@ -1,9 +1,10 @@
-mod query_types;
-pub(super) use query_types::*;
 mod error;
 pub use error::{Error, Result};
 
 mod dto;
+
+mod list_collections;
+pub(super) use list_collections::*;
 
 mod search;
 pub(super) use search::*;

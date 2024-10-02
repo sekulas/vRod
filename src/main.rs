@@ -271,6 +271,17 @@ mod tests {
         Ok(result)
     }
 
+    fn list_collections(temp_dir: &tempfile::TempDir, db_name: &str) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg("LISTCOLLECTIONS")
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .assert();
+        Ok(result)
+    }
+
     fn insert(
         temp_dir: &tempfile::TempDir,
         db_name: &str,
@@ -686,6 +697,71 @@ mod tests {
         assert!(collection_path.exists());
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_collections_should_return_empty_when_no_collections_exist() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        init_database(&temp_dir, db_name)?;
+
+        //Act
+        let result = list_collections(&temp_dir, db_name)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains("No collections found."));
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_collections_should_return_all_collections() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let collection_name2 = "test_col2";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        create_collection(&temp_dir, db_name, collection_name2)?;
+
+        //Act
+        let result = list_collections(&temp_dir, db_name)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains(collection_name))
+            .stdout(predicates::str::contains(collection_name2));
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_collections_should_not_return_deleted_collections() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col_to_delete";
+        let collection_name2 = "test_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        create_collection(&temp_dir, db_name, collection_name2)?;
+        drop_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        let result = list_collections(&temp_dir, db_name)?;
+
+        //Assert
+        result
+            .success()
+            .stdout(predicates::str::contains(collection_name2))
+            .stdout(predicates::str::contains(collection_name).not());
 
         Ok(())
     }
