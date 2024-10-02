@@ -29,7 +29,7 @@ impl Collection {
         let collection_path = path.join(name);
 
         fs::create_dir(&collection_path)?;
-        Wal::create(&collection_path)?;
+        Wal::create(&collection_path, None)?;
         Storage::create(&collection_path, None)?;
         BPTree::create(&collection_path, None)?;
 

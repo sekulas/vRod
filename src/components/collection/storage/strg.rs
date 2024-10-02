@@ -17,11 +17,9 @@ use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::{
-        get_file_name_from_path,
-        types::{NONE, NOT_SET},
-    },
+    components::collection::types::{NONE, NOT_SET},
     types::{Dim, Lsn, Offset, STORAGE_FILE},
+    utils::common::get_file_name_from_path,
 };
 
 impl StorageInterface for Storage {

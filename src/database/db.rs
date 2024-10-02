@@ -16,7 +16,7 @@ impl Database {
         fs::create_dir(&database_dir)?;
 
         DbConfig::create(&database_dir)?;
-        Wal::create(&database_dir)?;
+        Wal::create(&database_dir, None)?;
 
         println!("Database created at: {:?}", database_dir);
 
