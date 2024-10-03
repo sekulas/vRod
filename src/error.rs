@@ -16,6 +16,9 @@ pub enum Error {
     #[error("Collection does not exist in database: {0}.")]
     CollectionDoesNotExist(String),
 
+    #[error("Cannot perform operation on readonly target.")]
+    TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -36,4 +39,7 @@ pub enum Error {
 
     #[error(transparent)]
     Query(#[from] command_query_builder::QueryError),
+
+    #[error("Unexpected error: {0}")]
+    Unexpected(&'static str),
 }

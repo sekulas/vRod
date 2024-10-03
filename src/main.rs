@@ -12,7 +12,7 @@ use command_query_builder::{Builder, CQBuilder, CQType, Command};
 use components::wal::{utils::wal_to_txt, Wal, WalType};
 use database::{Database, DbConfig};
 use std::path::{Path, PathBuf};
-use types::DB_CONFIG;
+use types::{CQTarget, DB_CONFIG};
 use utils::embeddings::process_embeddings;
 
 #[derive(Parser)]
@@ -86,17 +86,20 @@ fn run() -> Result<()> {
     }
 
     let command_text = args.execute.ok_or(Error::MissingCommand)?;
+let (target, is_readonly) = specify_target(args.database, args.collection)?;
+    let target_path = get_target_path(&target);
 
-    let target_path = specify_target_path(args.database, args.collection)?;
+    let result: Result<()> = (|| {
+        let cq_action =
+            CQBuilder::build(&target_path, command_text, args.command_arg, args.file_path)?;
+        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build
 
-    let cq_action = CQBuilder::build(&target_path, command_text, args.command_arg, args.file_path)?;
-
-    let wal_path = target_path.join(WAL_FILE);
-    let wal_type = Wal::load(&wal_path)?;
+        let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
 
     match wal_type {
         WalType::Consistent(wal) => {
             execute_cq_action(cq_action, wal)?;
+Ok(())
         }
         WalType::Uncommited {
             mut wal,
@@ -105,10 +108,15 @@ fn run() -> Result<()> {
         } => {
             redo_last_command(&target_path, &mut wal, uncommited_command, arg, None)?;
             execute_cq_action(cq_action, wal)?;
+Ok(())
         }
     }
+})();
 
-    Ok(())
+match result {
+        Ok(_) =>     Ok(()),
+        Err(e) => handle_db_error(e, &target),
+    }
 }
 
 fn execute_cq_action(cq_action: CQType, mut wal: Wal) -> Result<()> {
@@ -156,22 +164,40 @@ fn execute_command(wal: &mut Wal, mut command: Box<dyn Command>) -> Result<()> {
     Ok(())
 }
 
-fn specify_target_path(
+fn specify_target(
     database_path: Option<PathBuf>,
     collection_name: Option<String>,
-) -> Result<PathBuf> {
+) -> Result<(CQTarget, bool)> {
     let database_path = get_database_path(database_path)?;
+let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
 
-    let target_path = match collection_name {
+    let (target_path, is_readonly) = match collection_name {
         Some(collection_name) => {
-            validate_collection(&database_path, &collection_name)?;
-            database_path.join(collection_name)
+            verify_if_collection_exists(&db_config, &collection_name)?;
+            let is_readonly = db_config.is_collection_readonly(&collection_name);
+            (
+                CQTarget::Collection {
+                    database_path,
+                    collection_name,
+                },
+                is_readonly,
+            )
         }
 
-        None => database_path,
+        None => (CQTarget::Database { database_path }, db_config.db_readonly),
     };
 
-    Ok(target_path)
+    Ok((target_path, is_readonly))
+}
+
+fn get_target_path(target: &CQTarget) -> PathBuf {
+    match target {
+        CQTarget::Database { database_path } => database_path.clone(),
+        CQTarget::Collection {
+            database_path,
+            collection_name,
+        } => database_path.join(collection_name),
+    }
 }
 
 fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
@@ -188,13 +214,67 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     }
 }
 
-fn validate_collection(database_path: &Path, collection_name: &str) -> Result<()> {
-    let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
-
-    match db_config.collection_exists(collection_name) {
+fn verify_if_collection_exists(db_config: &DbConfig, collection_name: &str) -> Result<()> {
+        match db_config.collection_exists(collection_name) {
         true => Ok(()),
         false => Err(Error::CollectionDoesNotExist(collection_name.to_string())),
     }
+}
+
+fn verify_if_command_not_run_on_readonly_target(
+    cq_action: &CQType,
+    is_readonly: bool,
+) -> Result<()> {
+    if let CQType::Command(_) = cq_action {
+        if is_readonly {
+            return Err(Error::TargetIsReadonly);
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_db_error(e: Error, target: &CQTarget) -> Result<()> {
+    let err_str = e.to_string();
+
+    if let Some(error_code) = parse_error_code(&err_str) {
+        set_target_as_readonly_if_needed(error_code, target)?;
+    }
+
+    Err(e)
+}
+
+fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Result<()> {
+    //TODO: ADD INDEX WAL AND WAL FOR DB
+    if [500, 501].contains(&error_code) {
+        if let CQTarget::Collection {
+            database_path,
+            collection_name,
+        } = target
+        {
+            let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+            db_config.set_collection_as_readonly(collection_name)?;
+            eprintln!(
+                "Collection: '{}' set as readonly due to error.",
+                collection_name
+            );
+        } else {
+            eprintln!("Error code: {error_code} was returned, but the target is not a collection.");
+        }
+    }
+    Ok(())
+}
+
+fn parse_error_code(err_str: &str) -> Option<u16> {
+    if let Some(code_part) = err_str.split("[CODE:").nth(1) {
+        if let Some(code_str) = code_part.split(']').next() {
+            if let Ok(code) = code_str.parse::<u16>() {
+                return Some(code);
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]
