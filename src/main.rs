@@ -250,7 +250,7 @@ fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Resul
             database_path,
             collection_name,
         } => {
-            if [200, 201, 500, 501, 600, 601].contains(&error_code) {
+            if [200, 201, 202, 500, 501, 600, 601].contains(&error_code) {
                 let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
                 db_config.set_collection_as_readonly(collection_name)?;
                 eprintln!(
@@ -262,7 +262,7 @@ fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Resul
         }
 
         CQTarget::Database { database_path } => {
-            if [200, 201].contains(&error_code) {
+            if [200, 201, 202].contains(&error_code) {
                 let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
                 db_config.set_db_as_readonly()?;
                 eprintln!("Database set as readonly due to error.");

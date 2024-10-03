@@ -78,18 +78,21 @@ impl Default for WalHeader {
 pub struct WalEntry {
     lsn: Lsn,
     commited: bool,
-    data_len: u16, //TODO: Is that needed? Maybe hash.
     data: String,
+    checksum: u64,
 }
 
 impl WalEntry {
     pub fn new(lsn: Lsn, commited: bool, data: String) -> Self {
-        Self {
+        let mut entry = Self {
             lsn,
             commited,
-            data_len: data.len() as u16,
             data,
-        }
+            checksum: NONE,
+        };
+
+        entry.checksum = entry.calculate_checksum();
+        entry
     }
 
     pub fn is_committed(&self) -> bool {
@@ -104,6 +107,36 @@ impl WalEntry {
             (Some(command), None) => Ok((command.to_string(), None)),
             _ => Err(Error::ParsingEntry(self.data.to_owned())),
         }
+    }
+
+    pub fn commit(&mut self) {
+        self.commited = true;
+        self.checksum = self.calculate_checksum();
+    }
+
+    pub fn validate_entry_checksum(&self) -> Result<()> {
+        if self.checksum != self.calculate_checksum() {
+            return Err(Error::IncorrectEntryChecksum {
+                entry_lsn: self.lsn,
+                entry: self.data.clone(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn calculate_checksum(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Hash for WalEntry {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.lsn.hash(state);
+        self.commited.hash(state);
+        self.data.hash(state);
     }
 }
 
@@ -199,12 +232,23 @@ impl Wal {
     }
 
     pub fn commit(&mut self) -> Result<()> {
-        self.file.seek(SeekFrom::Start(
-            self.header.last_entry_offset + mem::size_of::<u64>() as u64,
-        ))?;
+        let entry = match self.get_last_entry() {
+            Ok(Some(mut entry)) => {
+                entry.commit();
+                entry
+            }
+            Ok(None) => {
+                return Err(Error::Unexpected {
+                    description: "No entries to commit.",
+                })
+            }
+            Err(e) => return Err(e),
+        };
 
-        serialize_into(&mut BufWriter::new(&self.file), &true)?;
+        self.file
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
+        serialize_into(&mut BufWriter::new(&self.file), &entry)?;
         Ok(())
     }
 
@@ -236,6 +280,9 @@ impl Wal {
             .seek(SeekFrom::Start(self.header.last_entry_offset))?;
 
         let entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
+
+        entry.validate_entry_checksum()?;
+
         Ok(Some(entry))
     }
 
