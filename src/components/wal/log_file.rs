@@ -1,3 +1,4 @@
+use crate::components::collection::types::NONE;
 use crate::types::{Lsn, WAL_FILE};
 use crate::utils::common::get_file_name_from_path;
 
@@ -5,6 +6,8 @@ use super::{Error, Result};
 use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
+use std::hash::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -25,28 +28,49 @@ pub struct Wal {
     header: WalHeader,
 }
 
-//TODO:: Checksum?
 #[derive(Serialize, Deserialize)]
 pub struct WalHeader {
     last_entry_offset: u64,
     current_max_lsn: u64,
+    checksum: u64,
 }
 
 impl WalHeader {
     pub fn new(current_max_lsn: Lsn) -> Self {
-        Self {
+        let mut header = Self {
             last_entry_offset: mem::size_of::<WalHeader>() as u64,
             current_max_lsn,
-        }
+            checksum: NONE,
+        };
+
+        header.checksum = header.calculate_checksum();
+        header
+    }
+
+    fn calculate_checksum(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Hash for WalHeader {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.last_entry_offset.hash(state);
+        self.current_max_lsn.hash(state);
     }
 }
 
 impl Default for WalHeader {
     fn default() -> Self {
-        Self {
+        let mut header = Self {
             last_entry_offset: mem::size_of::<WalHeader>() as u64,
             current_max_lsn: 0,
-        }
+            checksum: NONE,
+        };
+
+        header.checksum = header.calculate_checksum();
+        header
     }
 }
 
@@ -115,7 +139,7 @@ impl Wal {
             file,
             header,
         };
-        wal.flush_header()?;
+        wal.update_header()?;
 
         Ok(wal)
     }
@@ -127,19 +151,25 @@ impl Wal {
             .create(true)
             .open(path)?;
 
-        let header: WalHeader = match deserialize_from(&mut BufReader::new(&file)) {
-            Ok(header) => header,
-            Err(_) => {
-                let wal = Wal::recreate_wal(path)?; //TODO: ### Cannot deserialize header -> Read only state of collection or Database?
-                return Ok(WalType::Consistent(wal));
+        let header = match deserialize_from::<_, WalHeader>(&mut BufReader::new(&file)) {
+            Ok(header) => {
+                let checksum = header.checksum;
+                if checksum != header.calculate_checksum() {
+                    return Err(Error::IncorrectHeaderChecksum);
+                }
+
+                Ok(header)
             }
-        };
+            Err(e) => Err(Error::CannotDeserializeFileHeader {
+                description: e.to_string(),
+            }),
+        }?;
 
         let file_name = get_file_name_from_path(path)?;
 
         let path = path.to_owned();
         let parent_path = path.parent().ok_or(Error::Unexpected {
-            description: "Cannot get wal file parent's path.".to_owned(),
+            description: "Cannot get wal file parent's path.",
         })?;
 
         let wal = Self {
@@ -164,7 +194,7 @@ impl Wal {
 
         serialize_into(&mut BufWriter::new(&self.file), &entry)?;
 
-        self.flush_header()?;
+        self.update_header()?;
         Ok(self.header.current_max_lsn)
     }
 
@@ -189,9 +219,9 @@ impl Wal {
                 })
             }
             Ok(_) => Ok(WalType::Consistent(self)),
-            Err(_) => Ok(WalType::Consistent(Wal::recreate_wal(
-                &self.parent_path.join(self.file_name),
-            )?)),
+            Err(_) => Err(Error::Unexpected {
+                description: "Cannot get last entry from WAL for specified target.",
+            }),
         }
     }
 
@@ -207,12 +237,6 @@ impl Wal {
 
         let entry: WalEntry = deserialize_from(&mut BufReader::new(&self.file))?;
         Ok(Some(entry))
-    }
-
-    fn flush_header(&mut self) -> Result<()> {
-        self.file.seek(SeekFrom::Start(0))?;
-        serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
-        Ok(())
     }
 
     pub fn truncate(self, lsn: Lsn) -> Result<Self> {
@@ -235,6 +259,16 @@ impl Wal {
         fs::remove_file(&bak_wal_path)?;
 
         Ok(new_wal)
+    }
+
+    fn update_header(&mut self) -> Result<()> {
+        self.file.seek(SeekFrom::Start(0))?;
+
+        self.header.checksum = self.header.calculate_checksum();
+        serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
+
+        self.file.sync_all()?;
+        Ok(())
     }
 }
 
@@ -285,14 +319,14 @@ mod tests {
     }
 
     #[test]
-    fn flush_header_changes_lsn_value() -> Result<()> {
+    fn update_header_changes_lsn_value() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut wal = Wal::create(temp_dir.path(), None)?;
         wal.header.current_max_lsn = 10;
 
         //Act
-        wal.flush_header()?;
+        wal.update_header()?;
 
         //Assert
         let wal = Wal::load(&temp_dir.path().join(WAL_FILE))?;

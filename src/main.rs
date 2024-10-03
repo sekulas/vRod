@@ -245,24 +245,31 @@ fn handle_db_error(e: Error, target: &CQTarget) -> Result<()> {
 }
 
 fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Result<()> {
-    //TODO: ADD INDEX WAL AND WAL FOR DB
-    if [500, 501, 600, 601].contains(&error_code) {
-        if let CQTarget::Collection {
+    match target {
+        CQTarget::Collection {
             database_path,
             collection_name,
-        } = target
-        {
-            let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
-            db_config.set_collection_as_readonly(collection_name)?;
-            eprintln!(
-                "Collection: '{}' set as readonly due to error.",
-                collection_name
-            );
-        } else {
-            eprintln!("Error code: {error_code} was returned, but the target is not a collection.");
+        } => {
+            if [200, 201, 500, 501, 600, 601].contains(&error_code) {
+                let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+                db_config.set_collection_as_readonly(collection_name)?;
+                eprintln!(
+                    "Collection: '{}' set as readonly due to error.",
+                    collection_name
+                );
+            }
+            Ok(())
+        }
+
+        CQTarget::Database { database_path } => {
+            if [200, 201].contains(&error_code) {
+                let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+                db_config.set_db_as_readonly()?;
+                eprintln!("Database set as readonly due to error.");
+            }
+            Ok(())
         }
     }
-    Ok(())
 }
 
 fn parse_error_code(err_str: &str) -> Option<u16> {
