@@ -86,7 +86,7 @@ fn run() -> Result<()> {
     }
 
     let command_text = args.execute.ok_or(Error::MissingCommand)?;
-let (target, is_readonly) = specify_target(args.database, args.collection)?;
+    let (target, is_readonly) = specify_target(args.database, args.collection)?;
     let target_path = get_target_path(&target);
 
     let result: Result<()> = (|| {
@@ -96,25 +96,25 @@ let (target, is_readonly) = specify_target(args.database, args.collection)?;
 
         let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
 
-    match wal_type {
-        WalType::Consistent(wal) => {
-            execute_cq_action(cq_action, wal)?;
-Ok(())
+        match wal_type {
+            WalType::Consistent(wal) => {
+                execute_cq_action(cq_action, wal)?;
+                Ok(())
+            }
+            WalType::Uncommited {
+                mut wal,
+                uncommited_command,
+                arg,
+            } => {
+                redo_last_command(&target_path, &mut wal, uncommited_command, arg, None)?;
+                execute_cq_action(cq_action, wal)?;
+                Ok(())
+            }
         }
-        WalType::Uncommited {
-            mut wal,
-            uncommited_command,
-            arg,
-        } => {
-            redo_last_command(&target_path, &mut wal, uncommited_command, arg, None)?;
-            execute_cq_action(cq_action, wal)?;
-Ok(())
-        }
-    }
-})();
+    })();
 
-match result {
-        Ok(_) =>     Ok(()),
+    match result {
+        Ok(_) => Ok(()),
         Err(e) => handle_db_error(e, &target),
     }
 }
@@ -169,7 +169,7 @@ fn specify_target(
     collection_name: Option<String>,
 ) -> Result<(CQTarget, bool)> {
     let database_path = get_database_path(database_path)?;
-let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
+    let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
 
     let (target_path, is_readonly) = match collection_name {
         Some(collection_name) => {
@@ -215,7 +215,7 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
 }
 
 fn verify_if_collection_exists(db_config: &DbConfig, collection_name: &str) -> Result<()> {
-        match db_config.collection_exists(collection_name) {
+    match db_config.collection_exists(collection_name) {
         true => Ok(()),
         false => Err(Error::CollectionDoesNotExist(collection_name.to_string())),
     }

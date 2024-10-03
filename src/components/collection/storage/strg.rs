@@ -290,27 +290,25 @@ impl Storage {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path)?;
 
-        let header: StorageHeader =
-            match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
-                Ok(header) => {
-                    if header.checksum != header.calculate_checksum() {
-                        println!("Checksum incorrect for 'Storage' header - defining header.");
-                        StorageHeader::define_header(&mut file)?;
-                    }
+        let header = match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
+            Ok(header) => {
+                let checksum = header.checksum;
+                if checksum != header.calculate_checksum() {
+                    return Err(Error::IncorrectHeaderChecksum);
+                }
 
-                    header
-                }
-                Err(_) => {
-                    println!("Cannot deserialize header for the 'Storage' - defining header.");
-                    StorageHeader::define_header(&mut file)?
-                }
-            };
+                Ok(header)
+            }
+            Err(e) => Err(Error::CannotDeserializeFileHeader {
+                description: e.to_string(),
+            }),
+        }?;
 
         let file_name = get_file_name_from_path(path)?;
 
