@@ -246,7 +246,7 @@ fn handle_db_error(e: Error, target: &CQTarget) -> Result<()> {
 
 fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Result<()> {
     //TODO: ADD INDEX WAL AND WAL FOR DB
-    if [500, 501].contains(&error_code) {
+    if [500, 501, 600, 601].contains(&error_code) {
         if let CQTarget::Collection {
             database_path,
             collection_name,
