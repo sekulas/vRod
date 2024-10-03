@@ -32,10 +32,8 @@ impl Query for ListCollectionsQuery {
 
         print!("Collections:\n[\n");
         for (index, collection) in collections.iter().enumerate() {
-            for collection in collections {
-                print!("  {},", collection);
-            }
-            if index > 0 && index < collection.len() {
+            print!("  {}", collection);
+            if index < collections.len() - 1 {
                 println!(",");
             }
         }
