@@ -8,6 +8,7 @@ pub type Offset = u64;
 pub type RecordId = u32;
 pub type Dim = f32;
 pub type Lsn = u64;
+pub const NONE: u64 = 0;
 
 pub enum CQTarget {
     Database {

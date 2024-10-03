@@ -2,7 +2,6 @@ use std::{
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufReader, BufWriter, Seek, SeekFrom},
-    mem,
     path::Path,
 };
 
@@ -17,8 +16,8 @@ use bincode::{deserialize_from, serialize_into};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::types::{NONE, NOT_SET},
-    types::{Dim, Lsn, Offset, STORAGE_FILE},
+    components::collection::types::NOT_SET,
+    types::{Dim, Lsn, Offset, NONE, STORAGE_FILE},
     utils::common::get_file_name_from_path,
 };
 

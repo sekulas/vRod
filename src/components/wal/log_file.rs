@@ -1,5 +1,4 @@
-use crate::components::collection::types::NONE;
-use crate::types::{Lsn, WAL_FILE};
+use crate::types::{Lsn, NONE, WAL_FILE};
 use crate::utils::common::get_file_name_from_path;
 
 use super::{Error, Result};
