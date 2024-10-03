@@ -124,18 +124,6 @@ impl BPTreeHeader {
         self.hash(&mut hasher);
         hasher.finish()
     }
-
-    fn define_header(file: &mut File) -> Result<Self> {
-        //TODO: Find MAX_ID in tree
-        let mut header = BPTreeHeader::default()?;
-        let checksum = header.calculate_checksum();
-        header.checksum = checksum;
-
-        file.seek(SeekFrom::Start(0))?;
-        serialize_into(&mut BufWriter::new(file), &header)?;
-
-        Ok(header)
-    }
 }
 
 impl Hash for BPTreeHeader {
@@ -398,23 +386,22 @@ impl BPTree {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
 
-        let header: BPTreeHeader =
-            match deserialize_from::<_, BPTreeHeader>(&mut BufReader::new(&file)) {
-                Ok(header) => {
-                    if header.checksum != header.calculate_checksum() {
-                        println!("Checksum incorrect for 'B+Tree' header - defining header.");
-                        BPTreeHeader::define_header(&mut file)?;
-                    }
+        let header = match deserialize_from::<_, BPTreeHeader>(&mut BufReader::new(&file)) {
+            Ok(header) => {
+                let checksum = header.checksum;
+                if checksum != header.calculate_checksum() {
+                    return Err(Error::IncorrectHeaderChecksum);
+                }
 
-                    header
-                }
-                Err(_) => {
-                    println!("Cannot deserialize header for the 'B+Tree' - defining header.");
-                    BPTreeHeader::define_header(&mut file)?
-                }
-            };
+                Ok(header)
+            }
+
+            Err(e) => Err(Error::CannotDeserializeFileHeader {
+                description: e.to_string(),
+            }),
+        }?;
 
         let file_name = get_file_name_from_path(path)?;
         let file = BTreeFile::new(file, file_name)?;

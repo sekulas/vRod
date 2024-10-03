@@ -4,6 +4,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("[CODE:500] Checksum incorrect for 'Storage' header.")]
+    IncorrectHeaderChecksum,
+
+    #[error("[CODE:501] Cannot deserialize file header for the 'Storage'. {description}")]
+    CannotDeserializeFileHeader { description: String },
+
     #[error("Cannot deserialize record with the given offset: '{offset}'. Source: '{source}")]
     CannotDeserializeRecord {
         offset: u64,

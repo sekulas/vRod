@@ -92,25 +92,6 @@ fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
 }
 
 fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -126,25 +107,6 @@ fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Re
 }
 
 fn build_bulk_insert_command(target_path: &Path, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -173,25 +135,6 @@ fn build_bulk_insert_command(target_path: &Path, arg: Option<String>, file_path:
 }
 
 fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -209,25 +152,6 @@ fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Resu
 }
 
 fn build_search_all_query(target_path: &Path) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -236,25 +160,6 @@ fn build_search_all_query(target_path: &Path) -> Result<CQType> {
 }
 
 fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name }); //TODO: Is that trully needed?
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -271,25 +176,6 @@ fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> R
 }
 
 fn build_delete_command(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;
@@ -307,25 +193,6 @@ fn build_delete_command(target_path: &Path, record_id_str: Option<String>) -> Re
 }
 
 fn build_reindex_command(target_path: &Path) -> Result<CQType> {
-    let collection_name = target_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned());
-    let database_path = target_path.parent().map(|path| path.to_path_buf());
-
-    if database_path.is_none() || collection_name.is_none() {
-        return Err(Error::CannotDetermineCollectionPath {
-            database_path,
-            collection_name,
-        });
-    }
-
-    let database_path = database_path.unwrap();
-    let collection_name = collection_name.unwrap();
-
-    if !collection_exists(&database_path, &collection_name)? {
-        return Err(Error::CollectionDoesNotExist { collection_name });
-    }
-
     let collection = Collection::load(target_path).map_err(|e| Error::Collection {
         description: e.to_string(),
     })?;

@@ -126,39 +126,6 @@ impl StorageHeader {
         header
     }
 
-    fn define_header(file: &mut File) -> Result<StorageHeader> {
-        file.seek(SeekFrom::Start(mem::size_of::<StorageHeader>() as u64))?;
-        let mut reader = BufReader::new(file);
-
-        let mut max_lsn = NONE;
-        let mut vec_dim_amount = NOT_SET;
-
-        match deserialize_from::<_, Record>(&mut reader) {
-            Ok(record) => {
-                max_lsn = record.record_header.lsn;
-                vec_dim_amount = record.vector.len() as u16;
-
-                while let Ok(record) = deserialize_from::<_, Record>(&mut reader) {
-                    if record.record_header.lsn > max_lsn {
-                        max_lsn = record.record_header.lsn;
-                    }
-                }
-            }
-            Err(_) => {
-                println!(
-                    "Cannot deserialize first record in storage file - leaving default values."
-                );
-                // TODO: mark collection as read-only
-            }
-        }
-        println!(
-            "Header defined: max_lsn: {}, vec_dim_amount: {}",
-            max_lsn, vec_dim_amount
-        );
-
-        Ok(StorageHeader::new(max_lsn, vec_dim_amount))
-    }
-
     fn calculate_checksum(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -290,27 +257,25 @@ impl Storage {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path)?;
 
-        let header: StorageHeader =
-            match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
-                Ok(header) => {
-                    if header.checksum != header.calculate_checksum() {
-                        println!("Checksum incorrect for 'Storage' header - defining header.");
-                        StorageHeader::define_header(&mut file)?;
-                    }
+        let header = match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
+            Ok(header) => {
+                let checksum = header.checksum;
+                if checksum != header.calculate_checksum() {
+                    return Err(Error::IncorrectHeaderChecksum);
+                }
 
-                    header
-                }
-                Err(_) => {
-                    println!("Cannot deserialize header for the 'Storage' - defining header.");
-                    StorageHeader::define_header(&mut file)?
-                }
-            };
+                Ok(header)
+            }
+            Err(e) => Err(Error::CannotDeserializeFileHeader {
+                description: e.to_string(),
+            }),
+        }?;
 
         let file_name = get_file_name_from_path(path)?;
 
@@ -478,33 +443,6 @@ mod tests {
 
     use super::*;
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
-
-    #[ignore = "Not sure if it will be needed."]
-    fn load_should_define_header_on_when_header_has_been_corrupted() -> Result<()> {
-        //Arrange
-        let temp_dir = tempfile::tempdir()?;
-        let path = temp_dir.path().join(STORAGE_FILE);
-        let mut storage = Storage::create(temp_dir.path(), None)?;
-        let vector: Vec<Dim> = vec![1.0, 2.0, 3.0];
-        let payload = "test";
-
-        let _ = storage.insert(&vector, payload, 1)?;
-        let checksum = storage.header.checksum;
-
-        let mut file = File::open(&path)?;
-        file.seek(SeekFrom::Start(0))?;
-        let mut writer = BufWriter::new(&file);
-        writer.write_all(b"corrupted data")?;
-
-        //Act
-        let storage = Storage::load(&path)?;
-
-        //Assert
-        assert_eq!(storage.header.modification_lsn, 1); //TODO: Should it somehow get the max lsn? How?
-        assert_eq!(storage.header.vector_dim_amount, 3); //TODO: Maybe make it readonly instead of defining it?
-        assert_eq!(storage.header.checksum, checksum);
-        Ok(())
-    }
 
     #[test]
     fn create_with_custom_settings_should_create_storage_with_custom_settings() -> Result<()> {
