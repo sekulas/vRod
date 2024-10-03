@@ -1,4 +1,4 @@
-use crate::command_query_builder;
+use crate::{command_query_builder, types::Lsn};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -9,6 +9,9 @@ pub enum Error {
 
     #[error("[CODE:201] Cannot deserialize file header for the 'WAL'. {description}")]
     CannotDeserializeFileHeader { description: String },
+
+    #[error("[CODE:202] Incorrect entry checksum for entry with LSN: {entry_lsn}. Entry: {entry}")]
+    IncorrectEntryChecksum { entry_lsn: Lsn, entry: String },
 
     #[error("Error while parsing wal entry to command and arg: {0}")]
     ParsingEntry(String),

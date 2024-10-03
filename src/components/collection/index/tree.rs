@@ -10,8 +10,8 @@ use bincode::{deserialize_from, serialize_into, serialized_size};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    components::collection::{index::types::UpdateResult, types::NONE},
-    types::{Lsn, Offset, RecordId, INDEX_FILE},
+    components::collection::index::types::UpdateResult,
+    types::{Lsn, Offset, RecordId, INDEX_FILE, NONE},
     utils::common::get_file_name_from_path,
 };
 
