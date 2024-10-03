@@ -236,15 +236,6 @@ impl Wal {
 
         Ok(new_wal)
     }
-
-    fn recreate_wal(path: &Path) -> Result<Self> {
-        fs::remove_file(path)?;
-
-        let wal = Wal::create(path, None)?;
-        //TODO when other files will exist, we have to check header lsn and create wal with highest lsn
-
-        Ok(wal)
-    }
 }
 
 #[cfg(test)]

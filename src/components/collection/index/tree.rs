@@ -124,18 +124,6 @@ impl BPTreeHeader {
         self.hash(&mut hasher);
         hasher.finish()
     }
-
-    fn define_header(file: &mut File) -> Result<Self> {
-        //TODO: Find MAX_ID in tree
-        let mut header = BPTreeHeader::default()?;
-        let checksum = header.calculate_checksum();
-        header.checksum = checksum;
-
-        file.seek(SeekFrom::Start(0))?;
-        serialize_into(&mut BufWriter::new(file), &header)?;
-
-        Ok(header)
-    }
 }
 
 impl Hash for BPTreeHeader {
