@@ -9,6 +9,9 @@ pub enum Error {
     #[error("Directory '{0}' already exists.")]
     DirectoryExists(PathBuf),
 
+    #[error("[CODE:Incorrect checksum for 'DbConfig'.")]
+    IncorrectChecksum,
+
     #[error(transparent)]
     Wal(#[from] wal::Error),
 

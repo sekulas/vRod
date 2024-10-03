@@ -1,22 +1,24 @@
 use std::{
     fs::{self, OpenOptions},
+    hash::{DefaultHasher, Hash, Hasher},
     io,
     path::{Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::DB_CONFIG;
+use crate::types::{DB_CONFIG, NONE};
 use std::io::Write;
 
 #[derive(Serialize, Deserialize)]
 pub struct DbConfig {
     pub db_readonly: bool,
-    path: PathBuf,
+    pub path: PathBuf,
     collections: Vec<CollectionMetadata>,
+    checksum: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Hash)]
 pub struct CollectionMetadata {
     name: String,
     is_readonly: bool,
@@ -33,11 +35,15 @@ impl CollectionMetadata {
 
 impl DbConfig {
     pub fn new(path: PathBuf) -> Self {
-        DbConfig {
+        let mut config = DbConfig {
             db_readonly: false,
             path,
             collections: Vec::new(),
-        }
+            checksum: NONE,
+        };
+
+        config.checksum = config.calculate_checksum();
+        config
     }
 
     pub fn create(path: &Path) -> Result<(), io::Error> {
@@ -58,6 +64,13 @@ impl DbConfig {
         let file = OpenOptions::new().read(true).open(path)?;
 
         let config: DbConfig = serde_json::from_reader(file)?;
+
+        if config.checksum != config.calculate_checksum() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Checksum mismatch for vr_config.json - cannot proceed",
+            ));
+        }
 
         Ok(config)
     }
@@ -81,6 +94,7 @@ impl DbConfig {
             .create(true)
             .open(&temp_path)?;
 
+        self.checksum = self.calculate_checksum();
         let json = serde_json::to_string_pretty(&self)?;
         write!(file, "{}", json)?;
 
@@ -107,6 +121,7 @@ impl DbConfig {
             .create(true)
             .open(&temp_path)?;
 
+        self.checksum = self.calculate_checksum();
         let json = serde_json::to_string_pretty(&self)?;
         write!(file, "{}", json)?;
 
@@ -126,6 +141,7 @@ impl DbConfig {
             .create(true)
             .open(&temp_path)?;
 
+        self.checksum = self.calculate_checksum();
         let json = serde_json::to_string_pretty(&self)?;
         write!(file, "{}", json)?;
 
@@ -151,6 +167,7 @@ impl DbConfig {
             .create(true)
             .open(&temp_path)?;
 
+        self.checksum = self.calculate_checksum();
         let json = serde_json::to_string_pretty(&self)?;
         write!(file, "{}", json)?;
 
@@ -182,5 +199,19 @@ impl DbConfig {
             .find(|c| c.name == collection_name)
             .map(|c| c.is_readonly)
             .unwrap_or(false)
+    }
+
+    fn calculate_checksum(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Hash for DbConfig {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.db_readonly.hash(state);
+        self.path.hash(state);
+        self.collections.hash(state);
     }
 }
