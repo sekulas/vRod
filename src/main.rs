@@ -68,12 +68,24 @@ fn run() -> Result<()> {
 
     //TODO To remove / for developmnet only
     if let Some(wal_path) = args.wal_path {
-        wal_to_txt(&wal_path).unwrap_or_else(|error| {
-            eprintln!(
-                "Error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
-                wal_path, error
-            );
-        });
+        if *"UNCOMMIT" == args.execute.unwrap_or_default() {
+            let wal_type = Wal::load(&wal_path)?;
+            match wal_type {
+                WalType::Uncommited { .. } => {
+                    panic!("cannot uncommit - expected consistent wal")
+                }
+                WalType::Consistent(mut wal) => {
+                    wal.uncommit()?;
+                }
+            }
+        } else {
+            wal_to_txt(&wal_path).unwrap_or_else(|error| {
+                eprintln!(
+                    "Error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
+                    wal_path, error
+                );
+            });
+        }
         return Ok(());
     }
 
@@ -93,7 +105,7 @@ fn run() -> Result<()> {
         let cq_action =
             CQBuilder::build(&target_path, command_text, args.command_arg, args.file_path)?;
         verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build
-
+                                                                                //TODO:: #### Maybe no need for readonly if cannot parse coll header?
         let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
 
         match wal_type {
@@ -152,7 +164,7 @@ fn redo_last_command(
 
         //TODO: ### Isn't REDO too much dangerous? Won't it be better to rollback and give the information
         //about not performed command?
-        execute_command(wal, last_command)?;
+        //execute_command(wal, last_command)?;
     }
     Ok(())
 }
@@ -311,6 +323,26 @@ mod tests {
             return Ok(false);
         }
         Ok(true)
+    }
+
+    fn uncommit_wal(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        col_name: Option<&str>,
+    ) -> Result<()> {
+        let mut wal_path = temp_dir.path().join(db_name);
+        if let Some(col) = col_name {
+            wal_path = wal_path.join(col);
+        }
+        let wal = Wal::load(&wal_path.join(WAL_FILE))?;
+
+        match wal {
+            WalType::Consistent(mut wal) => wal.uncommit(),
+            WalType::Uncommited { .. } => {
+                panic!("cannot uncommit - expected commited WAL.");
+            }
+        }?;
+        Ok(())
     }
 
     fn init_database(temp_dir: &tempfile::TempDir, db_name: &str) -> Result<Assert> {

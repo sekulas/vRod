@@ -318,6 +318,28 @@ impl Wal {
     }
 }
 
+#[cfg(debug_assertions)]
+impl WalEntry {
+    fn uncommit(&mut self) {
+        self.commited = false;
+        self.checksum = self.calculate_checksum();
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Wal {
+    pub fn uncommit(&mut self) -> Result<()> {
+        let mut entry = self.get_last_entry()?.expect("No last entry.");
+        entry.uncommit();
+
+        self.file
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
+
+        serialize_into(&mut BufWriter::new(&self.file), &entry)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
