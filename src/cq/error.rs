@@ -1,3 +1,8 @@
+use crate::components::wal;
+
+use super::commands::Error as CommandError;
+use super::queries::Error as QueryError;
+
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -30,7 +35,16 @@ pub enum Error {
     Collection { description: String },
 
     #[error(transparent)]
+    Command(#[from] CommandError),
+
+    #[error(transparent)]
+    Query(#[from] QueryError),
+
+    #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    Wal(#[from] wal::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

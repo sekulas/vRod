@@ -7,6 +7,7 @@ use super::parsing_ops::parse_vec_n_payload;
 use super::parsing_ops::parse_vecs_and_payloads_from_file;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
 use super::queries::*;
+use super::CQTarget;
 use super::CQType;
 use crate::cq::{Error, Result};
 use crate::components::collection::*;
@@ -15,23 +16,24 @@ use crate::types::DB_CONFIG;
 pub struct CQBuilder;
 
 pub trait Builder {
-    fn build(target_path: &Path, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType>;
+    fn build(target: &CQTarget, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType>;
 }
 
 impl Builder for CQBuilder {
-    fn build(target_path: &Path, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
+    fn build(target: &CQTarget, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
+        let target_path = target.get_target_path();
         match cq_action.to_uppercase().as_str() {
-            "CREATE" => build_create_collection_command(target_path, arg),
-            "DROP" => build_drop_collection_command(target_path, arg),
-            "LISTCOLLECTIONS" => build_list_collections_query(target_path),
-            "TRUNCATEWAL" => build_truncate_wal_command(target_path),
-            "INSERT" => build_insert_command(target_path, arg),
-            "SEARCH" => build_search_query(target_path, arg),
-            "SEARCHALL" => build_search_all_query(target_path),
-            "UPDATE" => build_update_command(target_path, arg),
-            "DELETE" => build_delete_command(target_path, arg),
-            "BULKINSERT" => build_bulk_insert_command(target_path, arg, file_path),
-            "REINDEX" => build_reindex_command(target_path),
+            "CREATE" => build_create_collection_command(&target_path, arg),
+            "DROP" => build_drop_collection_command(&target_path, arg),
+            "LISTCOLLECTIONS" => build_list_collections_query(&target_path),
+            "TRUNCATEWAL" => build_truncate_wal_command(&target_path),
+            "INSERT" => build_insert_command(&target_path, arg),
+            "SEARCH" => build_search_query(&target_path, arg),
+            "SEARCHALL" => build_search_all_query(&target_path),
+            "UPDATE" => build_update_command(&target_path, arg),
+            "DELETE" => build_delete_command(&target_path, arg),
+            "BULKINSERT" => build_bulk_insert_command(&target_path, arg, file_path),
+            "REINDEX" => build_reindex_command(&target_path),
             "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"),
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }

@@ -1,18 +1,18 @@
-mod command_query_builder;
 mod components;
+mod cq;
 mod database;
 mod error;
 mod types;
 mod utils;
 
+use crate::cq::CQTarget;
 use crate::error::{Error, Result};
-use crate::types::WAL_FILE;
 use clap::Parser;
-use command_query_builder::{Builder, CQBuilder, CQType, Command};
 use components::wal::{utils::wal_to_txt, Wal, WalType};
+use cq::{Builder, CQBuilder, CQExecutor, CQType, Executor};
 use database::{Database, DbConfig};
-use std::path::{Path, PathBuf};
-use types::{CQTarget, DB_CONFIG};
+use std::path::PathBuf;
+use types::DB_CONFIG;
 use utils::embeddings::process_embeddings;
 
 #[derive(Parser)]
@@ -99,81 +99,19 @@ fn run() -> Result<()> {
 
     let command_text = args.execute.ok_or(Error::MissingCommand)?;
     let (target, is_readonly) = specify_target(args.database, args.collection)?;
-    let target_path = get_target_path(&target);
 
     let result: Result<()> = (|| {
-        let cq_action =
-            CQBuilder::build(&target_path, command_text, args.command_arg, args.file_path)?;
+        let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
         verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build
                                                                                 //TODO:: #### Maybe no need for readonly if cannot parse coll header?
-        let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
-
-        match wal_type {
-            WalType::Consistent(wal) => {
-                execute_cq_action(cq_action, wal)?;
-                Ok(())
-            }
-            WalType::Uncommited {
-                mut wal,
-                uncommited_command,
-                arg,
-            } => {
-                redo_last_command(&target_path, &mut wal, uncommited_command, arg, None)?;
-                execute_cq_action(cq_action, wal)?;
-                Ok(())
-            }
-        }
+        CQExecutor::execute(&target, cq_action)?;
+        Ok(())
     })();
 
     match result {
         Ok(_) => Ok(()),
         Err(e) => handle_db_error(e, &target),
     }
-}
-
-fn execute_cq_action(cq_action: CQType, mut wal: Wal) -> Result<()> {
-    match cq_action {
-        CQType::Command(command) => {
-            println!("Executing command: {:?}", command.to_string());
-            execute_command(&mut wal, command)?
-        }
-        CQType::Query(mut query) => {
-            println!("Executing query: {:?}", query.to_string());
-            query.execute()?
-        }
-    };
-    Ok(())
-}
-
-fn redo_last_command(
-    target_path: &Path,
-    wal: &mut Wal,
-    command: String,
-    arg: Option<String>,
-    file_path: Option<PathBuf>,
-) -> Result<()> {
-    if let CQType::Command(mut last_command) =
-        CQBuilder::build(target_path, command, arg, file_path)?
-    {
-        let stringified_last_command = last_command.to_string();
-        println!("Redoing last command: {:?}", stringified_last_command);
-
-        let lsn = wal.append(format!("ROLLBACK {stringified_last_command}"))?;
-        last_command.rollback(lsn)?;
-        wal.commit()?;
-
-        //TODO: ### Isn't REDO too much dangerous? Won't it be better to rollback and give the information
-        //about not performed command?
-        //execute_command(wal, last_command)?;
-    }
-    Ok(())
-}
-
-fn execute_command(wal: &mut Wal, mut command: Box<dyn Command>) -> Result<()> {
-    let lsn = wal.append(command.to_string())?;
-    command.execute(lsn)?;
-    wal.commit()?;
-    Ok(())
 }
 
 fn specify_target(
@@ -185,7 +123,6 @@ fn specify_target(
 
     let (target_path, is_readonly) = match collection_name {
         Some(collection_name) => {
-            verify_if_collection_exists(&db_config, &collection_name)?;
             let is_readonly = db_config.is_collection_readonly(&collection_name);
             (
                 CQTarget::Collection {
@@ -300,12 +237,12 @@ fn parse_error_code(err_str: &str) -> Option<u16> {
 mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
-    use command_query_builder::parsing_ops::{
+    use cq::parsing_ops::{
         parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M,
         NO_RECORD_ID_PROVIDED_ERR_M,
     };
     use predicates::prelude::PredicateBooleanExt;
-    use types::{INDEX_FILE, STORAGE_FILE};
+    use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
 
@@ -673,7 +610,7 @@ mod tests {
 
         //Assert
         result.failure().stderr(predicates::str::contains(
-            command_query_builder::Error::CollectionAlreadyExists {
+            cq::Error::CollectionAlreadyExists {
                 collection_name: collection_name.to_owned(),
             }
             .to_string(),
@@ -708,6 +645,34 @@ mod tests {
         result.failure().stderr(predicates::str::contains(
             Error::DatabaseDoesNotExist(specified_path_str).to_string(),
         ));
+
+        Ok(())
+    }
+
+    #[ignore]
+    fn create_rollback_should_remove_created_collection() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_to_exist = "test_col";
+        let rolledback_collection = "rol_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, rolledback_collection)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, None)?;
+        assert!(!is_wal_consistent(&temp_dir, db_name, None)?);
+
+        create_collection(&temp_dir, db_name, collection_to_exist)?;
+
+        //Assert
+        let db_path = temp_dir.path().join(db_name);
+        let collection_path = db_path.join(collection_to_exist);
+        let collection_to_not_exist = db_path.join(rolledback_collection);
+
+        assert!(!collection_path.exists());
+        assert!(collection_to_not_exist.exists());
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
     }
@@ -750,7 +715,7 @@ mod tests {
 
         //Assert
         result.failure().stderr(predicates::str::contains(
-            command_query_builder::Error::CollectionDoesNotExist {
+            cq::Error::CollectionDoesNotExist {
                 collection_name: collection_name.to_owned(),
             }
             .to_string(),
@@ -776,7 +741,7 @@ mod tests {
 
         //Assert
         result.failure().stderr(predicates::str::contains(
-            command_query_builder::Error::CollectionDoesNotExist {
+            cq::Error::CollectionDoesNotExist {
                 collection_name: collection_name.to_owned(),
             }
             .to_string(),
@@ -1320,7 +1285,7 @@ mod tests {
 
         //Assert
         result.failure().stderr(predicates::str::contains(
-            command_query_builder::Error::InvalidDataFormat {
+            cq::Error::InvalidDataFormat {
                 description: EXPECTED_3_ARG_FORMAT_ERR_M.to_owned(),
             }
             .to_string(),
@@ -1347,7 +1312,7 @@ mod tests {
 
         //Assert
         result.failure().stderr(predicates::str::contains(
-            command_query_builder::Error::InvalidDataFormat {
+            cq::Error::InvalidDataFormat {
                 description: NO_RECORD_ID_PROVIDED_ERR_M.to_owned(),
             }
             .to_string(),

@@ -1,4 +1,4 @@
-use crate::{command_query_builder, components::wal, database, utils};
+use crate::{components::wal, cq, database, utils};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -32,13 +32,7 @@ pub enum Error {
     Database(#[from] database::Error),
 
     #[error(transparent)]
-    CommandBuilder(#[from] command_query_builder::Error),
-
-    #[error(transparent)]
-    Command(#[from] command_query_builder::CommandError),
-
-    #[error(transparent)]
-    Query(#[from] command_query_builder::QueryError),
+    CQ(#[from] cq::Error),
 
     #[error("Unexpected error: {0}")]
     Unexpected(&'static str),

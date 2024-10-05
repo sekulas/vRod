@@ -1,4 +1,4 @@
-use crate::{command_query_builder, types::Lsn};
+use crate::{cq, types::Lsn};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -15,9 +15,6 @@ pub enum Error {
 
     #[error("Error while parsing wal entry to command and arg: {0}")]
     ParsingEntry(String),
-
-    #[error(transparent)]
-    CommandBuilder(#[from] command_query_builder::Error),
 
     #[error(transparent)]
     Serialization(#[from] bincode::Error),
