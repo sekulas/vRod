@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::path::PathBuf;
 
 use super::commands::*;
@@ -10,9 +9,6 @@ use super::queries::*;
 use super::CQTarget;
 use super::CQType;
 use crate::cq::{Error, Result};
-use crate::components::collection::*;
-use crate::database::DbConfig;
-use crate::types::DB_CONFIG;
 pub struct CQBuilder;
 
 pub trait Builder {
@@ -21,83 +17,64 @@ pub trait Builder {
 
 impl Builder for CQBuilder {
     fn build(target: &CQTarget, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
-        let target_path = target.get_target_path();
+        let target = (*target).clone();
+
         match cq_action.to_uppercase().as_str() {
-            "CREATE" => build_create_collection_command(&target_path, arg),
-            "DROP" => build_drop_collection_command(&target_path, arg),
-            "LISTCOLLECTIONS" => build_list_collections_query(&target_path),
-            "TRUNCATEWAL" => build_truncate_wal_command(&target_path),
-            "INSERT" => build_insert_command(&target_path, arg),
-            "SEARCH" => build_search_query(&target_path, arg),
-            "SEARCHALL" => build_search_all_query(&target_path),
-            "UPDATE" => build_update_command(&target_path, arg),
-            "DELETE" => build_delete_command(&target_path, arg),
-            "BULKINSERT" => build_bulk_insert_command(&target_path, arg, file_path),
-            "REINDEX" => build_reindex_command(&target_path),
+            "CREATE" => build_create_collection_command(target, arg),
+            "DROP" => build_drop_collection_command(target, arg),
+            "LISTCOLLECTIONS" => build_list_collections_query(target),
+            "TRUNCATEWAL" => build_truncate_wal_command(),
+            "INSERT" => build_insert_command(target, arg),
+            "SEARCH" => build_search_query(target, arg),
+            "SEARCHALL" => build_search_all_query(target),
+            "UPDATE" => build_update_command(target, arg),
+            "DELETE" => build_delete_command(target, arg),
+            "BULKINSERT" => build_bulk_insert_command(target, arg, file_path),
+            "REINDEX" => build_reindex_command(target),
             "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"),
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
 }
 
-fn collection_exists(database_path: &Path, collection_name: &str) -> Result<bool> {
-    let db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
-    Ok(db_config.collection_exists(collection_name))
-}
-
 fn build_create_collection_command(
-    database_path: &Path,
+    database: CQTarget,
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => match collection_exists(database_path, &name)? {
-            true => Err(Error::CollectionAlreadyExists {
-                collection_name: name,
-            }),
-            false => Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
-                database_path,
-                name,
-            )))),
-        },
+        Some(name) => 
+             Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
+                database,
+                name))))
+        ,
         None => Err(Error::MissingCollectionName),
     }
 }
 
 fn build_drop_collection_command(
-    database_path: &Path,
+    database: CQTarget,
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => match collection_exists(database_path, &name)? {
-            true => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
-                database_path,
+        Some(name) => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
+                database,
                 name,
             )))),
-            false => Err(Error::CollectionDoesNotExist {
-                collection_name: name,
-            }),
-        },
         None => Err(Error::MissingCollectionName),
     }
 }
 
-fn build_list_collections_query(target_path: &Path) -> Result<CQType> {
+fn build_list_collections_query(database: CQTarget) -> Result<CQType> {
     Ok(CQType::Query(Box::new(ListCollectionsQuery::new(
-        target_path,
+        database,
     ))))
 }
 
-fn build_truncate_wal_command(target_path: &Path) -> Result<CQType> {
-    Ok(CQType::Command(Box::new(TruncateWalCommand::new(
-        target_path,
-    ))))
+fn build_truncate_wal_command() -> Result<CQType> {
+    Ok(CQType::Command(Box::new(TruncateWalCommand::new())))
 }
 
-fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_insert_command(collection: CQTarget, vec_n_payload: Option<String>) -> Result<CQType> {
     match vec_n_payload {
         Some(data) => {
             let (vector, payload) = parse_vec_n_payload(&data)?;
@@ -108,11 +85,7 @@ fn build_insert_command(target_path: &Path, vec_n_payload: Option<String>) -> Re
     }
 }
 
-fn build_bulk_insert_command(target_path: &Path, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_bulk_insert_command(collection: CQTarget, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
     if let (Some(_), Some(_)) = (&arg, &file_path) {
         println!("Provided both file_path and arg as the source. Using file path.");
     }
@@ -136,11 +109,7 @@ fn build_bulk_insert_command(target_path: &Path, arg: Option<String>, file_path:
     }
 }
 
-fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_search_query(collection: CQTarget, record_id_str: Option<String>) -> Result<CQType> {
     match record_id_str {
         Some(record_id_str) => {
             let record_id = record_id_str.parse()?;
@@ -153,19 +122,11 @@ fn build_search_query(target_path: &Path, record_id_str: Option<String>) -> Resu
     }
 }
 
-fn build_search_all_query(target_path: &Path) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_search_all_query(collection: CQTarget) -> Result<CQType> {
     Ok(CQType::Query(Box::new(SearchAllQuery::new(collection))))
 }
 
-fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_update_command(collection: CQTarget, id_vec_payload: Option<String>) -> Result<CQType> {
     match id_vec_payload {
         Some(data) => {
             let (record_id, vector, payload) = parse_id_and_optional_vec_payload(&data)?;
@@ -177,11 +138,7 @@ fn build_update_command(target_path: &Path, id_vec_payload: Option<String>) -> R
     }
 }
 
-fn build_delete_command(target_path: &Path, record_id_str: Option<String>) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_delete_command(collection: CQTarget, record_id_str: Option<String>) -> Result<CQType> {
     match record_id_str {
         Some(record_id_str) => {
             let record_id = record_id_str.parse()?;
@@ -194,10 +151,6 @@ fn build_delete_command(target_path: &Path, record_id_str: Option<String>) -> Re
     }
 }
 
-fn build_reindex_command(target_path: &Path) -> Result<CQType> {
-    let collection = Collection::load(target_path).map_err(|e| Error::Collection {
-        description: e.to_string(),
-    })?;
-
+fn build_reindex_command(collection: CQTarget) -> Result<CQType> {
     Ok(CQType::Command(Box::new(ReindexCommand::new(collection))))
 }

@@ -60,12 +60,12 @@ impl CQExecutor {
         if let CQType::Command(mut last_command) =
             CQBuilder::build(target, command, arg, file_path)?
         {
-            let stringified_last_command = last_command.to_string();
-            println!("Redoing last command: {:?}", stringified_last_command);
+            //let stringified_last_command = last_command.to_string();
+            //println!("Redoing last command: {:?}", stringified_last_command);
 
-            let lsn = wal.append(format!("ROLLBACK {stringified_last_command}"))?;
-            last_command.rollback(lsn)?;
-            wal.commit()?;
+            //let lsn = wal.append(format!("ROLLBACK {stringified_last_command}"))?;
+            last_command.rollback(wal)?;
+            //wal.commit()?;
 
             //TODO: ### Isn't REDO too much dangerous? Won't it be better to rollback and give the information
             //about not performed command?
@@ -75,9 +75,9 @@ impl CQExecutor {
     }
 
     fn execute_command(wal: &mut Wal, mut command: Box<dyn Command>) -> Result<()> {
-        let lsn = wal.append(command.to_string())?;
-        command.execute(lsn)?; //TODO: Catch and rollback.
-        wal.commit()?;
+        //let lsn = wal.append(command.to_string())?;
+        command.execute(wal)?; //TODO: Catch and rollback.
+                               //wal.commit()?;
         Ok(())
     }
 }

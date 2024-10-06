@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 pub const WAL_FILE: &str = "vr_wal";
 pub const INDEX_FILE: &str = "vr_index";
 pub const STORAGE_FILE: &str = "vr_storage";

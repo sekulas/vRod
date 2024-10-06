@@ -285,7 +285,7 @@ impl Wal {
         Ok(Some(entry))
     }
 
-    pub fn truncate(self, lsn: Lsn) -> Result<Self> {
+    pub fn truncate(&self, lsn: Lsn) -> Result<Self> {
         let new_wal_name = format!("new_{WAL_FILE}");
         let cur_wal_path = self.parent_path.join(&self.file_name);
         let new_wal_path = self.parent_path.join(&new_wal_name);

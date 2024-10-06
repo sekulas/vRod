@@ -1,20 +1,22 @@
 use super::Result;
 use crate::components::collection::types::CollectionInsertResult;
+use crate::components::wal::Wal;
 use crate::cq::parsing_ops::parse_string_from_vector_option;
-use crate::types::{Dim, Lsn};
+use crate::cq::{CQTarget, CQValidator, Validator};
+use crate::types::Dim;
 use crate::{
     components::collection::Collection,
     cq::{CQAction, Command},
 };
 
 pub struct InsertCommand {
-    collection: Collection,
+    collection: CQTarget,
     vector: Vec<Dim>,
     payload: String,
 }
 
 impl InsertCommand {
-    pub fn new(collection: Collection, vector: Vec<Dim>, payload: String) -> Self {
+    pub fn new(collection: CQTarget, vector: Vec<Dim>, payload: String) -> Self {
         Self {
             collection,
             vector,
@@ -24,8 +26,14 @@ impl InsertCommand {
 }
 
 impl Command for InsertCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        match self.collection.insert(&self.vector, &self.payload, lsn)? {
+    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(self.to_string())?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        match collection.insert(&self.vector, &self.payload, lsn)? {
             CollectionInsertResult::Inserted => {
                 println!("Embedding inserted successfully");
             }
@@ -33,11 +41,21 @@ impl Command for InsertCommand {
                 println!("Embedding not inserted: {}", description);
             }
         }
+
+        wal.commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        self.collection.rollback_insertion_like_command(lsn)?;
+    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        collection.rollback_insertion_like_command(lsn)?;
+
+        wal.commit()?;
         Ok(())
     }
 }

@@ -1,8 +1,9 @@
 use super::commands::Result as CommandResult;
 use super::queries::Result as QueryResult;
-use crate::types::Lsn;
+use crate::components::wal::Wal;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub enum CQTarget {
     Database {
         database_path: PathBuf,
@@ -15,14 +16,13 @@ pub enum CQTarget {
 
 impl CQTarget {
     pub fn get_target_path(&self) -> PathBuf {
-        let path = match self {
+        match self {
             CQTarget::Database { database_path } => database_path.to_owned(),
             CQTarget::Collection {
                 database_path,
                 collection_name,
             } => database_path.join(collection_name),
-        };
-        path
+        }
     }
 }
 
@@ -36,8 +36,8 @@ pub trait CQAction {
 }
 
 pub trait Command: CQAction {
-    fn execute(&mut self, lsn: Lsn) -> CommandResult<()>;
-    fn rollback(&mut self, lsn: Lsn) -> CommandResult<()>;
+    fn execute(&mut self, wal: &mut Wal) -> CommandResult<()>;
+    fn rollback(&mut self, wal: &mut Wal) -> CommandResult<()>;
 }
 
 pub trait Query: CQAction {

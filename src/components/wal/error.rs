@@ -1,4 +1,4 @@
-use crate::{cq, types::Lsn};
+use crate::types::Lsn;
 
 pub type Result<T> = core::result::Result<T, Error>;
 

@@ -7,14 +7,14 @@ use super::CQTarget;
 pub struct CQValidator;
 
 pub trait Validator {
-    fn target_exists(target: CQTarget) -> bool;
+    fn target_exists(target: &CQTarget) -> bool;
 }
 
 impl Validator for CQValidator {
-    fn target_exists(target: CQTarget) -> bool {
+    fn target_exists(target: &CQTarget) -> bool {
         match target {
             CQTarget::Database { database_path } => {
-                let db_config = DbConfig::load(&database_path.join(DB_CONFIG)).unwrap_or_else(|_| {
+                let _ = DbConfig::load(&database_path.join(DB_CONFIG)).unwrap_or_else(|_| {
                     panic!("failed to load database configuration file during database existance checking")
                 });
                 true
@@ -26,11 +26,7 @@ impl Validator for CQValidator {
                 let db_config = DbConfig::load(&database_path.join(DB_CONFIG)).unwrap_or_else(|_| {
                     panic!("failed to load database configuration file during collection existance checking")
                 });
-                if db_config.collection_exists(&collection_name) {
-                    true
-                } else {
-                    false
-                }
+                db_config.collection_exists(collection_name)
             }
         }
     }

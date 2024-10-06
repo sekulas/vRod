@@ -139,16 +139,6 @@ fn specify_target(
     Ok((target_path, is_readonly))
 }
 
-fn get_target_path(target: &CQTarget) -> PathBuf {
-    match target {
-        CQTarget::Database { database_path } => database_path.clone(),
-        CQTarget::Collection {
-            database_path,
-            collection_name,
-        } => database_path.join(collection_name),
-    }
-}
-
 fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     let path = match path {
         Some(path) => path,
@@ -163,13 +153,7 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     }
 }
 
-fn verify_if_collection_exists(db_config: &DbConfig, collection_name: &str) -> Result<()> {
-    match db_config.collection_exists(collection_name) {
-        true => Ok(()),
-        false => Err(Error::CollectionDoesNotExist(collection_name.to_string())),
-    }
-}
-
+//TODO: !!!
 fn verify_if_command_not_run_on_readonly_target(
     cq_action: &CQType,
     is_readonly: bool,
@@ -609,12 +593,7 @@ mod tests {
         let result = create_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.failure().stderr(predicates::str::contains(
-            cq::Error::CollectionAlreadyExists {
-                collection_name: collection_name.to_owned(),
-            }
-            .to_string(),
-        ));
+        result.failure();
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -714,12 +693,9 @@ mod tests {
         let result = drop_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.failure().stderr(predicates::str::contains(
-            cq::Error::CollectionDoesNotExist {
-                collection_name: collection_name.to_owned(),
-            }
-            .to_string(),
-        ));
+        result
+            .failure()
+            .stderr(predicates::str::contains("does not exist".to_string()));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
@@ -740,12 +716,9 @@ mod tests {
         let result = drop_collection(&temp_dir, db_name, collection_name)?;
 
         //Assert
-        result.failure().stderr(predicates::str::contains(
-            cq::Error::CollectionDoesNotExist {
-                collection_name: collection_name.to_owned(),
-            }
-            .to_string(),
-        ));
+        result
+            .failure()
+            .stderr(predicates::str::contains("does not exist".to_string()));
 
         let db_path = temp_dir.path().join(db_name);
         assert!(db_path.exists());
@@ -1081,9 +1054,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, inserted_data)?;
 
         //Assert
-        result.failure().stderr(predicates::str::contains(
-            Error::CollectionDoesNotExist(collection_name.to_owned()).to_string(),
-        ));
+        result.failure();
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 

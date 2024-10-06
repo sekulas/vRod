@@ -1,52 +1,34 @@
-use super::{Error, Result};
-use std::path::{Path, PathBuf};
+use super::Result;
 
 use crate::{
-    components::wal::{Wal, WalType},
+    components::wal::Wal,
     cq::{CQAction, Command},
-    types::{Lsn, WAL_FILE},
 };
 
-pub struct TruncateWalCommand {
-    pub wal_parent_path: PathBuf,
-}
+pub struct TruncateWalCommand {}
 
 impl TruncateWalCommand {
-    pub fn new(target_path: &Path) -> Self {
-        TruncateWalCommand {
-            wal_parent_path: target_path.to_owned(),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 impl Command for TruncateWalCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        let wal_path = self.wal_parent_path.join(WAL_FILE);
-        let wal = Wal::load(&wal_path)?;
+    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+        let lsn = wal.append(self.to_string())?;
+        wal.truncate(lsn)?;
+        wal.commit()?;
 
-        match wal {
-            WalType::Uncommited {
-                wal,
-                uncommited_command,
-                arg: _,
-            } => {
-                if uncommited_command != self.to_string() {
-                    return Err(Error::Unexpected {
-                        description: "Last command should be TRUNCATEWAL.".to_string(),
-                    });
-                }
-                wal.truncate(lsn)?;
-                println!("WAL truncated successfully.");
-                Ok(())
-            }
-            _ => Err(Error::Unexpected {
-                description: "Wal during command execution should be in not consistent state."
-                    .to_string(),
-            }),
-        }
+        println!("WAL truncated successfully.");
+        Ok(())
     }
 
-    fn rollback(&mut self, _: Lsn) -> Result<()> {
+    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+        wal.append(format!("ROLLBACK {}", self.to_string()))?;
+
+        println!("No ROLLBACK for TRUNCATEWAL command provided. Commiting."); //TODO: Maybe rollback?
+
+        wal.commit()?;
         Ok(())
     }
 }

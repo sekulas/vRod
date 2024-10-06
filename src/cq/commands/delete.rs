@@ -1,17 +1,20 @@
 use super::Result;
 use crate::{
-    components::collection::{types::CollectionDeleteResult, Collection},
-    cq::{CQAction, Command},
-    types::{Lsn, RecordId},
+    components::{
+        collection::{types::CollectionDeleteResult, Collection},
+        wal::Wal,
+    },
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    types::RecordId,
 };
 
 pub struct DeleteCommand {
-    collection: Collection,
+    collection: CQTarget,
     record_id: RecordId,
 }
 
 impl DeleteCommand {
-    pub fn new(collection: Collection, record_id: RecordId) -> Self {
+    pub fn new(collection: CQTarget, record_id: RecordId) -> Self {
         Self {
             collection,
             record_id,
@@ -20,8 +23,14 @@ impl DeleteCommand {
 }
 
 impl Command for DeleteCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        match self.collection.delete(self.record_id, lsn)? {
+    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(self.to_string())?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        match collection.delete(self.record_id, lsn)? {
             CollectionDeleteResult::Deleted => {
                 println!("Embedding deleted successfully.");
             }
@@ -29,10 +38,19 @@ impl Command for DeleteCommand {
                 println!("Embedding to delete has been not found.");
             }
         }
+
+        wal.commit()?;
+
         Ok(())
     }
 
-    fn rollback(&mut self, _: Lsn) -> Result<()> {
+    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        wal.append(format!("ROLLBACK {}", self.to_string()))?;
+
+        println!("No ROLLBACK for DELETE command provided. Commiting."); //TODO: Maybe rollback?
+
+        wal.commit()?;
         Ok(())
     }
 }

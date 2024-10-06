@@ -1,17 +1,17 @@
 use super::Result;
 use crate::{
-    components::collection::Collection,
-    cq::{CQAction, Command},
-    types::{Dim, Lsn},
+    components::{collection::Collection, wal::Wal},
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    types::Dim,
 };
 
 pub struct BulkInsertCommand {
-    pub collection: Collection,
-    pub vectors_and_payloads: Vec<(Vec<Dim>, String)>,
+    collection: CQTarget,
+    vectors_and_payloads: Vec<(Vec<Dim>, String)>,
 }
 
 impl BulkInsertCommand {
-    pub fn new(collection: Collection, vectors_and_payloads: Vec<(Vec<Dim>, String)>) -> Self {
+    pub fn new(collection: CQTarget, vectors_and_payloads: Vec<(Vec<Dim>, String)>) -> Self {
         Self {
             collection,
             vectors_and_payloads,
@@ -20,21 +20,35 @@ impl BulkInsertCommand {
 }
 
 impl Command for BulkInsertCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
+    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(self.to_string())?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
         let vectors_and_payloads_ref: Vec<(&[Dim], &str)> = self
             .vectors_and_payloads
             .iter()
             .map(|(vec, string)| (vec.as_slice(), string.as_str()))
             .collect();
 
-        self.collection
-            .bulk_insert(&vectors_and_payloads_ref, lsn)?;
+        collection.bulk_insert(&vectors_and_payloads_ref, lsn)?;
 
+        wal.commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        self.collection.rollback_insertion_like_command(lsn)?;
+    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        collection.rollback_insertion_like_command(lsn)?;
+
+        wal.commit()?;
         Ok(())
     }
 }

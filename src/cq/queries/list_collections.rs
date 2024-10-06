@@ -1,27 +1,27 @@
 use super::Result;
-use std::path::{Path, PathBuf};
 
 use crate::{
-    cq::{CQAction, Query},
+    cq::{CQAction, CQTarget, CQValidator, Query, Validator},
     database::DbConfig,
     types::DB_CONFIG,
 };
 
 pub struct ListCollectionsQuery {
-    pub db_path: PathBuf,
+    database: CQTarget,
 }
 
 impl ListCollectionsQuery {
-    pub fn new(db_path: &Path) -> Self {
-        ListCollectionsQuery {
-            db_path: db_path.to_owned(),
-        }
+    pub fn new(database: CQTarget) -> Self {
+        ListCollectionsQuery { database }
     }
 }
 
 impl Query for ListCollectionsQuery {
     fn execute(&mut self) -> Result<()> {
-        let db_config = DbConfig::load(&self.db_path.join(DB_CONFIG))?;
+        CQValidator::target_exists(&self.database);
+        let path = self.database.get_target_path();
+
+        let db_config = DbConfig::load(&path.join(DB_CONFIG))?;
 
         let collections = db_config.get_collections();
 

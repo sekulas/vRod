@@ -1,17 +1,17 @@
 use super::Result;
 use crate::{
     components::collection::{types::CollectionSearchResult, Collection},
-    cq::{queries::dto::RecordDTO, CQAction, Query},
+    cq::{queries::dto::RecordDTO, CQAction, CQTarget, CQValidator, Query, Validator},
     types::RecordId,
 };
 
 pub struct SearchQuery {
-    collection: Collection,
+    collection: CQTarget,
     record_id: RecordId,
 }
 
 impl SearchQuery {
-    pub fn new(collection: Collection, record_id: RecordId) -> Self {
+    pub fn new(collection: CQTarget, record_id: RecordId) -> Self {
         Self {
             collection,
             record_id,
@@ -21,7 +21,12 @@ impl SearchQuery {
 
 impl Query for SearchQuery {
     fn execute(&mut self) -> Result<()> {
-        let result = self.collection.search(self.record_id)?;
+        CQValidator::target_exists(&self.collection);
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        let result = collection.search(self.record_id)?;
 
         match result {
             CollectionSearchResult::FoundRecord(record) => {

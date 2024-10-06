@@ -13,9 +13,6 @@ pub enum Error {
     #[error("Database does not exist in path: {0}.")]
     DatabaseDoesNotExist(String),
 
-    #[error("Collection does not exist in database: {0}.")]
-    CollectionDoesNotExist(String),
-
     #[error("Cannot perform operation on readonly target.")]
     TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
 
