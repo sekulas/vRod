@@ -1,5 +1,5 @@
+use super::Result;
 use super::{Builder, CQBuilder, CQTarget, CQType};
-use super::{Command, Result};
 use crate::{
     components::wal::{Wal, WalType},
     types::WAL_FILE,
@@ -39,9 +39,9 @@ impl Executor for CQExecutor {
 impl CQExecutor {
     fn execute_cq(cq: CQType, mut wal: Wal) -> Result<()> {
         match cq {
-            CQType::Command(command) => {
+            CQType::Command(mut command) => {
                 println!("Executing command: {:?}", command.to_string());
-                CQExecutor::execute_command(&mut wal, command)?
+                command.execute(&mut wal)?
             }
             CQType::Query(mut query) => {
                 println!("Executing query: {:?}", query.to_string());
@@ -62,23 +62,12 @@ impl CQExecutor {
             CQBuilder::build(target, command, arg, file_path)?
         {
             let stringified_last_command = last_command.to_string();
-            println!("Redoing last command: {:?}", stringified_last_command);
+            println!("Rollbacking last command: {:?}", stringified_last_command);
 
-            //let lsn = wal.append(format!("ROLLBACK {stringified_last_command}"))?;
             last_command.rollback(wal)?;
-            //wal.commit()?;
 
-            //TODO: ### Isn't REDO too much dangerous? Won't it be better to rollback and give the information
-            //about not performed command?
-            //execute_command(wal, last_command)?;
+            println!("Rollback completed.");
         }
-        Ok(())
-    }
-
-    fn execute_command(wal: &mut Wal, mut command: Box<dyn Command>) -> Result<()> {
-        //let lsn = wal.append(command.to_string())?;
-        command.execute(wal)?; //TODO: Catch and rollback.
-                               //wal.commit()?;
         Ok(())
     }
 }
