@@ -1,12 +1,18 @@
 use super::Result;
 use crate::{
-    command_query_builder::{parsing_ops::parse_string_from_vector_option, CQAction, Command},
-    components::collection::{types::CollectionUpdateResult, Collection},
-    types::{Dim, Lsn, RecordId},
+    components::{
+        collection::{types::CollectionUpdateResult, Collection},
+        wal::Wal,
+    },
+    cq::{
+        parsing_ops::parse_string_from_vector_option, CQAction, CQTarget, CQValidator, Command,
+        Validator,
+    },
+    types::{Dim, RecordId},
 };
 
 pub struct UpdateCommand {
-    collection: Collection,
+    collection: CQTarget,
     record_id: RecordId,
     vector: Option<Vec<Dim>>,
     payload: Option<String>,
@@ -14,7 +20,7 @@ pub struct UpdateCommand {
 
 impl UpdateCommand {
     pub fn new(
-        collection: Collection,
+        collection: CQTarget,
         record_id: RecordId,
         vector: Option<Vec<Dim>>,
         payload: Option<String>,
@@ -28,8 +34,14 @@ impl UpdateCommand {
     }
 }
 impl Command for UpdateCommand {
-    fn execute(&mut self, lsn: Lsn) -> Result<()> {
-        match self.collection.update(
+    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(self.to_string())?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        match collection.update(
             self.record_id,
             self.vector.as_deref(),
             self.payload.as_deref(),
@@ -45,11 +57,21 @@ impl Command for UpdateCommand {
                 println!("Embedding not updated: {}", description);
             }
         }
+
+        wal.commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self, lsn: Lsn) -> Result<()> {
-        self.collection.rollback_update_command(lsn)?;
+    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+        CQValidator::target_exists(&self.collection);
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        collection.rollback_update_command(lsn)?;
+
+        wal.commit()?;
         Ok(())
     }
 }

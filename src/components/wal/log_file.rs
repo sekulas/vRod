@@ -285,7 +285,7 @@ impl Wal {
         Ok(Some(entry))
     }
 
-    pub fn truncate(self, lsn: Lsn) -> Result<Self> {
+    pub fn truncate(&self, lsn: Lsn) -> Result<Self> {
         let new_wal_name = format!("new_{WAL_FILE}");
         let cur_wal_path = self.parent_path.join(&self.file_name);
         let new_wal_path = self.parent_path.join(&new_wal_name);
@@ -314,6 +314,28 @@ impl Wal {
         serialize_into(&mut BufWriter::new(&self.file), &self.header)?;
 
         self.file.sync_all()?;
+        Ok(())
+    }
+}
+
+#[cfg(debug_assertions)]
+impl WalEntry {
+    fn uncommit(&mut self) {
+        self.commited = false;
+        self.checksum = self.calculate_checksum();
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Wal {
+    pub fn uncommit(&mut self) -> Result<()> {
+        let mut entry = self.get_last_entry()?.expect("No last entry.");
+        entry.uncommit();
+
+        self.file
+            .seek(SeekFrom::Start(self.header.last_entry_offset))?;
+
+        serialize_into(&mut BufWriter::new(&self.file), &entry)?;
         Ok(())
     }
 }

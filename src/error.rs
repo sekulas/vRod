@@ -1,4 +1,4 @@
-use crate::{command_query_builder, components::wal, database, utils};
+use crate::{components::wal, cq, database, utils};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -12,9 +12,6 @@ pub enum Error {
 
     #[error("Database does not exist in path: {0}.")]
     DatabaseDoesNotExist(String),
-
-    #[error("Collection does not exist in database: {0}.")]
-    CollectionDoesNotExist(String),
 
     #[error("Cannot perform operation on readonly target.")]
     TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
@@ -32,14 +29,5 @@ pub enum Error {
     Database(#[from] database::Error),
 
     #[error(transparent)]
-    CommandBuilder(#[from] command_query_builder::Error),
-
-    #[error(transparent)]
-    Command(#[from] command_query_builder::CommandError),
-
-    #[error(transparent)]
-    Query(#[from] command_query_builder::QueryError),
-
-    #[error("Unexpected error: {0}")]
-    Unexpected(&'static str),
+    CQ(#[from] cq::Error),
 }

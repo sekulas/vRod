@@ -1,13 +1,12 @@
+use crate::components::wal;
+
+use super::commands::Error as CommandError;
+use super::queries::Error as QueryError;
+
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Collection '{collection_name}' already exists.")]
-    CollectionAlreadyExists { collection_name: String },
-
-    #[error("Collection '{collection_name}' does not exist.")]
-    CollectionDoesNotExist { collection_name: String },
-
     #[error("Unrecognized command or query '{0}'.")]
     UnrecognizedCommandOrQuery(String),
 
@@ -26,11 +25,17 @@ pub enum Error {
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
 
-    #[error("{description}")]
-    Collection { description: String },
+    #[error(transparent)]
+    Command(#[from] CommandError),
+
+    #[error(transparent)]
+    Query(#[from] QueryError),
 
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    Wal(#[from] wal::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

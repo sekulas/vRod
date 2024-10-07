@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 pub const WAL_FILE: &str = "vr_wal";
 pub const INDEX_FILE: &str = "vr_index";
 pub const STORAGE_FILE: &str = "vr_storage";
@@ -9,13 +7,3 @@ pub type RecordId = u32;
 pub type Dim = f32;
 pub type Lsn = u64;
 pub const NONE: u64 = 0;
-
-pub enum CQTarget {
-    Database {
-        database_path: PathBuf,
-    },
-    Collection {
-        database_path: PathBuf,
-        collection_name: String,
-    },
-}

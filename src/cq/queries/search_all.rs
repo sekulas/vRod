@@ -1,21 +1,27 @@
 use super::Result;
 use crate::{
-    command_query_builder::{queries::dto::RecordDTOList, CQAction, Query},
     components::collection::Collection,
+    cq::{queries::dto::RecordDTOList, CQAction, CQTarget, CQValidator, Query, Validator},
 };
 pub struct SearchAllQuery {
-    collection: Collection,
+    collection: CQTarget,
 }
 
 impl SearchAllQuery {
-    pub fn new(collection: Collection) -> Self {
+    pub fn new(collection: CQTarget) -> Self {
         Self { collection }
     }
 }
 
 impl Query for SearchAllQuery {
     fn execute(&mut self) -> Result<()> {
-        let result = self.collection.search_all()?;
+        CQValidator::target_exists(&self.collection);
+
+        let path = self.collection.get_target_path();
+        let mut collection = Collection::load(&path)?;
+
+        let result = collection.search_all()?;
+
         println!("Found {} records.", result.len());
         println!("{}", RecordDTOList(result));
         Ok(())
