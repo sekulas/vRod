@@ -103,7 +103,6 @@ pub struct Storage {
     header: StorageHeader,
 }
 
-//TODO: Offset backup for storing recently deleted record?
 #[derive(Serialize, Deserialize, Clone)]
 struct StorageHeader {
     modification_lsn: Lsn,

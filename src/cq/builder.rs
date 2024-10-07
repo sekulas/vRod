@@ -31,7 +31,7 @@ impl Builder for CQBuilder {
             "DELETE" => build_delete_command(target, arg),
             "BULKINSERT" => build_bulk_insert_command(target, arg, file_path),
             "REINDEX" => build_reindex_command(target),
-            "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"),
+            "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"), //TODO: ### What if last command was ROLLBACK and it's uncommited? Readonly State?
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
