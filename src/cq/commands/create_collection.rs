@@ -60,6 +60,7 @@ impl Command for CreateCollectionCommand {
             db_config.remove_collection(&self.collection_name)?;
         }
 
+        // TODO: ##### Is that needed? If the collection was created, it will be removed in the execute method.
         let collection_path = &path.join(&self.collection_name);
 
         if collection_path.exists() {

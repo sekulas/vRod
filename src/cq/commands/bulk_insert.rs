@@ -41,7 +41,7 @@ impl Command for BulkInsertCommand {
 
     fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
-        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?; //TODO: ### Not having inserted records in WAL? For rollback no need i see.
 
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;

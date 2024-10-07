@@ -30,7 +30,4 @@ pub enum Error {
 
     #[error(transparent)]
     CQ(#[from] cq::Error),
-
-    #[error("Unexpected error: {0}")]
-    Unexpected(&'static str),
 }

@@ -38,6 +38,7 @@ impl Command for DropCollectionCommand {
 
         db_config.remove_collection(&self.collection_name)?;
 
+        // TODO: ##### Is that needed? If the collection was created, it will be removed in the execute method.
         let collection_path = path.join(&self.collection_name);
 
         if collection_path.exists() {
@@ -53,6 +54,7 @@ impl Command for DropCollectionCommand {
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
         println!("No ROLLBACK for DROP command provided. Commiting."); //TODO: Maybe rollback?
+                                                                       //TODO: ### Should this be printed on stderr, and from small letter?
 
         wal.commit()?;
         Ok(())

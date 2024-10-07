@@ -26,7 +26,7 @@ impl Command for TruncateWalCommand {
     fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for TRUNCATEWAL command provided. Commiting."); //TODO: Maybe rollback?
+        println!("No ROLLBACK for TRUNCATEWAL command provided. Commiting."); //TODO: ### Is the rollback necessary here?
 
         wal.commit()?;
         Ok(())

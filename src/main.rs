@@ -67,6 +67,7 @@ fn run() -> Result<()> {
     }
 
     //TODO To remove / for developmnet only
+    //TODO: ### OR LEAVE THIS AS SUPPORT COMMANDS?
     if let Some(wal_path) = args.wal_path {
         if *"UNCOMMIT" == args.execute.unwrap_or_default() {
             let wal_type = Wal::load(&wal_path)?;
@@ -153,7 +154,7 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     }
 }
 
-//TODO: !!!
+//TODO: TO CHECK
 fn verify_if_command_not_run_on_readonly_target(
     cq_action: &CQType,
     is_readonly: bool,
@@ -628,7 +629,7 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
+    #[test]
     fn create_rollback_should_remove_created_collection() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -646,11 +647,11 @@ mod tests {
 
         //Assert
         let db_path = temp_dir.path().join(db_name);
-        let collection_path = db_path.join(collection_to_exist);
-        let collection_to_not_exist = db_path.join(rolledback_collection);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
 
-        assert!(!collection_path.exists());
-        assert!(collection_to_not_exist.exists());
+        assert!(db_options.collection_exists(collection_to_exist));
+        assert!(!db_options.collection_exists(rolledback_collection));
+
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
@@ -725,6 +726,37 @@ mod tests {
 
         let collection_path = db_path.join(collection_name);
         assert!(!collection_path.exists());
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn drop_rollback_should_not_be_implemented() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_to_exist = "test_col";
+        let dropped_collection = "dropped_col";
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, dropped_collection)?;
+        drop_collection(&temp_dir, db_name, dropped_collection)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, None)?;
+        let post_rollback_result = create_collection(&temp_dir, db_name, collection_to_exist)?;
+
+        //Assert
+        let db_path = temp_dir.path().join(db_name);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
+
+        assert!(db_options.collection_exists(collection_to_exist));
+        assert!(!db_options.collection_exists(dropped_collection));
+
+        post_rollback_result
+            .success()
+            .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
@@ -874,6 +906,41 @@ mod tests {
     }
 
     #[test]
+    fn rollback_insert_should_leave_col_in_state_like_vec_never_existed() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let rolled_back_data = "1.0,2.0,3.0;test_payload";
+        let new_entry = "4.0,5.0,6.0;test_payload_2";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, rolled_back_data)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let post_rollback_result = insert(&temp_dir, db_name, collection_name, new_entry)?;
+
+        //Assert
+        post_rollback_result.success();
+
+        let result = search(&temp_dir, db_name, collection_name, "1")?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("test_payload_2"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
     fn bulk_insert_should_insert_multiple_embeddings_from_file() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -975,6 +1042,43 @@ mod tests {
         result
             .failure()
             .stderr(predicates::str::contains(EXPECTED_2_ARG_FORMAT_ERR_M));
+
+        Ok(())
+    }
+
+    #[test]
+    fn rolled_back_bulk_insert_should_leave_col_in_state_like_vecs_never_existed() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let rolled_back_data = "1.0,2.0,3.0;should_not_appear 1.0,2.0,3.0;should_not_appear2";
+        let new_entry = "4.0,5.0,6.0;test_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        bulk_insert_arg(&temp_dir, db_name, collection_name, rolled_back_data)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let post_rollback_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
+
+        //Assert
+        post_rollback_result.success();
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("test_payload"))
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0").not())
+            .stdout(predicates::str::contains("should_not_appear").not());
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
 
         Ok(())
     }
@@ -1237,7 +1341,6 @@ mod tests {
         Ok(())
     }
 
-    //TODO: ### Czy testy wygenerowane przez Copilota to problem? Jeden napisałem ,a potem generowały się same.
     #[test]
     fn update_should_not_update_record_2_args_provided() -> Result<()> {
         //Arrange
@@ -1365,6 +1468,45 @@ mod tests {
     }
 
     #[test]
+    fn rollback_update_should_return_entry_to_previous_state() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let data_to_exist = "1.0,2.0,3.0;payload";
+        let data_to_change = "1;4.0,5.0,6.0;updated_payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, data_to_exist)?;
+        update(&temp_dir, db_name, collection_name, data_to_change)?;
+        let post_update_result = search(&temp_dir, db_name, collection_name, "1")?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+
+        //Assert
+        let post_update_result = post_update_result.success();
+        post_update_result
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("updated_payload"));
+
+        let post_rollback_result = post_rollback_result.success();
+        post_rollback_result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("payload"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
     fn delete_should_remove_record_when_it_exists() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -1425,6 +1567,75 @@ mod tests {
     }
 
     #[test]
+    fn rollback_delete_should_not_be_implemented() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let data = "1.0,2.0,3.0;payload";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, data)?;
+        delete(&temp_dir, db_name, collection_name, "1")?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+
+        //Assert
+        post_rollback_result
+            .success()
+            .stdout(predicates::str::contains("No ROLLBACK".to_string()))
+            .stdout(predicates::str::contains("not found"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reindex_should_not_remove_existing_records() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let inserted_data = "1.0,2.0,3.0;payload";
+        let inserted_data_2 = "4.0,5.0,6.0;payload2";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data)?;
+        insert(&temp_dir, db_name, collection_name, inserted_data_2)?;
+
+        //Act
+        let result = reindex(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        result.success();
+
+        let result = search_all(&temp_dir, db_name, collection_name)?;
+        let result = result.success();
+        result
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("payload"))
+            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("payload2"));
+
+        assert!(is_wal_consistent(
+            &temp_dir,
+            db_name,
+            Some(collection_name)
+        )?);
+
+        Ok(())
+    }
+
+    #[test]
     fn reindex_should_remove_deleted_records() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
@@ -1450,6 +1661,35 @@ mod tests {
             .stdout(predicates::str::contains("payload"))
             .stdout(predicates::str::contains("4.0, 5.0, 6.0").not())
             .stdout(predicates::str::contains("payload2").not());
+
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_reindex_should_return_to_previous_collection_state() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, "1.0,2.0,3.0;payload")?;
+        insert(&temp_dir, db_name, collection_name, "4.0,5.0,6.0;payload2")?;
+        reindex(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let post_rollback_result = search(&temp_dir, db_name, collection_name, "4")?; //TODO: ### Reindex new ID is being put - okay?
+                                                                                      //TODO: ### Is it okay that it does not ID consistency? 1->4, 2->3?
+                                                                                      //Assert
+        post_rollback_result
+            .success()
+            .stdout(predicates::str::contains("No backup files"))
+            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("payload"));
+
+        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
     }
