@@ -159,7 +159,7 @@ impl Node {
             checksum: 0,
             is_leaf,
             keys: vec![EMPTY_KEY_SLOT; (branching_factor - 1) as usize],
-            values: vec![EMPTY_CHILD_SLOT; branching_factor as usize],
+            values: vec![EMPTY_CHILD_SLOT; branching_factor as usize], //TODO: ### Is it good to have it like this? [EMPTY, VAL] instead of [VAL, EMPTY].
             next_leaf_offset: NONE,
             recently_taken_key_slot: branching_factor - 1,
         };
