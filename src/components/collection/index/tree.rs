@@ -16,7 +16,7 @@ use crate::{
 };
 
 use std::{
-    cmp::Reverse,
+    cmp::{Ordering, Reverse},
     collections::HashMap,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
@@ -487,20 +487,8 @@ impl BPTree {
                 }
             }
             false => {
-                let key_idx = node
-                    .keys
-                    .binary_search_by_key(&Reverse(searched_key), |&key| Reverse(key));
-
-                match key_idx {
-                    Ok(idx) => {
-                        let child_offset = node.values[idx + 1];
-                        self.recursive_search(child_offset, searched_key)
-                    }
-                    Err(idx) => {
-                        let child_offset = node.values[idx];
-                        self.recursive_search(child_offset, searched_key)
-                    }
-                }
+                let key_idx = self.find_next_key_idx_for_search(&node.keys, searched_key);
+                self.recursive_search(node.values[key_idx], searched_key)
             }
         }
     }
@@ -792,6 +780,30 @@ impl BPTree {
         }
     }
 
+    fn find_next_key_idx_for_search(&mut self, keys: &[RecordId], target: RecordId) -> usize {
+        if keys[keys.len() - 1] == EMPTY_KEY_SLOT {
+            return keys.len();
+        }
+
+        let mut last_larger = keys.len() - 1;
+
+        for (id, &item) in keys.iter().enumerate().rev() {
+            match &target.cmp(&item) {
+                Ordering::Equal => return id + 1,
+                Ordering::Less => return id + 1,
+                Ordering::Greater => {
+                    if item == EMPTY_KEY_SLOT {
+                        break;
+                    }
+                    last_larger = id;
+                    continue;
+                }
+            }
+        }
+
+        last_larger
+    }
+
     fn get_node_mut(&mut self, offset: &Offset) -> Result<&mut Node> {
         self.modified_nodes
             .get_mut(offset)
@@ -1040,6 +1052,27 @@ mod tests {
 
         //Act
         let result = tree.perform_query(IndexQuery::Search(1))?;
+
+        //Assert
+        assert_eq!(IndexQueryResult::FoundValue(expected_value), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn search_should_find_key_existing_in_new_subtree() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let mut tree = BPTree::create(path, None)?;
+        let expected_value = 1234;
+
+        for value in [1, 2, 3, 4, 5, 6, expected_value] {
+            tree.perform_command(IndexCommand::Insert(value), 1)?;
+        }
+
+        //Act
+        let result = tree.perform_query(IndexQuery::Search(7))?;
 
         //Assert
         assert_eq!(IndexQueryResult::FoundValue(expected_value), result);
