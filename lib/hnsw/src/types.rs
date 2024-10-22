@@ -30,16 +30,7 @@ impl PartialOrd for ScoredPointOffset {
     }
 }
 
-#[derive(
-    Debug,
-    Deserialize,
-    Serialize,
-    /*JsonSchema,*/ Clone,
-    Copy,
-    /*FromPrimitive,*/ PartialEq,
-    Eq,
-    Hash,
-)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Hash)]
 /// Distance f
 pub enum Distance {
     // <https://en.wikipedia.org/wiki/Cosine_similarity>

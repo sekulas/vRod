@@ -1,12 +1,11 @@
 use super::Result;
 
 use crate::{
-    fixed_length_priority_queue::FixedLengthPriorityQueue,
     metrics::{
         CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, Metric, MetricQueryScorer,
     },
     types::{Distance, PointIdType, QueryScorer, QueryVector, ScoreType, ScoredPointOffset},
-    vector_storage::{VectorStorage, VectorStorageImpl},
+    vector_storage::VectorStorage,
 };
 
 pub struct FilteredScorer<'a> {
@@ -82,8 +81,6 @@ pub trait RawScorer {
     fn score_point(&self, point: PointIdType) -> ScoreType;
 
     fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType;
-
-    fn peek_top_all(&self, top: usize) -> Vec<ScoredPointOffset>;
 }
 
 pub struct RawScorerImpl<TQueryScorer>
@@ -127,34 +124,6 @@ where
     fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType {
         self.query_scorer.score_internal(point_a, point_b)
     }
-
-    fn peek_top_all(&self, top: usize) -> Vec<ScoredPointOffset> {
-        let scores = (0..self.total_vector_count as PointIdType).map(|point_id| {
-            let point_id = point_id as PointIdType;
-            ScoredPointOffset {
-                idx: point_id,
-                score: self.query_scorer.score_stored(point_id),
-            }
-        });
-        peek_top_largest_iterable(scores, top)
-    }
-}
-
-pub fn peek_top_largest_iterable<I, E: Ord>(elements: I, top: usize) -> Vec<E>
-where
-    I: IntoIterator<Item = E>,
-{
-    if top == 0 {
-        return vec![];
-    }
-
-    // If the caller is interested in greatest
-    // values coming first, the priority queue should be a max-heap
-    let mut pq = FixedLengthPriorityQueue::new(top);
-    for element in elements {
-        pq.push(element);
-    }
-    pq.into_vec()
 }
 
 pub fn new_raw_scorer<'a>(

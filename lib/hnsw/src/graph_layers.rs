@@ -44,7 +44,6 @@ pub trait GraphLayersBase {
     where
         F: FnMut(PointIdType);
 
-    /// Get M based on current level
     fn get_m(&self, level: usize) -> usize;
 
     /// Greedy search for closest points within a single graph layer
@@ -157,15 +156,7 @@ impl GraphLayersBase for GraphLayers {
     }
 }
 
-/// Object contains links between nodes for HNSW search
-///
-/// Assume all scores are similarities. Larger score = closer points
 impl GraphLayers {
-    /// Returns the highest level this point is included in
-    pub fn point_level(&self, point_id: PointIdType) -> usize {
-        self.links.point_level(point_id)
-    }
-
     fn get_entry_point(&self) -> Option<EntryPoint> {
         self.entry_points.get_entry_point()
     }
@@ -197,10 +188,6 @@ impl GraphLayers {
     pub fn get_links_path(path: &Path) -> PathBuf {
         path.join(HNSW_LINKS_FILE)
     }
-
-    pub fn num_points(&self) -> usize {
-        self.links.num_points()
-    }
 }
 
 impl GraphLayers {
@@ -222,6 +209,7 @@ impl GraphLayers {
         save_bin(path, self)
     }
 }
+
 fn rev_range(a: usize, b: usize) -> impl Iterator<Item = usize> {
     (b + 1..=a).rev()
 }

@@ -140,10 +140,6 @@ pub trait GraphLinks: Default {
 
     fn from_converter(converter: GraphLinksConverter) -> Result<Self>;
 
-    fn offsets_len(&self) -> usize;
-
-    fn levels_count(&self) -> usize;
-
     fn get_links(&self, range: Range<usize>) -> &[PointIdType];
 
     fn get_links_range(&self, idx: usize) -> Range<usize>;
@@ -163,34 +159,6 @@ pub trait GraphLinks: Default {
             let layer_offsets_start = self.get_level_offset(level);
             let links_range = self.get_links_range(layer_offsets_start + reindexed_point_id);
             self.get_links(links_range)
-        }
-    }
-
-    fn point_level(&self, point_id: PointIdType) -> usize {
-        let reindexed_point_id = self.reindex(point_id) as usize;
-        for level in 1.. {
-            if let Some(offsets_range) = self.get_level_offsets_range(level) {
-                if offsets_range.start + reindexed_point_id >= offsets_range.end {
-                    return level - 1;
-                }
-            } else {
-                return level - 1;
-            }
-        }
-        unreachable!()
-    }
-
-    fn get_level_offsets_range(&self, level: usize) -> Option<Range<usize>> {
-        if level < self.levels_count() {
-            let layer_offsets_start = self.get_level_offset(level);
-            let layer_offsets_end = if level + 1 < self.levels_count() {
-                self.get_level_offset(level + 1)
-            } else {
-                self.offsets_len() - 1
-            };
-            Some(layer_offsets_start..layer_offsets_end)
-        } else {
-            None
         }
     }
 }
@@ -232,14 +200,6 @@ impl GraphLinks for GraphLinksImpl {
             level_offsets: file_data.level_offsets,
             reindex: file_data.reindex,
         })
-    }
-
-    fn offsets_len(&self) -> usize {
-        self.offsets.len()
-    }
-
-    fn levels_count(&self) -> usize {
-        self.level_offsets.len()
     }
 
     fn get_links(&self, range: Range<usize>) -> &[PointIdType] {
