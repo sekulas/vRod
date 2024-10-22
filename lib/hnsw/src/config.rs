@@ -11,7 +11,6 @@ use crate::{
 
 pub const HNSW_INDEX_CONFIG_FILE: &str = "hnsw_config.json";
 
-/// Config of HNSW index
 #[derive(Debug, Deserialize, Serialize, Validate, Clone, PartialEq, Eq)]
 pub struct HnswConfig {
     /// Number of edges per node in the index graph. Larger the value - more accurate the search, more space required.
@@ -25,21 +24,14 @@ pub struct HnswConfig {
     /// On small CPUs, less threads are used.
     #[serde(default)]
     pub max_indexing_threads: usize,
-    /// Store HNSW index on disk. If set to false, index will be stored in RAM. Default: false
-    #[serde(default, skip_serializing_if = "Option::is_none")] // Better backward compatibility
-    pub on_disk: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Copy, Clone, PartialEq, Eq)]
 pub struct HnswGraphConfig {
     pub m: usize,
-    /// Requested M
     pub m0: usize,
-    /// Actual M on level 0
     pub ef_construct: usize,
-    /// Number of neighbours to search on construction
     pub ef: usize,
-    /// Distance used for graph building
     pub distance: Distance,
     #[serde(default)]
     pub max_indexing_threads: usize,

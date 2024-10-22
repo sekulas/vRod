@@ -221,7 +221,7 @@ impl HnswIndex {
         config.indexed_vector_count.replace(indexed_vectors);
 
         let graph_links_path = GraphLayers::get_links_path(path);
-        let graph: GraphLayers = graph_layers_builder.into_graph_layers(Some(&graph_links_path))?;
+        let graph: GraphLayers = graph_layers_builder.into_graph_layers(&graph_links_path)?;
 
         Ok((config, graph))
     }

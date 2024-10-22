@@ -55,7 +55,6 @@ impl Query for SearchSimilarQuery {
                 m: 3, //TODO: M, EF changeable?
                 ef_construct: 5,
                 max_indexing_threads: 3, //TODO: To Verify
-                on_disk: Some(true),     //TODO: Always on disk in our case
             },
             distance: Distance::Euclid, //TODO: Selectable?
         };

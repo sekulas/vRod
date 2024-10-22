@@ -125,7 +125,7 @@ impl GraphLayersBuilder {
         )
     }
 
-    pub fn into_graph_layers(self, path: Option<&Path>) -> Result<GraphLayers> {
+    pub fn into_graph_layers(self, path: &Path) -> Result<GraphLayers> {
         let unlocker_links_layers = self
             .links_layers
             .into_iter()
@@ -133,9 +133,7 @@ impl GraphLayersBuilder {
             .collect();
 
         let mut links_converter = GraphLinksConverter::new(unlocker_links_layers);
-        if let Some(path) = path {
-            links_converter.save_as(path)?;
-        }
+        links_converter.save_as(path)?;
 
         let links = GraphLinks::from_converter(links_converter)?;
         Ok(GraphLayers {
