@@ -260,19 +260,7 @@ impl HnswIndex {
         let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
 
         let search_result = self.graph.search(top, self.config.ef, points_scorer);
-        self.postprocess_search_result(search_result, vector, top)
-    }
-
-    //TODO: Is that needed?
-    fn postprocess_search_result(
-        &self,
-        search_result: Vec<ScoredPointOffset>,
-        vector: &QueryVector,
-        top: usize,
-    ) -> Result<Vec<ScoredPointOffset>> {
-        let mut postprocess_result = search_result;
-        postprocess_result.truncate(top);
-        Ok(postprocess_result)
+        Ok(search_result)
     }
 }
 
