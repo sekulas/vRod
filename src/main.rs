@@ -62,7 +62,13 @@ fn run() -> Result<()> {
 
     //TODO To remove / for developmnet only
     if let Some(amount) = args.generate_embeddings {
-        process_embeddings(amount)?;
+        if let Some(file_path) = args.file_path {
+            process_embeddings(amount, file_path)?;
+        } else {
+            return Err(Error::MissingFilePathArgument { 
+                description: "for embedding generation you need to pass a file from which they will be genereated.".to_owned() 
+            });
+        }
         return Ok(());
     }
 

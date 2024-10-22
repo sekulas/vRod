@@ -16,6 +16,9 @@ pub enum Error {
     #[error("Cannot perform operation on readonly target.")]
     TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
 
+    #[error("missing file path argument: {description}")]
+    MissingFilePathArgument { description: String },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

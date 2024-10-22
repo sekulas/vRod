@@ -3,18 +3,18 @@ use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use std::fs;
 use std::io::Write;
 use std::mem::size_of;
+use std::path::PathBuf;
 
-pub fn process_embeddings(number_of_embeddings: usize) -> Result<()> {
+pub fn process_embeddings(number_of_embeddings: usize, file: PathBuf) -> Result<()> {
     let options = InitOptions {
         model_name: EmbeddingModel::AllMiniLML6V2,
         ..Default::default()
     };
     let model = TextEmbedding::try_new(options)?;
 
-    let content = fs::read_to_string("alice_in_wonderland.txt")
-        .expect("Something went wrong reading the file");
+    let content = fs::read_to_string(file).expect("Something went wrong reading the file");
 
-    println!("Alice acquired.");
+    println!("File content acquired.");
 
     let words = extract_words(&content, number_of_embeddings);
     let embeddings = generate_embeddings(&model, &words)?;
@@ -58,7 +58,7 @@ fn print_embeddings_info(words: &[&str], embeddings: &[Vec<f32>]) {
 }
 
 fn write_embeddings_to_file(words: &[&str], embeddings: &[Vec<f32>]) -> std::io::Result<()> {
-    let mut file = fs::File::create("alice_embeddings.txt")?;
+    let mut file = fs::File::create("embeddings.txt")?;
 
     for (word, embedding) in words.iter().zip(embeddings.iter()) {
         let embedding_str = embedding
