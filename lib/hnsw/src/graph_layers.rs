@@ -213,36 +213,9 @@ impl GraphLayers {
             ))),
         }?;
 
-        // match try_self {
-        //     Ok(mut slf) => {
         let links = GraphLinksImpl::load_from_file(links_path)?;
         slf.links = links;
         Ok(slf)
-        //     }
-        //     Err(err) => {
-        //         let try_legacy: Result<GraphLayersBackwardCompatibility, _> = read_bin(graph_path);
-        //         if let Ok(legacy) = try_legacy {
-        //             log::debug!("Converting legacy graph to new format");
-
-        //             let mut converter = GraphLinksConverter::new(legacy.links_layers);
-        //             converter.save_as(links_path)?;
-
-        //             let links = GraphLinksImpl::from_converter(converter)?;
-        //             let slf = Self {
-        //                 m: legacy.m,
-        //                 m0: legacy.m0,
-        //                 ef_construct: legacy.ef_construct,
-        //                 links,
-        //                 entry_points: legacy.entry_points,
-        //                 visited_pool: VisitedPool::new(),
-        //             };
-        //             slf.save(graph_path)?;
-        //             Ok(slf)
-        //         } else {
-        //             Err(err)?
-        //         }
-        //     }
-        // }
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {

@@ -48,9 +48,9 @@ impl EntryPoints {
 
     pub fn new_point(&mut self, new_point: PointIdType, level: usize) -> Option<EntryPoint> {
         // there are 3 cases:
+        // - There is no point and alternatives - return None
         // - There is proper entry point for a new point higher or same level - return the point
         // - The new point is higher than any alternative - return the next best thing
-        // - There is no point and alternatives - return None
 
         if self.entry_points.is_empty() {
             // No entry points found. Create a new one and return self

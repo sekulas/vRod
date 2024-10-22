@@ -79,35 +79,9 @@ impl<'a> FilteredScorer<'a> {
 pub trait RawScorer {
     fn score_points(&self, points: &[PointIdType], scores: &mut [ScoredPointOffset]) -> usize;
 
-    /// Score points without excluding deleted and filtered points
-    ///
-    /// # Arguments
-    ///
-    /// * `points` - points to score
-    ///
-    /// # Returns
-    ///
-    /// Vector of scored points
-    fn score_points_unfiltered(
-        &self,
-        points: &mut dyn Iterator<Item = PointIdType>,
-    ) -> Vec<ScoredPointOffset>;
-
-    /// Score stored vector with vector under the given index
     fn score_point(&self, point: PointIdType) -> ScoreType;
 
-    /// Return distance between stored points selected by IDs
-    ///
-    /// # Panics
-    ///
-    /// Panics if any id is out of range
     fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType;
-
-    fn peek_top_iter(
-        &self,
-        points: &mut dyn Iterator<Item = PointIdType>,
-        top: usize,
-    ) -> Vec<ScoredPointOffset>;
 
     fn peek_top_all(&self, top: usize) -> Vec<ScoredPointOffset>;
 }
@@ -146,23 +120,6 @@ where
         size
     }
 
-    fn score_points_unfiltered(
-        &self,
-        points: &mut dyn Iterator<Item = PointIdType>,
-    ) -> Vec<ScoredPointOffset> {
-        // if self.is_stopped.load(Ordering::Relaxed) {
-        //     return vec![];
-        // }
-        let mut scores = vec![];
-        for point_id in points {
-            scores.push(ScoredPointOffset {
-                idx: point_id,
-                score: self.query_scorer.score_stored(point_id),
-            });
-        }
-        scores
-    }
-
     fn score_point(&self, point: PointIdType) -> ScoreType {
         self.query_scorer.score_stored(point)
     }
@@ -171,29 +128,14 @@ where
         self.query_scorer.score_internal(point_a, point_b)
     }
 
-    fn peek_top_iter(
-        &self,
-        points: &mut dyn Iterator<Item = PointIdType>,
-        top: usize,
-    ) -> Vec<ScoredPointOffset> {
-        let scores = points.map(|point_id| ScoredPointOffset {
-            idx: point_id,
-            score: self.query_scorer.score_stored(point_id),
-        });
-        peek_top_largest_iterable(scores, top)
-    }
-
     fn peek_top_all(&self, top: usize) -> Vec<ScoredPointOffset> {
-        let scores = (0..self.total_vector_count as PointIdType)
-            //.take_while(|_| !self.is_stopped.load(Ordering::Relaxed))
-            //.filter(|point_id| self.check_vector(*point_id))
-            .map(|point_id| {
-                let point_id = point_id as PointIdType;
-                ScoredPointOffset {
-                    idx: point_id,
-                    score: self.query_scorer.score_stored(point_id),
-                }
-            });
+        let scores = (0..self.total_vector_count as PointIdType).map(|point_id| {
+            let point_id = point_id as PointIdType;
+            ScoredPointOffset {
+                idx: point_id,
+                score: self.query_scorer.score_stored(point_id),
+            }
+        });
         peek_top_largest_iterable(scores, top)
     }
 }

@@ -223,7 +223,6 @@ impl HnswIndex {
         let graph_links_path = GraphLayers::get_links_path(path);
         let graph: GraphLayers = graph_layers_builder.into_graph_layers(Some(&graph_links_path))?;
 
-        //debug!("finish additional payload field indexing");
         Ok((config, graph))
     }
 

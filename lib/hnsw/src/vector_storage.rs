@@ -47,7 +47,6 @@ impl VectorStorage for VectorStorageImpl {
         self.get_vector_opt(key).expect("vector not found")
     }
 
-    /// Get vector by key, if it exists.
     fn get_vector_opt(&self, key: PointIdType) -> Option<Cow<[VectorElementType]>> {
         self.vectors
             .get(key as usize)
