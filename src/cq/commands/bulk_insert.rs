@@ -55,6 +55,7 @@ impl Command for BulkInsertCommand {
 
 impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
+        //TODO: ### Should we print all of these?
         format!(
             "BULKINSERT {}",
             self.vectors_and_payloads

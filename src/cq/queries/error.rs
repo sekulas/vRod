@@ -10,4 +10,7 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] io::Error),
+
+    #[error(transparent)]
+    Hnsw(#[from] hnsw::Error),
 }

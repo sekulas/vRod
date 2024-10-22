@@ -5,6 +5,7 @@ use super::parsing_ops::parse_id_and_optional_vec_payload;
 use super::parsing_ops::parse_vec_n_payload;
 use super::parsing_ops::parse_vecs_and_payloads_from_file;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
+use super::parsing_ops::parse_vector;
 use super::queries::*;
 use super::CQTarget;
 use super::CQType;
@@ -31,7 +32,7 @@ impl Builder for CQBuilder {
             "DELETE" => build_delete_command(target, arg),
             "BULKINSERT" => build_bulk_insert_command(target, arg, file_path),
             "REINDEX" => build_reindex_command(target),
-            "SEARCHSIMILAR" => todo!("NOT IMPLEMENTED search similar"), //TODO: ### What if last command was ROLLBACK and it's uncommited? Readonly State?
+            "SEARCHSIMILAR" => build_search_simmilar_query(target, arg), //TODO: ### What if last command was ROLLBACK and it's uncommited? Readonly State?
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
@@ -153,4 +154,16 @@ fn build_delete_command(collection: CQTarget, record_id_str: Option<String>) -> 
 
 fn build_reindex_command(collection: CQTarget) -> Result<CQType> {
     Ok(CQType::Command(Box::new(ReindexCommand::new(collection))))
+}
+
+fn build_search_simmilar_query(collection: CQTarget, query_vec: Option<String>) -> Result<CQType> {
+    match query_vec {
+        Some(query_vec) => {
+            let query_vec = parse_vector(&query_vec)?;
+            Ok(CQType::Query(Box::new(SearchSimilarQuery::new(collection, query_vec))))
+        }
+        None => Err(Error::MissingArgument {
+            description: "SEARCHSIMILAR command requires to pass query vector.".to_string(),
+        }),
+    }
 }

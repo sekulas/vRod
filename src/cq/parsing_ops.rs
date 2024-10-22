@@ -44,7 +44,8 @@ pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
     Ok((vector, splitted_data[1].to_string()))
 }
 
-fn parse_vector(data: &str) -> std::result::Result<Vec<Dim>, ParseFloatError> {
+pub fn parse_vector(data: &str) -> std::result::Result<Vec<Dim>, ParseFloatError> {
+    let data = data.replace("\"", "");
     data.split(',').map(|s| s.trim().parse::<Dim>()).collect()
 }
 

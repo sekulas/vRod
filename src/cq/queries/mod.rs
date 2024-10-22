@@ -10,3 +10,5 @@ mod search;
 pub(super) use search::*;
 mod search_all;
 pub(super) use search_all::*;
+mod search_similar;
+pub(super) use search_similar::*;
