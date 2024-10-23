@@ -21,7 +21,7 @@ impl<'a> FilteredScorer<'a> {
         }
     }
 
-    /// Method filters and calculates scores for the given slice of points IDs
+    /// Method and calculates scores for the given slice of points IDs
     ///
     /// For performance reasons this function mutates input values.
     /// For result slice allocation this function mutates self.
@@ -36,22 +36,6 @@ impl<'a> FilteredScorer<'a> {
         point_ids: &mut [PointIdType],
         limit: usize, //TODO: CHECK IF LIMIT NEVER HAS 0
     ) -> &[ScoredPointOffset] {
-        // apply filter and store filtered ids to source slice memory
-        // let filtered_point_ids = match self.filter_context {
-        //     None => point_ids,
-        //     Some(f) => {
-        //         let len = point_ids.len();
-        //         let mut filtered_len = 0;
-        //         for i in 0..len {
-        //             let point_id = point_ids[i];
-        //             if f.check(point_id) {
-        //                 point_ids[filtered_len] = point_id;
-        //                 filtered_len += 1;
-        //             }
-        //         }
-        //         &point_ids[0..filtered_len]
-        //     }
-        // };
         // if limit == 0 {
         //     self.points_buffer
         //         .resize_with(filtered_point_ids.len(), ScoredPointOffset::default);
@@ -59,10 +43,9 @@ impl<'a> FilteredScorer<'a> {
         self.points_buffer
             .resize_with(limit, ScoredPointOffset::default);
         // }
-        let count = self.raw_scorer.score_points(
-            /*filtered_point_ids*/ point_ids,
-            &mut self.points_buffer,
-        );
+        let count = self
+            .raw_scorer
+            .score_points(point_ids, &mut self.points_buffer);
         &self.points_buffer[0..count] //TODO: count -> limit?
     }
 
@@ -96,14 +79,8 @@ where
     TQueryScorer: QueryScorer,
 {
     fn score_points(&self, points: &[PointIdType], scores: &mut [ScoredPointOffset]) -> usize {
-        // if self.is_stopped.load(Ordering::Relaxed) {
-        //     return 0;
-        // }
         let mut size: usize = 0;
         for point_id in points.iter().copied() {
-            // if !self.check_vector(point_id) {
-            //     continue;
-            // }
             scores[size] = ScoredPointOffset {
                 idx: point_id,
                 score: self.query_scorer.score_stored(point_id),

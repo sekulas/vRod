@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::Result;
+use crate::components::collection::types::CollectionSearchResult;
 use atomic_refcell::AtomicRefCell;
 use hnsw::config::HnswConfig;
 use hnsw::id_tracker::{IdTracker, IdTrackerImpl};
@@ -62,19 +63,13 @@ impl Query for SearchSimilarQuery {
         let index = HnswIndex::open(args)?;
         let result = index.search(&[&self.query_vector], 5)?; //TODO: Maybe more vectors for query?
                                                               //TODO: Make top number modifiable?
-
-        let id_tracker = id_tracker_arc.borrow();
         for query_result in result {
             for scored_point in query_result {
-                let in_collection_id = id_tracker.get_external_id(scored_point.idx);
-                let search_result = collection.search(in_collection_id)?;
-                if let crate::components::collection::types::CollectionSearchResult::FoundRecord(
-                    record,
-                ) = search_result
-                {
+                let search_result = collection.search(scored_point.id)?;
+                if let CollectionSearchResult::FoundRecord(record) = search_result {
                     println!(
                         "Id: {}, Payload: {}, Score: {:?}",
-                        in_collection_id, record.payload, scored_point.score
+                        scored_point.id, record.payload, scored_point.score
                     );
                 }
             }

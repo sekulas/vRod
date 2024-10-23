@@ -15,7 +15,7 @@ use crate::{
     graph_layers_builder::GraphLayersBuilder,
     id_tracker::IdTrackerSS,
     scorer::{new_raw_scorer, FilteredScorer},
-    types::{Distance, QueryVector, ScoredPointOffset},
+    types::{Distance, Order, QueryVector, ScoredPoint, ScoredPointOffset},
     vector_storage::{VectorStorage, VectorStorageSS},
     visited_pool::POOL_KEEP_LIMIT,
 };
@@ -230,24 +230,19 @@ impl HnswIndex {
         &self,
         vectors: &[&QueryVector],
         top: usize,
-    ) -> Result<Vec<Vec<ScoredPointOffset>>> {
+    ) -> Result<Vec<Vec<ScoredPoint>>> {
         vectors
             .iter()
             .map(|&vector| self.search_with_graph(vector, top))
             .collect()
     }
 
-    fn search_with_graph(
-        &self,
-        vector: &QueryVector,
-        top: usize,
-    ) -> Result<Vec<ScoredPointOffset>> {
+    fn search_with_graph(&self, vector: &QueryVector, top: usize) -> Result<Vec<ScoredPoint>> {
         // let ef = params
         // TODO: make EF be selectable ??
         //     .and_then(|params| params.hnsw_ef)
         //     .unwrap_or(self.config.ef);
 
-        //let id_tracker = self.id_tracker.borrow();
         let vector_storage = self.vector_storage.borrow();
 
         let raw_scorer = new_raw_scorer(
@@ -259,16 +254,47 @@ impl HnswIndex {
         let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
 
         let search_result = self.graph.search(top, self.config.ef, points_scorer);
-        Ok(search_result)
+        let postprocessed_points = self.postprocess_points(search_result);
+
+        Ok(postprocessed_points)
+    }
+
+    fn postprocess_points(&self, points: Vec<ScoredPointOffset>) -> Vec<ScoredPoint> {
+        let distance = self.config.distance;
+        let id_tracker = self.id_tracker.borrow();
+
+        let postprocessed_points: Vec<ScoredPoint> = points
+            .into_iter()
+            .map(|scored_point| {
+                let external_id = id_tracker.get_external_id(scored_point.idx);
+                ScoredPoint {
+                    id: external_id,
+                    score: distance.postprocess_score(scored_point.score),
+                }
+            })
+            .collect();
+
+        self.sort_points_basing_on_distance(postprocessed_points, distance)
+    }
+
+    fn sort_points_basing_on_distance(
+        &self,
+        points: Vec<ScoredPoint>,
+        distance: Distance,
+    ) -> Vec<ScoredPoint> {
+        let distance_order = distance.distance_order();
+        match distance_order {
+            Order::LargeBetter => points.into_iter().rev().collect(),
+            Order::SmallBetter => points,
+        }
     }
 }
-
 pub trait VectorIndex {
-    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPointOffset>>>;
+    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPoint>>>;
 }
 
 impl VectorIndex for HnswIndex {
-    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPointOffset>>> {
+    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPoint>>> {
         self.search_vectors_with_graph(vectors, top)
     }
 }

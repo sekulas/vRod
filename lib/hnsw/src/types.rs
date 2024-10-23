@@ -3,6 +3,10 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
+use crate::metrics::{
+    CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, MetricPostProcessing,
+};
+
 pub type PointIdType = u32; //RecordId;
 pub type ScoreType = f32; //Vector element type;
 
@@ -43,10 +47,59 @@ pub enum Distance {
     Manhattan,
 }
 
+impl Distance {
+    pub fn postprocess_score(&self, score: ScoreType) -> ScoreType {
+        match self {
+            Distance::Cosine => CosineMetric::postprocess(score),
+            Distance::Euclid => EuclidMetric::postprocess(score),
+            Distance::Dot => DotProductMetric::postprocess(score),
+            Distance::Manhattan => ManhattanMetric::postprocess(score),
+        }
+    }
+
+    pub fn distance_order(&self) -> Order {
+        match self {
+            Distance::Cosine | Distance::Dot => Order::LargeBetter,
+            Distance::Euclid | Distance::Manhattan => Order::SmallBetter,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Order {
+    LargeBetter,
+    SmallBetter,
+}
+
 pub trait QueryScorer {
     fn score_stored(&self, idx: PointIdType) -> ScoreType;
 
     fn score(&self, v2: &Vector) -> ScoreType;
 
     fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType;
+}
+
+pub struct ScoredPoint {
+    pub id: PointIdType,
+    pub score: ScoreType,
+}
+
+impl Eq for ScoredPoint {}
+
+impl Ord for ScoredPoint {
+    fn cmp(&self, other: &Self) -> Ordering {
+        OrderedFloat(self.score).cmp(&OrderedFloat(other.score))
+    }
+}
+
+impl PartialOrd for ScoredPoint {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for ScoredPoint {
+    fn eq(&self, other: &Self) -> bool {
+        (self.id, &self.score) == (other.id, &other.score)
+    }
 }
