@@ -14,7 +14,7 @@ use crate::{
     io_ops::{read_bin, save_bin},
     scorer::FilteredScorer,
     search_context::SearchContext,
-    types::{PointIdType, ScoredPointOffset},
+    types::{Distance, PointIdType, ScoredPointOffset},
     visited_pool::{VisitedListHandle, VisitedPool},
 };
 
@@ -181,12 +181,12 @@ impl GraphLayers {
         nearest.into_iter().take(top).collect()
     }
 
-    pub fn get_path(path: &Path) -> PathBuf {
-        path.join(HNSW_GRAPH_FILE)
+    pub fn get_path(path: &Path, distance: &Distance) -> PathBuf {
+        path.join(format!("{distance}_{HNSW_GRAPH_FILE}"))
     }
 
-    pub fn get_links_path(path: &Path) -> PathBuf {
-        path.join(HNSW_LINKS_FILE)
+    pub fn get_links_path(path: &Path, distance: &Distance) -> PathBuf {
+        path.join(format!("{distance}_{HNSW_LINKS_FILE}"))
     }
 }
 

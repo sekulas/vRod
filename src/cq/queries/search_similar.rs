@@ -86,12 +86,6 @@ impl Query for SearchSimilarQuery {
 
 impl CQAction for SearchSimilarQuery {
     fn to_string(&self) -> String {
-        let distance_str = match self.distance {
-            Distance::Cosine => "COSINE",
-            Distance::Euclid => "EUCLID",
-            Distance::Dot => "DOT",
-            Distance::Manhattan => "MANHATTAN",
-        };
-        "SEARCHSIMILAR ".to_string() + distance_str
+        "SEARCHSIMILAR ".to_string() + &self.distance.to_string().to_uppercase()
     }
 }

@@ -18,7 +18,6 @@ thiserror = { workspace = true }
 atomic_refcell = { workspace = true }
 regex = "1.11.0"
 
-
 hnsw = { path = "lib/hnsw" }
 
 [features]

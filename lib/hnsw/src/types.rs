@@ -1,5 +1,8 @@
 use ordered_float::OrderedFloat;
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    fmt::{self, Display, Formatter},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +64,17 @@ impl Distance {
         match self {
             Distance::Cosine | Distance::Dot => Order::LargeBetter,
             Distance::Euclid | Distance::Manhattan => Order::SmallBetter,
+        }
+    }
+}
+
+impl Display for Distance {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Distance::Cosine => write!(f, "cosine"),
+            Distance::Euclid => write!(f, "euclid"),
+            Distance::Dot => write!(f, "dot"),
+            Distance::Manhattan => write!(f, "manhattan"),
         }
     }
 }

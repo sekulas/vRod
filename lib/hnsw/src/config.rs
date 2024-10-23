@@ -58,8 +58,8 @@ impl HnswGraphConfig {
         }
     }
 
-    pub fn get_config_path(path: &Path) -> PathBuf {
-        path.join(HNSW_INDEX_CONFIG_FILE)
+    pub fn get_config_path(path: &Path, distance: &Distance) -> PathBuf {
+        path.join(format!("{distance}_{HNSW_INDEX_CONFIG_FILE}"))
     }
 
     pub fn load(path: &Path) -> Result<Self> {
