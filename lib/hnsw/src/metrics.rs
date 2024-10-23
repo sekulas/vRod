@@ -1,16 +1,12 @@
 use std::{borrow::Cow, marker::PhantomData};
 
 use crate::{
-    types::{
-        Distance, PointIdType, QueryScorer, QueryVector, ScoreType, Vector, VectorElementType,
-    },
-    vector_storage::{VectorStorage, VectorStorageImpl},
+    types::{PointIdType, QueryScorer, QueryVector, ScoreType, Vector, VectorElementType},
+    vector_storage::VectorStorage,
 };
 
 /// Defines how to compare vectors
 pub trait Metric {
-    fn distance() -> Distance;
-
     /// Greater the value - closer the vectors
     fn similarity(v1: &[VectorElementType], v2: &[VectorElementType]) -> ScoreType;
 
@@ -37,10 +33,6 @@ pub struct EuclidMetric;
 pub struct ManhattanMetric;
 
 impl Metric for EuclidMetric {
-    fn distance() -> Distance {
-        Distance::Euclid
-    }
-
     fn similarity(v1: &[VectorElementType], v2: &[VectorElementType]) -> ScoreType {
         euclid_similarity(v1, v2)
     }
@@ -57,10 +49,6 @@ impl MetricPostProcessing for EuclidMetric {
 }
 
 impl Metric for ManhattanMetric {
-    fn distance() -> Distance {
-        Distance::Manhattan
-    }
-
     fn similarity(v1: &[VectorElementType], v2: &[VectorElementType]) -> ScoreType {
         manhattan_similarity(v1, v2)
     }
@@ -77,10 +65,6 @@ impl MetricPostProcessing for ManhattanMetric {
 }
 
 impl Metric for DotProductMetric {
-    fn distance() -> Distance {
-        Distance::Dot
-    }
-
     fn similarity(v1: &[VectorElementType], v2: &[VectorElementType]) -> ScoreType {
         dot_similarity(v1, v2)
     }
@@ -98,10 +82,6 @@ impl MetricPostProcessing for DotProductMetric {
 
 /// Equivalent to DotProductMetric with normalization of the vectors in preprocessing.
 impl Metric for CosineMetric {
-    fn distance() -> Distance {
-        Distance::Cosine
-    }
-
     fn similarity(v1: &[VectorElementType], v2: &[VectorElementType]) -> ScoreType {
         DotProductMetric::similarity(v1, v2)
     }

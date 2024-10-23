@@ -71,7 +71,6 @@ where
     TQueryScorer: QueryScorer,
 {
     pub query_scorer: TQueryScorer,
-    total_vector_count: usize,
 }
 
 impl<TQueryScorer> RawScorer for RawScorerImpl<TQueryScorer>
@@ -120,24 +119,17 @@ fn new_scorer_with_metric<'a, TMetric: Metric + 'a>(
     query_vector: QueryVector,
     vector_storage: &'a dyn VectorStorage,
 ) -> Result<Box<dyn RawScorer + 'a>> {
-    raw_scorer_from_query_scorer(
-        MetricQueryScorer::<TMetric>::new(
-            query_vector, //TODO: Check if this is correct - REMOVED TRY INTO
-            vector_storage,
-        ),
-        vector_storage.total_vector_count(),
-    )
+    raw_scorer_from_query_scorer(MetricQueryScorer::<TMetric>::new(
+        query_vector, //TODO: Check if this is correct - REMOVED TRY INTO
+        vector_storage,
+    ))
 }
 
 pub fn raw_scorer_from_query_scorer<'a, TQueryScorer>(
     query_scorer: TQueryScorer,
-    total_vector_count: usize,
 ) -> Result<Box<dyn RawScorer + 'a>>
 where
     TQueryScorer: QueryScorer + 'a,
 {
-    Ok(Box::new(RawScorerImpl::<TQueryScorer> {
-        query_scorer,
-        total_vector_count,
-    }))
+    Ok(Box::new(RawScorerImpl::<TQueryScorer> { query_scorer }))
 }
