@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use super::commands::*;
+use super::parsing_ops::parse_distance_and_vecs;
 use super::parsing_ops::parse_id_and_optional_vec_payload;
 use super::parsing_ops::parse_vec_n_payload;
 use super::parsing_ops::parse_vecs_and_payloads_from_file;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
-use super::parsing_ops::parse_vector;
 use super::queries::*;
 use super::CQTarget;
 use super::CQType;
@@ -13,11 +13,21 @@ use crate::cq::{Error, Result};
 pub struct CQBuilder;
 
 pub trait Builder {
-    fn build(target: &CQTarget, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType>;
+    fn build(
+        target: &CQTarget,
+        cq_action: String,
+        arg: Option<String>,
+        file_path: Option<PathBuf>,
+    ) -> Result<CQType>;
 }
 
 impl Builder for CQBuilder {
-    fn build(target: &CQTarget, cq_action: String, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
+    fn build(
+        target: &CQTarget,
+        cq_action: String,
+        arg: Option<String>,
+        file_path: Option<PathBuf>,
+    ) -> Result<CQType> {
         let target = (*target).clone();
 
         match cq_action.to_uppercase().as_str() {
@@ -43,11 +53,9 @@ fn build_create_collection_command(
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => 
-             Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
-                database,
-                name))))
-        ,
+        Some(name) => Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
+            database, name,
+        )))),
         None => Err(Error::MissingCollectionName),
     }
 }
@@ -58,17 +66,14 @@ fn build_drop_collection_command(
 ) -> Result<CQType> {
     match collection_name {
         Some(name) => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
-                database,
-                name,
-            )))),
+            database, name,
+        )))),
         None => Err(Error::MissingCollectionName),
     }
 }
 
 fn build_list_collections_query(database: CQTarget) -> Result<CQType> {
-    Ok(CQType::Query(Box::new(ListCollectionsQuery::new(
-        database,
-    ))))
+    Ok(CQType::Query(Box::new(ListCollectionsQuery::new(database))))
 }
 
 fn build_truncate_wal_command() -> Result<CQType> {
@@ -86,7 +91,11 @@ fn build_insert_command(collection: CQTarget, vec_n_payload: Option<String>) -> 
     }
 }
 
-fn build_bulk_insert_command(collection: CQTarget, arg: Option<String>, file_path: Option<PathBuf>) -> Result<CQType> {
+fn build_bulk_insert_command(
+    collection: CQTarget,
+    arg: Option<String>,
+    file_path: Option<PathBuf>,
+) -> Result<CQType> {
     if let (Some(_), Some(_)) = (&arg, &file_path) {
         println!("Provided both file_path and arg as the source. Using file path.");
     }
@@ -104,7 +113,9 @@ fn build_bulk_insert_command(collection: CQTarget, arg: Option<String>, file_pat
                 Ok(CQType::Command(Box::new(bulk_insert_command)))
             }
             None => Err(Error::MissingArgument {
-                description: "BULKINSERT command requires to pass either file path or vectors and payloads.".to_string(),
+                description:
+                    "BULKINSERT command requires to pass either file path or vectors and payloads."
+                        .to_string(),
             }),
         },
     }
@@ -134,8 +145,9 @@ fn build_update_command(collection: CQTarget, id_vec_payload: Option<String>) ->
             let update_command = UpdateCommand::new(collection, record_id, vector, payload);
             Ok(CQType::Command(Box::new(update_command)))
         }
-        None => Err(Error::MissingArgument{ 
-            description: "UPDATE command requires to pass id, embedding and payload in following format '<record_id>;[vector];[payload].".to_string()}),
+        None => Err(Error::MissingArgument {
+            description: "UPDATE command requires to pass id, embedding and payload.".to_string(),
+        }),
     }
 }
 
@@ -156,11 +168,13 @@ fn build_reindex_command(collection: CQTarget) -> Result<CQType> {
     Ok(CQType::Command(Box::new(ReindexCommand::new(collection))))
 }
 
-fn build_search_simmilar_query(collection: CQTarget, query_vec: Option<String>) -> Result<CQType> {
-    match query_vec {
-        Some(query_vec) => {
-            let query_vec = parse_vector(&query_vec)?;
-            Ok(CQType::Query(Box::new(SearchSimilarQuery::new(collection, query_vec))))
+fn build_search_simmilar_query(collection: CQTarget, args: Option<String>) -> Result<CQType> {
+    match args {
+        Some(args) => {
+            let (distance, query_vecs) = parse_distance_and_vecs(&args)?;
+            Ok(CQType::Query(Box::new(SearchSimilarQuery::new(
+                collection, distance, query_vecs,
+            ))))
         }
         None => Err(Error::MissingArgument {
             description: "SEARCHSIMILAR command requires to pass query vector.".to_string(),

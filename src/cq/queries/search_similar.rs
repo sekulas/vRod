@@ -17,14 +17,16 @@ use crate::{
 
 pub struct SearchSimilarQuery {
     collection: CQTarget,
-    query_vector: Vec<Dim>,
+    distance: Distance,
+    query_vectors: Vec<Vec<Dim>>,
 }
 
 impl SearchSimilarQuery {
-    pub fn new(collection: CQTarget, query_vector: Vec<Dim>) -> Self {
+    pub fn new(collection: CQTarget, distance: Distance, query_vectors: Vec<Vec<Dim>>) -> Self {
         Self {
             collection,
-            query_vector,
+            distance,
+            query_vectors,
         }
     }
 }
@@ -61,14 +63,17 @@ impl Query for SearchSimilarQuery {
         };
 
         let index = HnswIndex::open(args)?;
-        let result = index.search(&[&self.query_vector], 5)?; //TODO: Maybe more vectors for query?
-                                                              //TODO: Make top number modifiable?
+        let query_vectors_ref: Vec<&Vec<Dim>> = self.query_vectors.iter().collect();
+
+        let result = index.search(&query_vectors_ref, 5)?; //TODO: Maybe more vectors for query?
+                                                           //TODO: Make top number modifiable?
         for query_result in result {
+            println!();
             for scored_point in query_result {
                 let search_result = collection.search(scored_point.id)?;
                 if let CollectionSearchResult::FoundRecord(record) = search_result {
                     println!(
-                        "Id: {}, Payload: {}, Score: {:?}",
+                        "Id: {}, Payload: {}, Distance: {:?}",
                         scored_point.id, record.payload, scored_point.score
                     );
                 }
@@ -81,6 +86,12 @@ impl Query for SearchSimilarQuery {
 
 impl CQAction for SearchSimilarQuery {
     fn to_string(&self) -> String {
-        "SEARCHSIMILAR".to_string()
+        let distance_str = match self.distance {
+            Distance::Cosine => "COSINE",
+            Distance::Euclid => "EUCLID",
+            Distance::Dot => "DOT",
+            Distance::Manhattan => "MANHATTAN",
+        };
+        "SEARCHSIMILAR ".to_string() + distance_str
     }
 }
