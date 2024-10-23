@@ -1,12 +1,16 @@
+use hnsw::types::Distance;
+
 use crate::types::{Dim, RecordId};
 
 use super::{Error, Result};
+use regex::Regex;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    num::ParseFloatError,
     path::Path,
 };
+
+const VECTOR_REGEX: &str = r"^-?\d+(\.\d+)?(?:,-?\d+(\.\d+)?)*$";
 
 pub const EXPECTED_2_ARG_FORMAT_ERR_M: &str = "Expected format: <vector>;<payload>";
 pub const NO_EMBEDDING_PROVIDED_ERR_M: &str =
@@ -17,6 +21,12 @@ pub const EXPECTED_3_ARG_FORMAT_ERR_M: &str = "Expected format: <record_id>;[vec
 pub const NO_RECORD_ID_PROVIDED_ERR_M: &str =
     "No record id provided. Expected format: <record_id>;[vector];[payload]";
 pub const DIFFERENT_DIMENSIONS_ERR_M: &str = "All vectors must have the same number of dimensions.";
+pub const EXPECTED_DISTANCE_AND_VECTORS_ERR_M: &str =
+    "Expected format: <distance> [vector] [vector] ...";
+pub const INVALID_DISTANCE_METRIC_ERR_M: &str =
+    "Invalid distance metric - expected EUCLID, MANHATTAN, DOT or COSINE";
+pub const INVALID_VECTOR_FORMAT_ERR_M: &str = "Invalid vector format - expected floating point numbers separated by commas (e.g. 1.0,2.0,-3.0)";
+pub const CANNOT_PARSE_FLOAT_ERR_M: &str = "Cannot parse float from given vector.";
 
 pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
     let splitted_data = data.split(';').collect::<Vec<&str>>();
@@ -44,9 +54,27 @@ pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
     Ok((vector, splitted_data[1].to_string()))
 }
 
-pub fn parse_vector(data: &str) -> std::result::Result<Vec<Dim>, ParseFloatError> {
+pub fn parse_vector(data: &str) -> Result<Vec<Dim>> {
     let data = data.replace("\"", "");
-    data.split(',').map(|s| s.trim().parse::<Dim>()).collect()
+    let re = Regex::new(VECTOR_REGEX)?;
+
+    if !re.is_match(&data) {
+        return Err(Error::InvalidDataFormat {
+            description: INVALID_VECTOR_FORMAT_ERR_M.to_owned(),
+        });
+    }
+
+    let vector = data
+        .split(',')
+        .map(|s| {
+            s.trim()
+                .parse::<Dim>()
+                .map_err(|_| Error::InvalidDataFormat {
+                    description: CANNOT_PARSE_FLOAT_ERR_M.to_owned(),
+                })
+        })
+        .collect::<Result<Vec<Dim>>>()?;
+    Ok(vector)
 }
 
 pub fn parse_vecs_and_payloads_from_file(file_path: &Path) -> Result<Vec<(Vec<Dim>, String)>> {
@@ -136,6 +164,35 @@ fn validate_vecs_and_payloads(vecs_and_payloads: &[(Vec<Dim>, String)]) -> Resul
     }
 
     Ok(())
+}
+
+pub fn parse_distance_and_vecs(data: &str) -> Result<(Distance, Vec<Vec<Dim>>)> {
+    let splitted_data = data.split(' ').collect::<Vec<&str>>();
+
+    if splitted_data.len() < 2 {
+        return Err(Error::InvalidDataFormat {
+            description: EXPECTED_DISTANCE_AND_VECTORS_ERR_M.to_owned(),
+        });
+    }
+
+    let distance = match splitted_data[0].to_uppercase().as_str() {
+        "EUCLID" => Distance::Euclid,
+        "MANHATTAN" => Distance::Manhattan,
+        "DOT" => Distance::Dot,
+        "COSINE" => Distance::Cosine,
+        _ => {
+            return Err(Error::InvalidDataFormat {
+                description: INVALID_DISTANCE_METRIC_ERR_M.to_owned(),
+            })
+        }
+    };
+
+    let vectors = splitted_data[1..]
+        .iter()
+        .map(|s| parse_vector(s).map_err(Error::from))
+        .collect::<Result<Vec<Vec<Dim>>>>()?;
+
+    Ok((distance, vectors))
 }
 
 #[cfg(test)]
@@ -393,5 +450,48 @@ mod tests {
 
         //Assert
         assert_eq!(result, "".to_string());
+    }
+
+    #[test]
+    fn vector_regex_parse_test() -> Result<()> {
+        //Arrange
+        let re = Regex::new(VECTOR_REGEX)?;
+
+        let test_cases = vec![
+            "1.0,-2.3,3.0",    // Basic floating points with negative
+            "1,-2,3",          // Integers with negative
+            "1.5,-2.3",        // Two numbers
+            "-1.0",            // Single negative float
+            "1",               // Single integer
+            "0.5",             // Single float
+            "-1,-2,-3",        // All negative integers
+            "-1.1,-2.2,-3.3",  // All negative floats
+            "1.0,2.0,3.0,4.0", // Multiple floats
+            "1,2.5,-3.7,4",    // Mixed format
+        ];
+
+        //Act & Assert
+        for test in test_cases {
+            assert!(re.is_match(test));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_distance_and_vecs_should_return_distance_and_vecs() -> Result<()> {
+        //Arrange
+        let data = "EUCLID 1.0,2,-3 -4,5.0,6.0";
+
+        //Act
+        let (distance, vectors) = parse_distance_and_vecs(data)?;
+
+        //Assert
+        assert_eq!(distance, Distance::Euclid);
+        assert_eq!(vectors.len(), 2);
+        assert_eq!(vectors[0], vec![1.0, 2.0, -3.0]);
+        assert_eq!(vectors[1], vec![-4.0, 5.0, 6.0]);
+
+        Ok(())
     }
 }

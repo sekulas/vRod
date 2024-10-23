@@ -229,8 +229,7 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use cq::parsing_ops::{
-        parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M,
-        NO_RECORD_ID_PROVIDED_ERR_M,
+        parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, INVALID_VECTOR_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M
     };
     use predicates::prelude::PredicateBooleanExt;
     use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
@@ -1444,7 +1443,7 @@ mod tests {
         //Assert
         result
             .failure()
-            .stderr(predicates::str::contains("ParseFloatError"));
+            .stderr(predicates::str::contains(INVALID_VECTOR_FORMAT_ERR_M));
 
         Ok(())
     }

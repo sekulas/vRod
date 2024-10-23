@@ -35,6 +35,9 @@ pub enum Error {
     ParseInt(#[from] std::num::ParseIntError),
 
     #[error(transparent)]
+    Regex(#[from] regex::Error),
+
+    #[error(transparent)]
     Wal(#[from] wal::Error),
 
     #[error(transparent)]
