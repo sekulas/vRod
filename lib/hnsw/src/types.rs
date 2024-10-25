@@ -59,13 +59,6 @@ impl Distance {
             Distance::Manhattan => ManhattanMetric::postprocess(score),
         }
     }
-
-    pub fn distance_order(&self) -> Order {
-        match self {
-            Distance::Cosine | Distance::Dot => Order::LargeBetter,
-            Distance::Euclid | Distance::Manhattan => Order::SmallBetter,
-        }
-    }
 }
 
 impl Display for Distance {
@@ -77,12 +70,6 @@ impl Display for Distance {
             Distance::Manhattan => write!(f, "manhattan"),
         }
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Order {
-    LargeBetter,
-    SmallBetter,
 }
 
 pub trait QueryScorer {

@@ -15,7 +15,7 @@ use crate::{
     graph_layers_builder::GraphLayersBuilder,
     id_tracker::IdTrackerSS,
     scorer::{new_raw_scorer, FilteredScorer},
-    types::{Distance, Order, QueryVector, ScoredPoint, ScoredPointOffset},
+    types::{Distance, QueryVector, ScoredPoint, ScoredPointOffset},
     vector_storage::{VectorStorage, VectorStorageSS},
     visited_pool::POOL_KEEP_LIMIT,
 };
@@ -274,19 +274,7 @@ impl HnswIndex {
             })
             .collect();
 
-        self.sort_points_basing_on_distance(postprocessed_points, distance)
-    }
-
-    fn sort_points_basing_on_distance(
-        &self,
-        points: Vec<ScoredPoint>,
-        distance: Distance,
-    ) -> Vec<ScoredPoint> {
-        let distance_order = distance.distance_order();
-        match distance_order {
-            Order::LargeBetter => points.into_iter().rev().collect(),
-            Order::SmallBetter => points,
-        }
+        postprocessed_points
     }
 }
 pub trait VectorIndex {
