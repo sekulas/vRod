@@ -59,7 +59,7 @@ impl Query for SearchSimilarQuery {
                 ef_construct: 5,
                 max_indexing_threads: 3, //TODO: To Verify
             },
-            distance: Distance::Euclid, //TODO: Selectable?
+            distance: self.distance,
         };
 
         let index = HnswIndex::open(args)?;
