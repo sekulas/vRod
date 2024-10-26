@@ -11,8 +11,6 @@ use crate::types::PointIdType;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct GraphLinksFileData {
-    point_count: u64,
-    levels_count: u64,
     links: Vec<PointIdType>,
     offsets: Vec<u64>,
     level_offsets: Vec<u64>,
@@ -46,8 +44,8 @@ impl GraphLinksConverter {
         back_index.reverse();
 
         let mut reindex = vec![0; back_index.len()];
-        for i in 0..back_index.len() {
-            reindex[back_index[i]] = i as PointIdType;
+        for point_idx in 0..back_index.len() {
+            reindex[back_index[point_idx]] = point_idx as PointIdType;
         }
 
         let mut total_links_len = 0;
@@ -84,8 +82,6 @@ impl GraphLinksConverter {
         }
 
         GraphLinksFileData {
-            point_count: self.reindex.len() as u64,
-            levels_count: self.get_levels_count() as u64,
             links,
             offsets,
             level_offsets,
@@ -166,9 +162,9 @@ pub trait GraphLinks: Default {
 #[derive(Debug, Default)]
 pub struct GraphLinksImpl {
     links: Vec<PointIdType>,
-    offsets: Vec<u64>,
+    offsets: Vec<u64>, // offsets[point_id] = start_offset, offsets[point_id + 1] = end_offset. Stored from lowest to highest layer.
     level_offsets: Vec<u64>,
-    reindex: Vec<PointIdType>,
+    reindex: Vec<PointIdType>, // reindex[point_id] = new_point_id (used for access to links in offsets especially for layers > 0)
 }
 
 impl GraphLinksImpl {
