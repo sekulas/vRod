@@ -300,3 +300,91 @@ impl VectorIndex for HnswIndex {
 // .map(|scorer| scorer.peek_top_all(top))
 // })
 // .collect()
+
+#[cfg(test)]
+mod tests {
+    type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
+    use atomic_refcell::AtomicRefCell;
+
+    use crate::{
+        config::HnswConfig,
+        id_tracker::{IdTracker, IdTrackerImpl, IdTrackerSS},
+        types::{Distance, PointIdType, QueryVector, VectorElementType},
+        vector_storage::{VectorStorageImpl, VectorStorageSS},
+        HnswIndex, HnswIndexOpenArgs, VectorIndex,
+    };
+    use std::sync::Arc;
+
+    fn generate_fibb_data_set() -> (
+        Arc<AtomicRefCell<IdTrackerSS>>,
+        Arc<AtomicRefCell<VectorStorageSS>>,
+    ) {
+        let mut id_tracker = IdTrackerImpl::new();
+        let mut vector_storage = VectorStorageImpl::new();
+
+        let fibb: Vec<u32> = vec![
+            1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765,
+            10946, 17711, 28657, 46368, 75025, 121393,
+        ];
+        for (i, &f) in fibb.iter().enumerate() {
+            let _ = id_tracker.add_new_external_id(i as PointIdType);
+            vector_storage.add_vector(vec![f as VectorElementType]);
+        }
+
+        let id_tracker = Arc::new(AtomicRefCell::new(id_tracker));
+        let vector_storage = Arc::new(AtomicRefCell::new(vector_storage));
+        (id_tracker, vector_storage)
+    }
+
+    #[test]
+    fn hnsw_search_euclid_on_fibb_data_set() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let (id_tracker, vector_storage) = generate_fibb_data_set();
+
+        let hnsw_config = HnswConfig {
+            m: 6,
+            ef_construct: 12,
+            max_indexing_threads: 4,
+        };
+
+        let hnsw_index = HnswIndex::open(HnswIndexOpenArgs {
+            path,
+            id_tracker,
+            vector_storage,
+            hnsw_config,
+            distance: Distance::Euclid,
+        })?;
+
+        let query_vectors = [
+            QueryVector::from(vec![21.0]),
+            QueryVector::from(vec![418.0]),
+        ];
+        let query_vectors_refs: Vec<&QueryVector> = query_vectors.iter().collect();
+        let top = 3;
+
+        //Act
+        let search_result = hnsw_index.search(&query_vectors_refs, top)?;
+
+        //Assert
+        assert_eq!(search_result.len(), query_vectors.len());
+        assert_eq!(search_result[0].len(), top);
+        assert_eq!(search_result[1].len(), top);
+
+        let result = search_result[0]
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<PointIdType>>();
+
+        let result2 = search_result[1]
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<PointIdType>>();
+
+        assert_eq!(result, vec![7, 6, 5]);
+        assert_eq!(result2, vec![13, 12, 14]);
+
+        Ok(())
+    }
+}
