@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     entry_points::{EntryPoint, EntryPoints},
     fixed_length_priority_queue::FixedLengthPriorityQueue,
-    graph_links_bin::{GraphLinks, GraphLinksImpl},
+    graph_links::{GraphLinks, GraphLinksImpl},
     io_ops::{read_bin, save_bin},
     scorer::FilteredScorer,
     search_context::SearchContext,

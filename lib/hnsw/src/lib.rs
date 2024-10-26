@@ -5,8 +5,7 @@ pub mod config;
 mod fixed_length_priority_queue;
 mod graph_layers;
 mod graph_layers_builder;
-//mod graph_links;
-mod graph_links_bin; //TODO: REMOVE ONE OF GRAPH LINKS
+mod graph_links;
 mod hnsw;
 pub use hnsw::*;
 pub mod id_tracker;

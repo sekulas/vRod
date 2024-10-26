@@ -14,7 +14,7 @@ use crate::{
     entry_points::EntryPoints,
     fixed_length_priority_queue::FixedLengthPriorityQueue,
     graph_layers::{GraphLayers, GraphLayersBase, LinkContainer},
-    graph_links_bin::{GraphLinks, GraphLinksConverter},
+    graph_links::{GraphLinks, GraphLinksConverter},
     scorer::FilteredScorer,
     search_context::SearchContext,
     types::{PointIdType, ScoreType, ScoredPointOffset},
