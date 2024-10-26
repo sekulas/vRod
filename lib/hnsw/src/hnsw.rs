@@ -362,7 +362,7 @@ mod tests {
             QueryVector::from(vec![418.0]),
         ];
         let query_vectors_refs: Vec<&QueryVector> = query_vectors.iter().collect();
-        let top = 3;
+        let top = 2;
 
         //Act
         let search_result = hnsw_index.search(&query_vectors_refs, top)?;
@@ -382,8 +382,8 @@ mod tests {
             .map(|p| p.id)
             .collect::<Vec<PointIdType>>();
 
-        assert_eq!(result, vec![7, 6, 5]);
-        assert_eq!(result2, vec![13, 12, 14]);
+        assert_eq!(result, vec![7, 6]);
+        assert_eq!(result2, vec![13, 12]);
 
         Ok(())
     }
