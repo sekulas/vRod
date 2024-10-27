@@ -147,14 +147,6 @@ impl HnswIndex {
             config.m,
             config.m0,
             config.ef_construct,
-            std::cmp::max(
-                1,
-                // total_vector_count //TODO: To check how many entry points
-                //     .checked_div(full_scan_threshold)
-                //     .unwrap_or(0)
-                //     * 10,
-                0,
-            ),
             HNSW_USE_HEURISTIC,
         );
 

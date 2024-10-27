@@ -11,7 +11,7 @@ use std::{
 use parking_lot::{Mutex, RwLock};
 
 use crate::{
-    entry_points::EntryPoints,
+    entry_point::EntryPointContainer,
     fixed_length_priority_queue::FixedLengthPriorityQueue,
     graph_layers::{GraphLayers, GraphLayersBase, LinkContainer},
     graph_links::{GraphLinks, GraphLinksConverter},
@@ -34,7 +34,7 @@ pub struct GraphLayersBuilder {
     // Exclude points according to "not closer than base" heuristic?
     use_heuristic: bool,
     links_layers: Vec<LockedLayersContainer>,
-    entry_points: Mutex<EntryPoints>,
+    entry_point: Mutex<EntryPointContainer>,
 
     // Fields used on construction phase only
     visited_pool: VisitedPool,
@@ -76,7 +76,6 @@ impl GraphLayersBuilder {
         m: usize,           // Expected M for non-first layer
         m0: usize,          // Expected M for first layer
         ef_construct: usize,
-        entry_points_num: usize, // Depends on number of points
         use_heuristic: bool,
         reserve: bool,
     ) -> Self {
@@ -100,7 +99,7 @@ impl GraphLayersBuilder {
             level_factor: 1.0 / (max(m, 2) as f64).ln(),
             use_heuristic,
             links_layers,
-            entry_points: Mutex::new(EntryPoints::new(entry_points_num)),
+            entry_point: Mutex::new(EntryPointContainer::new()),
             visited_pool: VisitedPool::new(),
             ready_list,
         }
@@ -111,18 +110,9 @@ impl GraphLayersBuilder {
         m: usize,           // Expected M for non-first layer
         m0: usize,          // Expected M for first layer
         ef_construct: usize,
-        entry_points_num: usize, // Depends on number of points
         use_heuristic: bool,
     ) -> Self {
-        Self::new_with_params(
-            num_vectors,
-            m,
-            m0,
-            ef_construct,
-            entry_points_num,
-            use_heuristic,
-            true,
-        )
+        Self::new_with_params(num_vectors, m, m0, ef_construct, use_heuristic, true)
     }
 
     pub fn into_graph_layers(self, path: &Path) -> Result<GraphLayers> {
@@ -141,7 +131,7 @@ impl GraphLayersBuilder {
             m0: self.m0,
             ef_construct: self.ef_construct,
             links,
-            entry_points: self.entry_points.into_inner(),
+            entry_point: self.entry_point.into_inner(),
             visited_pool: self.visited_pool,
         })
     }
@@ -260,7 +250,7 @@ impl GraphLayersBuilder {
 
         let level = self.get_point_level(point_id);
 
-        let entry_point_opt = self.entry_points.lock().get_entry_point();
+        let entry_point_opt = self.entry_point.lock().get_entry_point();
         match entry_point_opt {
             // New point is a new empty entry (for this filter, at least)
             // We can't do much here, so just quit
@@ -402,7 +392,7 @@ impl GraphLayersBuilder {
             }
         }
         self.ready_list.write().set(point_id as usize, true);
-        self.entry_points.lock().new_point(point_id, level);
+        self.entry_point.lock().set_if_higher(point_id, level);
     }
 
     fn num_points(&self) -> usize {

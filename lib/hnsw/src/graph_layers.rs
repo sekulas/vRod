@@ -8,7 +8,7 @@ use super::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    entry_points::{EntryPoint, EntryPoints},
+    entry_point::{EntryPoint, EntryPointContainer},
     fixed_length_priority_queue::FixedLengthPriorityQueue,
     graph_links::{GraphLinks, GraphLinksImpl},
     io_ops::{read_bin, save_bin},
@@ -31,7 +31,7 @@ pub struct GraphLayers {
 
     #[serde(skip)]
     pub(super) links: GraphLinksImpl,
-    pub(super) entry_points: EntryPoints,
+    pub(super) entry_point: EntryPointContainer,
 
     #[serde(skip)]
     pub(super) visited_pool: VisitedPool,
@@ -158,7 +158,7 @@ impl GraphLayersBase for GraphLayers {
 
 impl GraphLayers {
     fn get_entry_point(&self) -> Option<EntryPoint> {
-        self.entry_points.get_entry_point()
+        self.entry_point.get_entry_point()
     }
 
     pub fn search(

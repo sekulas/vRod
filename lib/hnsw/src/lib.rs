@@ -1,4 +1,4 @@
-mod entry_points;
+mod entry_point;
 mod error;
 pub use error::{Error, Result};
 pub mod config;
