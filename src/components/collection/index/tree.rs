@@ -70,7 +70,7 @@ impl Index for BPTree {
 
     fn perform_rollback(&mut self, lsn: Lsn) -> Result<()> {
         if lsn - 1 != self.header.modification_lsn {
-            return Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."));
+            return Ok(()); //Nothing to rollback.
         }
 
         self.header.modification_lsn -= 1;
