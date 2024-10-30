@@ -65,18 +65,20 @@ impl Query for SearchSimilarQuery {
             id_tracker: Arc::new(AtomicRefCell::new(id_tracker)).clone(),
             vector_storage: Arc::new(AtomicRefCell::new(vector_storage)),
             hnsw_config: HnswConfig {
-                m: 8, //TODO: M, EF changeable?
-                ef_construct: 32,
-                max_indexing_threads: 3, //TODO: To Verify
+                m: 24, //TODO: M, EF changeable?
+                ef_construct: 64,
+                max_indexing_threads: 10, //TODO: To Verify
             },
             distance: self.distance,
         };
 
         // TODO: Should rebuild be specified?
 
-        println!("Opening Hnsw index...");
+        println!("Opening HNSW Index...");
+        let time = std::time::Instant::now();
         let index = HnswIndex::open(args)?;
-        println!("Hnsw index opened.");
+        println!("HNSW Index opened in {}s.", time.elapsed().as_secs_f32()); //TODO: Time to remove?
+        println!("HNSW Index opened.");
 
         let query_vectors_ref: Vec<&Vec<Dim>> = self.query_vectors.iter().collect();
 
