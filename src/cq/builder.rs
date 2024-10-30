@@ -102,7 +102,13 @@ fn build_bulk_insert_command(
 
     match file_path {
         Some(file_path) => {
+            println!("Parsing vectors and payloads from file...");
+            let time = std::time::Instant::now();
             let vecs_and_payloads = parse_vecs_and_payloads_from_file(&file_path)?;
+            println!(
+                "Vectors and payloads parsed in {}s.",
+                time.elapsed().as_secs_f32()
+            );
             let bulk_insert_command = BulkInsertCommand::new(collection, vecs_and_payloads);
             Ok(CQType::Command(Box::new(bulk_insert_command)))
         }
@@ -111,12 +117,16 @@ fn build_bulk_insert_command(
                 let vecs_and_payloads = parse_vecs_and_payloads_from_string(&arg)?;
                 let bulk_insert_command = BulkInsertCommand::new(collection, vecs_and_payloads);
                 Ok(CQType::Command(Box::new(bulk_insert_command)))
+            } // None => Err(Error::MissingArgument {
+            //     description:
+            //         "BULKINSERT command requires to pass either file path or vectors and payloads."
+            //             .to_string(),
+            // }),
+            None => {
+                let vecs_and_payloads = Vec::new();
+                let bulk_insert_command = BulkInsertCommand::new(collection, vecs_and_payloads);
+                Ok(CQType::Command(Box::new(bulk_insert_command)))
             }
-            None => Err(Error::MissingArgument {
-                description:
-                    "BULKINSERT command requires to pass either file path or vectors and payloads."
-                        .to_string(),
-            }),
         },
     }
 }
