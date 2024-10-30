@@ -32,8 +32,16 @@ impl Command for BulkInsertCommand {
             .iter()
             .map(|(vec, string)| (vec.as_slice(), string.as_str()))
             .collect();
+        println!("Vectors and payloads collected.");
 
+        println!("Inserting vectors and payloads...");
+
+        let time = std::time::Instant::now();
         collection.bulk_insert(&vectors_and_payloads_ref, lsn)?;
+        println!(
+            "Vectors and payloads inserted in {}s.",
+            time.elapsed().as_secs_f32()
+        );
 
         wal.commit()?;
         Ok(())
