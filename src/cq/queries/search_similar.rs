@@ -65,19 +65,24 @@ impl Query for SearchSimilarQuery {
             id_tracker: Arc::new(AtomicRefCell::new(id_tracker)).clone(),
             vector_storage: Arc::new(AtomicRefCell::new(vector_storage)),
             hnsw_config: HnswConfig {
-                m: 3, //TODO: M, EF changeable?
-                ef_construct: 5,
+                m: 8, //TODO: M, EF changeable?
+                ef_construct: 32,
                 max_indexing_threads: 3, //TODO: To Verify
             },
             distance: self.distance,
         };
 
-        // TODO: Open with rebuild if needed (because of collection updates)
+        // TODO: Should rebuild be specified?
+
+        println!("Opening Hnsw index...");
         let index = HnswIndex::open(args)?;
+        println!("Hnsw index opened.");
+
         let query_vectors_ref: Vec<&Vec<Dim>> = self.query_vectors.iter().collect();
 
-        let result = index.search(&query_vectors_ref, 5)?; //TODO: Maybe more vectors for query?
-                                                           //TODO: Make top number modifiable?
+        println!("Searching similar vectors...");
+        let result = index.search(&query_vectors_ref, 100)?; //TODO: Maybe more vectors for query?
+                                                             //TODO: Make top number modifiable?
         for query_result in result {
             println!();
             for scored_point in query_result {
