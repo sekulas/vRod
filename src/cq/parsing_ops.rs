@@ -1,4 +1,5 @@
 use hnsw::types::Distance;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::types::{Dim, RecordId};
 
@@ -8,9 +9,18 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
+    sync::atomic::AtomicBool,
 };
 
-const VECTOR_REGEX: &str = r"^-?\d+(\.\d+)?(?:,-?\d+(\.\d+)?)*$";
+const DEFAULT_VECTOR_SIZE: usize = 324;
+const VECTOR_DELIMITER: char = ',';
+const VECTOR_PATTERN: &str = r"^-?\d+(\.\d+)?(?:,-?\d+(\.\d+)?)*$";
+const VECTOR_PAYLOAD_DELIMITER: char = ';';
+const ENTRY_DELIMETER: char = ' ';
+
+thread_local! {
+    static VECTOR_REGEX: Regex = Regex::new(VECTOR_PATTERN).expect("Failed to create static vector regex");
+}
 
 pub const EXPECTED_2_ARG_FORMAT_ERR_M: &str = "Expected format: <vector>;<payload>";
 pub const NO_EMBEDDING_PROVIDED_ERR_M: &str =
@@ -29,7 +39,7 @@ pub const INVALID_VECTOR_FORMAT_ERR_M: &str = "Invalid vector format - expected 
 pub const CANNOT_PARSE_FLOAT_ERR_M: &str = "Cannot parse float from given vector.";
 
 pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
-    let splitted_data = data.split(';').collect::<Vec<&str>>();
+    let splitted_data = data.split(VECTOR_PAYLOAD_DELIMITER).collect::<Vec<&str>>();
 
     if splitted_data.len() != 2 {
         return Err(Error::InvalidDataFormat {
@@ -55,44 +65,64 @@ pub fn parse_vec_n_payload(data: &str) -> Result<(Vec<f32>, String)> {
 }
 
 pub fn parse_vector(data: &str) -> Result<Vec<Dim>> {
-    let data = data.replace("\"", "");
-    let re = Regex::new(VECTOR_REGEX)?;
-
-    if !re.is_match(&data) {
+    if !VECTOR_REGEX.with(|re| re.is_match(data)) {
         return Err(Error::InvalidDataFormat {
             description: INVALID_VECTOR_FORMAT_ERR_M.to_owned(),
         });
     }
 
-    let vector = data
-        .split(',')
-        .map(|s| {
-            s.trim()
-                .parse::<Dim>()
-                .map_err(|_| Error::InvalidDataFormat {
-                    description: CANNOT_PARSE_FLOAT_ERR_M.to_owned(),
-                })
-        })
-        .collect::<Result<Vec<Dim>>>()?;
+    let mut vector = Vec::with_capacity(DEFAULT_VECTOR_SIZE);
+    let mut current_num = String::new();
+
+    for c in data.chars() {
+        match c {
+            VECTOR_DELIMITER => {
+                if !current_num.trim().is_empty() {
+                    match current_num.trim().parse::<Dim>() {
+                        Ok(dim) => vector.push(dim),
+                        Err(_) => {
+                            return Err(Error::InvalidDataFormat {
+                                description: CANNOT_PARSE_FLOAT_ERR_M.to_owned(),
+                            });
+                        }
+                    }
+                    current_num.clear();
+                }
+            }
+            _ => current_num.push(c),
+        }
+    }
+
+    if !current_num.trim().is_empty() {
+        current_num
+            .trim()
+            .parse::<Dim>()
+            .map(|dim| vector.push(dim))
+            .map_err(|_| Error::InvalidDataFormat {
+                description: CANNOT_PARSE_FLOAT_ERR_M.to_owned(),
+            })?;
+    }
+
     Ok(vector)
 }
 
 pub fn parse_vecs_and_payloads_from_file(file_path: &Path) -> Result<Vec<(Vec<Dim>, String)>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
-    let mut vecs_and_payloads = Vec::new();
 
-    for line in reader.lines() {
-        let line = line?;
-        let (vector, payload) = parse_vec_n_payload(&line)?;
-        vecs_and_payloads.push((vector, payload));
-    }
+    let lines: Vec<String> = reader.lines().collect::<std::result::Result<_, _>>()?;
+
+    let vecs_and_payloads: Vec<_> = lines
+        .par_iter()
+        .map(|line| parse_vec_n_payload(line).expect("Failed to parse vector and payload"))
+        .collect();
 
     validate_vecs_and_payloads(&vecs_and_payloads)?;
 
     Ok(vecs_and_payloads)
 }
 
+//TODO: To optimize.
 pub fn parse_vecs_and_payloads_from_string(data: &str) -> Result<Vec<(Vec<Dim>, String)>> {
     let vecs_and_payloads: Vec<(Vec<Dim>, String)> = data
         .split_whitespace()
@@ -117,7 +147,7 @@ pub fn parse_string_from_vector_option(data: Option<&[Dim]>) -> String {
 pub fn parse_id_and_optional_vec_payload(
     data: &str,
 ) -> Result<(RecordId, Option<Vec<Dim>>, Option<String>)> {
-    let splitted_data = data.split(';').collect::<Vec<&str>>();
+    let splitted_data = data.split(VECTOR_PAYLOAD_DELIMITER).collect::<Vec<&str>>();
 
     if splitted_data.len() != 3 {
         return Err(Error::InvalidDataFormat {
@@ -154,20 +184,25 @@ fn validate_vecs_and_payloads(vecs_and_payloads: &[(Vec<Dim>, String)]) -> Resul
     }
 
     let first_vec_len = vecs_and_payloads[0].0.len();
+    let data_is_valid: AtomicBool = AtomicBool::new(true);
 
-    for (vec, _) in vecs_and_payloads.iter() {
+    vecs_and_payloads.par_iter().for_each(|(vec, _)| {
         if vec.len() != first_vec_len {
-            return Err(Error::InvalidDataFormat {
-                description: DIFFERENT_DIMENSIONS_ERR_M.to_owned(),
-            });
+            data_is_valid.store(false, std::sync::atomic::Ordering::Relaxed);
         }
+    });
+
+    if !data_is_valid.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(Error::InvalidDataFormat {
+            description: DIFFERENT_DIMENSIONS_ERR_M.to_owned(),
+        });
     }
 
     Ok(())
 }
 
 pub fn parse_distance_and_vecs(data: &str) -> Result<(Distance, Vec<Vec<Dim>>)> {
-    let splitted_data = data.split(' ').collect::<Vec<&str>>();
+    let splitted_data = data.split(ENTRY_DELIMETER).collect::<Vec<&str>>();
 
     if splitted_data.len() < 2 {
         return Err(Error::InvalidDataFormat {
@@ -455,7 +490,7 @@ mod tests {
     #[test]
     fn vector_regex_parse_test() -> Result<()> {
         //Arrange
-        let re = Regex::new(VECTOR_REGEX)?;
+        let re = VECTOR_REGEX.with(|re| re.clone());
 
         let test_cases = vec![
             "1.0,-2.3,3.0",    // Basic floating points with negative

@@ -27,6 +27,7 @@ impl Command for BulkInsertCommand {
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;
 
+        println!("Collecting vectors and payloads...");
         let vectors_and_payloads_ref: Vec<(&[Dim], &str)> = self
             .vectors_and_payloads
             .iter()
@@ -63,24 +64,7 @@ impl Command for BulkInsertCommand {
 
 impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
-        //TODO: ### Should we print all of these?
-        format!(
-            "BULKINSERT {}",
-            self.vectors_and_payloads
-                .iter()
-                .map(|(vector, payload)| {
-                    format!(
-                        "{};{}",
-                        vector
-                            .iter()
-                            .map(|dim| dim.to_string())
-                            .collect::<Vec<String>>()
-                            .join(","),
-                        payload
-                    )
-                })
-                .collect::<Vec<String>>()
-                .join(" ")
-        )
+        //TODO: ### Should we print all of these? Performance Reasons.
+        "BULKINSERT".to_string()
     }
 }

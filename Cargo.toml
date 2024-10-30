@@ -17,6 +17,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 atomic_refcell = { workspace = true }
 regex = "1.11.0"
+rayon = { workspace = true }
 
 hnsw = { path = "lib/hnsw" }
 
@@ -32,3 +33,4 @@ serde = { version = "1.0.198", features = ["derive"] }
 thiserror = "1.0.58"
 atomic_refcell = "0.1.13"
 tempfile = "3.10.1"
+rayon = "1.10.0"
