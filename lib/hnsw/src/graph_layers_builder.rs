@@ -259,6 +259,7 @@ impl GraphLayersBuilder {
             // Entry point found.
             Some(entry_point) => {
                 let mut level_entry = if entry_point.level > level {
+                    //TODO: Zbadaj!!!
                     // The entry point is higher than a new point
                     // Let's find closest one on same level
 

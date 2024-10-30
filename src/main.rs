@@ -130,6 +130,10 @@ fn specify_target(
 
     let (target_path, is_readonly) = match collection_name {
         Some(collection_name) => {
+            if !db_config.collection_exists(&collection_name) {
+                return Err(Error::CollectionDoesNotExist(collection_name));
+            }
+
             let is_readonly = db_config.is_collection_readonly(&collection_name);
             (
                 CQTarget::Collection {

@@ -1,5 +1,4 @@
 use crate::{components::wal, cq, database, utils};
-
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -12,6 +11,9 @@ pub enum Error {
 
     #[error("Database does not exist in path: {0}.")]
     DatabaseDoesNotExist(String),
+
+    #[error("Collection with name {0} does not exist in selected database.")]
+    CollectionDoesNotExist(String),
 
     #[error("Cannot perform operation on readonly target.")]
     TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
