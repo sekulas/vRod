@@ -81,8 +81,8 @@ impl Query for SearchSimilarQuery {
         let query_vectors_ref: Vec<&Vec<Dim>> = self.query_vectors.iter().collect();
 
         println!("Searching similar vectors...");
-        let result = index.search(&query_vectors_ref, 100)?; //TODO: Maybe more vectors for query?
-                                                             //TODO: Make top number modifiable?
+        let result = index.search(&query_vectors_ref, 10)?; //TODO: Maybe more vectors for query?
+                                                            //TODO: Make top number modifiable?
         for query_result in result {
             println!();
             for scored_point in query_result {
