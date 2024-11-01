@@ -1034,7 +1034,8 @@ mod tests {
     }
 
     #[test]
-    fn rollback_should_throw_error_when_trying_to_rollback_not_last_opeartion() -> Result<()> {
+    fn rollback_should_do_nothing_when_trying_to_rollback_on_lsn_difference_bigger_than_one(
+    ) -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let mut storage = Storage::create(temp_dir.path(), None)?;
@@ -1057,10 +1058,10 @@ mod tests {
         let result = storage.perform_rollback(lsn + 2);
 
         //Assert
-        assert!(matches!(
-            result,
-            Err(Error::Unexpected("Index: Cannot rollback - LSN mismatch."))
-        ));
+        assert!(result.is_ok());
+        let storage = Storage::load(&temp_dir.path().join(STORAGE_FILE))?;
+        assert_eq!(storage.header.modification_lsn, lsn);
+        assert_eq!(storage.header.backup_offset, NONE);
         Ok(())
     }
 
