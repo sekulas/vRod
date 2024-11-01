@@ -20,6 +20,7 @@ regex = "1.11.0"
 rayon = { workspace = true }
 
 hnsw = { path = "lib/hnsw" }
+memchr = "2.7.4"
 
 [features]
 load_tests = []

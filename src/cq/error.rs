@@ -35,6 +35,9 @@ pub enum Error {
     ParseInt(#[from] std::num::ParseIntError),
 
     #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
+
+    #[error(transparent)]
     Regex(#[from] regex::Error),
 
     #[error(transparent)]

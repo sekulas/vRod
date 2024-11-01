@@ -4,11 +4,11 @@ use super::commands::*;
 use super::parsing_ops::parse_distance_and_vecs;
 use super::parsing_ops::parse_id_and_optional_vec_payload;
 use super::parsing_ops::parse_vec_n_payload;
-use super::parsing_ops::parse_vecs_and_payloads_from_file;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
 use super::queries::*;
 use super::CQTarget;
 use super::CQType;
+use crate::cq::parsing_ops::parse_vecs_and_payloads_from_file;
 use crate::cq::{Error, Result};
 pub struct CQBuilder;
 
@@ -83,8 +83,8 @@ fn build_truncate_wal_command() -> Result<CQType> {
 fn build_insert_command(collection: CQTarget, vec_n_payload: Option<String>) -> Result<CQType> {
     match vec_n_payload {
         Some(data) => {
-            let (vector, payload) = parse_vec_n_payload(&data)?;
-            let insert_command = InsertCommand::new(collection, vector, payload);
+            let (vector, payload) = parse_vec_n_payload(&data, None)?;
+            let insert_command = InsertCommand::new(collection, vector, payload.to_string());
             Ok(CQType::Command(Box::new(insert_command)))
         }
         None => Err(Error::MissingArgument { description: "INSERT command requires to pass vector and payload in following format '[vector];[payload]'".to_string() }),
