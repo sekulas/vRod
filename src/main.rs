@@ -233,7 +233,7 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use cq::parsing_ops::{
-        parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, INVALID_VECTOR_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M
+        parse_vec_n_payload, CANNOT_PARSE_FLOAT_ERR_M, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M
     };
     use predicates::prelude::PredicateBooleanExt;
     use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
@@ -958,7 +958,7 @@ mod tests {
         let file_path = "test_data.txt";
         let inserted_data = "1.0,2.0,3.0;test_payload";
         let inserted_data_2 = "4.0,5.0,6.0;test_payload_2";
-        let file_content = format!("{}\n{}\n", inserted_data, inserted_data_2);
+        let file_content = format!("3\n{}\n{}\n", inserted_data, inserted_data_2);
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1039,7 +1039,7 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let incorrect_data = "1.0,2.0,3.0;test_payload;extra_data";
+        let incorrect_data = "1.0,2.0,3.0;test_payload extra_data";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1099,7 +1099,7 @@ mod tests {
         let db_name = "test_db";
         let collection_name = "test_col";
         let inserted_data = "1.0,2.0,3.0;test_payload";
-        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data)?;
+        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data, None)?;
         let expected_record_id = "1";
 
         init_database(&temp_dir, db_name)?;
@@ -1447,7 +1447,7 @@ mod tests {
         //Assert
         result
             .failure()
-            .stderr(predicates::str::contains(INVALID_VECTOR_FORMAT_ERR_M));
+            .stderr(predicates::str::contains(CANNOT_PARSE_FLOAT_ERR_M));
 
         Ok(())
     }
@@ -1761,6 +1761,7 @@ mod tests {
         dimensions: usize,
     ) -> Result<PathBuf> {
         let mut file_content = String::new();
+        file_content.push_str(&format!("{}\n", dimensions));
         for i in 0..records_count {
             let data = format!(
                 "{};test_payload\n",
