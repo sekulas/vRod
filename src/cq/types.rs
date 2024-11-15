@@ -3,6 +3,20 @@ use super::queries::Result as QueryResult;
 use crate::components::wal::Wal;
 use std::path::PathBuf;
 
+pub const CREATE_C_STR: &str = "CREATE";
+pub const DROP_C_STR: &str = "DROP";
+pub const LIST_COLLECTIONS_Q_STR: &str = "LIST_COLLECTIONS";
+pub const TRUNCATE_WAL_C_STR: &str = "TRUNCATE_WAL";
+pub const INSERT_C_STR: &str = "INSERT";
+pub const SEARCH_Q_STR: &str = "SEARCH";
+pub const SEARCH_ALL_Q_STR: &str = "SEARCH_ALL_Q_STR";
+pub const UPDATE_C_STR: &str = "UPDATE";
+pub const DELETE_C_STR: &str = "DELETE";
+pub const BULK_INSERT_C_STR: &str = "BULK_INSERT";
+pub const REINDEX_C_STR: &str = "REINDEX";
+pub const SEARCH_SIMILAR_Q_STR: &str = "SEARCH_SIMILAR";
+pub const CREATE_VECTOR_INDEX_C_STR: &str = "CREATE_VECTOR_INDEX";
+
 #[derive(Clone)]
 pub enum CQTarget {
     Database {

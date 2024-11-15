@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     components::collection::Collection,
-    cq::{queries::dto::RecordDTOList, CQAction, CQTarget, CQValidator, Query, Validator},
+    cq::{queries::dto::RecordDTOList, CQAction, CQTarget, CQValidator, Query, Validator, types::SEARCH_ALL_Q_STR},
 };
 pub struct SearchAllQuery {
     collection: CQTarget,
@@ -30,6 +30,6 @@ impl Query for SearchAllQuery {
 
 impl CQAction for SearchAllQuery {
     fn to_string(&self) -> String {
-        "SEARCHALL".to_string()
+        SEARCH_ALL_Q_STR.to_string()
     }
 }

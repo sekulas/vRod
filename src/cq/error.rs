@@ -7,19 +7,19 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Unrecognized command or query '{0}'.")]
+    #[error("unrecognized command or query '{0}'.")]
     UnrecognizedCommandOrQuery(String),
 
-    #[error("No name for the collection has been provided.")]
+    #[error("no name for the collection has been provided.")]
     MissingCollectionName,
 
-    #[error("Missing argument for the given command. {description}")]
+    #[error("missing argument for the given command. {description}")]
     MissingArgument { description: String },
 
-    #[error("Invalid data format: {description}")]
+    #[error("invalid data format: {description}")]
     InvalidDataFormat { description: String },
 
-    #[error("No data in the source.")]
+    #[error("no data in the source.")]
     NoDataInSource,
 
     #[error(transparent)]

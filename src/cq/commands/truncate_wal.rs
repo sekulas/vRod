@@ -2,7 +2,7 @@ use super::Result;
 
 use crate::{
     components::wal::Wal,
-    cq::{CQAction, Command},
+    cq::{CQAction, Command, types::TRUNCATE_WAL_C_STR},
 };
 
 pub struct TruncateWalCommand {}
@@ -35,6 +35,6 @@ impl Command for TruncateWalCommand {
 
 impl CQAction for TruncateWalCommand {
     fn to_string(&self) -> String {
-        "TRUNCATEWAL".to_string()
+        TRUNCATE_WAL_C_STR.to_string()
     }
 }

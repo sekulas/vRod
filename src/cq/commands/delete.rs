@@ -4,7 +4,7 @@ use crate::{
         collection::{types::CollectionDeleteResult, Collection},
         wal::Wal,
     },
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::DELETE_C_STR},
     types::RecordId,
 };
 
@@ -57,6 +57,6 @@ impl Command for DeleteCommand {
 
 impl CQAction for DeleteCommand {
     fn to_string(&self) -> String {
-        format!("DELETE {}", self.record_id)
+        format!("{} {}", DELETE_C_STR, self.record_id)
     }
 }

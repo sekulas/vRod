@@ -104,7 +104,11 @@ impl Query for SearchSimilarQuery {
 
 impl CQAction for SearchSimilarQuery {
     fn to_string(&self) -> String {
-        "SEARCHSIMILAR ".to_string() + &self.distance.to_string().to_uppercase()
+        format!(
+            "{} {}",
+            SEARCH_SIMILAR_Q_STR,
+            self.distance.to_string().to_uppercase()
+        )
     }
 }
 

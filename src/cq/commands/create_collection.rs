@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::CREATE_C_STR},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -74,6 +74,6 @@ impl Command for CreateCollectionCommand {
 
 impl CQAction for CreateCollectionCommand {
     fn to_string(&self) -> String {
-        format!("CREATE {}", self.collection_name)
+        format!("{} {}", CREATE_C_STR, self.collection_name)
     }
 }

@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     components::collection::{types::CollectionSearchResult, Collection},
-    cq::{queries::dto::RecordDTO, CQAction, CQTarget, CQValidator, Query, Validator},
+    cq::{queries::dto::RecordDTO, CQAction, CQTarget, CQValidator, Query, Validator, types::SEARCH_Q_STR},
     types::RecordId,
 };
 
@@ -43,6 +43,6 @@ impl Query for SearchQuery {
 
 impl CQAction for SearchQuery {
     fn to_string(&self) -> String {
-        format!("SEARCH {}", self.record_id)
+        format!("{} {}", SEARCH_Q_STR, self.record_id)
     }
 }

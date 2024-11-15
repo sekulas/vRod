@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::{
     components::wal::Wal,
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::DROP_C_STR},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -63,6 +63,6 @@ impl Command for DropCollectionCommand {
 
 impl CQAction for DropCollectionCommand {
     fn to_string(&self) -> String {
-        format!("DROP {}", self.collection_name)
+        format!("{} {}", DROP_C_STR, self.collection_name)
     }
 }

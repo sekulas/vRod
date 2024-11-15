@@ -2,7 +2,7 @@ use super::Result;
 use crate::components::collection::types::CollectionInsertResult;
 use crate::components::wal::Wal;
 use crate::cq::parsing_ops::parse_string_from_vector_option;
-use crate::cq::{CQTarget, CQValidator, Validator};
+use crate::cq::{CQTarget, CQValidator, Validator, types::INSERT_C_STR};
 use crate::types::Dim;
 use crate::{
     components::collection::Collection,
@@ -63,7 +63,8 @@ impl Command for InsertCommand {
 impl CQAction for InsertCommand {
     fn to_string(&self) -> String {
         format!(
-            "INSERT {};{}",
+            "{} {};{}",
+            INSERT_C_STR,
             parse_string_from_vector_option(Some(&self.vector)),
             self.payload
         )

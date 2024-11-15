@@ -109,7 +109,7 @@ fn run() -> Result<()> {
 
     let result: Result<()> = (|| {
         let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
-        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build
+        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build - Not needed.
                                                                                 //TODO:: #### Maybe no need for readonly if cannot parse coll header?
         CQExecutor::execute(&target, cq_action)?;
         Ok(())
@@ -233,7 +233,15 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use cq::parsing_ops::{
-        parse_vec_n_payload, CANNOT_PARSE_FLOAT_ERR_M, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, NO_RECORD_ID_PROVIDED_ERR_M
+        parse_vec_n_payload, CANNOT_PARSE_FLOAT_ERR_M, 
+        EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, 
+        NO_RECORD_ID_PROVIDED_ERR_M
+    };
+    use cq::types::{
+        BULK_INSERT_C_STR, CREATE_C_STR, DELETE_C_STR, 
+        DROP_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, 
+        REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, 
+        UPDATE_C_STR,
     };
     use predicates::prelude::PredicateBooleanExt;
     use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
@@ -295,7 +303,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("CREATE")
+            .arg(CREATE_C_STR)
             .arg("--command-arg")
             .arg(collection_name)
             .arg("--database")
@@ -312,7 +320,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("DROP")
+            .arg(DROP_C_STR)
             .arg("--command-arg")
             .arg(collection_name)
             .arg("--database")
@@ -325,7 +333,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("LISTCOLLECTIONS")
+            .arg(LIST_COLLECTIONS_Q_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .assert();
@@ -341,7 +349,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("INSERT")
+            .arg(INSERT_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -361,7 +369,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("BULKINSERT")
+            .arg(BULK_INSERT_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -381,7 +389,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("BULKINSERT")
+            .arg(BULK_INSERT_C_STR)
             .arg("--file-path")
             .arg(file_path)
             .arg("--database")
@@ -401,7 +409,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("SEARCH")
+            .arg(SEARCH_Q_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -420,7 +428,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("SEARCHALL")
+            .arg(SEARCH_ALL_Q_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")
@@ -438,7 +446,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("UPDATE")
+            .arg(UPDATE_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -458,7 +466,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("DELETE")
+            .arg(DELETE_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -477,7 +485,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("REINDEX")
+            .arg(REINDEX_C_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")
@@ -494,7 +502,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("TRUNCATEWAL")
+            .arg(TRUNCATE_WAL_C_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name));
 
@@ -1688,8 +1696,8 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "4")?; //TODO: ### Reindex new ID is being put - okay?
-                                                                                      //TODO: ### Is it okay that it does not ID consistency? 1->4, 2->3?
+        let post_rollback_result = search(&temp_dir, db_name, collection_name, "4")?; //TODO: ### Reindex new ID is being put - okay? - OK
+                                                                                      //TODO: ### Is it okay that it does not ID consistency? 1->4, 2->3? - OK
                                                                                       //Assert
         post_rollback_result
             .success()

@@ -3,19 +3,19 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Missing '--init_database_name' flag with argument for '--init_database' flag.")]
+    #[error("missing '--init_database_name' flag with argument for '--init_database' flag.")]
     MissingInitDatabaseName,
 
-    #[error("Missing argument '-e' - 'command to execute'.")]
+    #[error("missing argument '-e' - 'command to execute'.")]
     MissingCommand,
 
-    #[error("Database does not exist in path: {0}.")]
+    #[error("database does not exist in path: '{0}'.")]
     DatabaseDoesNotExist(String),
 
-    #[error("Collection with name {0} does not exist in selected database.")]
+    #[error("collection with name {0} does not exist in selected database.")]
     CollectionDoesNotExist(String),
 
-    #[error("Cannot perform operation on readonly target.")]
+    #[error("cannot perform operation on readonly target.")]
     TargetIsReadonly, //TODO: Possibly not needed if verification not needed.
 
     #[error("missing file path argument: {description}")]

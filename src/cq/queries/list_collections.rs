@@ -1,9 +1,9 @@
 use super::Result;
 
 use crate::{
-    cq::{CQAction, CQTarget, CQValidator, Query, Validator},
+    cq::{CQAction, CQTarget, CQValidator, Query, Validator, types::LIST_COLLECTIONS_Q_STR},
     database::DbConfig,
-    types::DB_CONFIG,
+    types::{DB_CONFIG},
 };
 
 pub struct ListCollectionsQuery {
@@ -45,6 +45,6 @@ impl Query for ListCollectionsQuery {
 
 impl CQAction for ListCollectionsQuery {
     fn to_string(&self) -> String {
-        "LISTCOLLECTIONS".to_string()
+        LIST_COLLECTIONS_Q_STR.to_string()
     }
 }

@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::BULK_INSERT_C_STR},
     types::Dim,
 };
 
@@ -65,6 +65,6 @@ impl Command for BulkInsertCommand {
 impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
         //TODO: ### Should we print all of these? Performance Reasons.
-        "BULKINSERT".to_string()
+        BULK_INSERT_C_STR.to_string()
     }
 }

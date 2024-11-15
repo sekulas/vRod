@@ -7,6 +7,7 @@ use crate::{
     cq::{
         parsing_ops::parse_string_from_vector_option, CQAction, CQTarget, CQValidator, Command,
         Validator,
+        types::UPDATE_C_STR,
     },
     types::{Dim, RecordId},
 };
@@ -79,7 +80,8 @@ impl Command for UpdateCommand {
 impl CQAction for UpdateCommand {
     fn to_string(&self) -> String {
         format!(
-            "UPDATE {};{};{}",
+            "{} {};{};{}",
+            UPDATE_C_STR,
             self.record_id,
             parse_string_from_vector_option(self.vector.as_deref()),
             self.payload.as_deref().unwrap_or_default()
