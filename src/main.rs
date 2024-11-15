@@ -937,7 +937,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload_2"));
 
         assert!(is_wal_consistent(
@@ -981,13 +981,13 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("test_payload"));
 
         let result = search(&temp_dir, db_name, collection_name, "2")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload_2"));
 
         Ok(())
@@ -1021,13 +1021,13 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("test_payload"));
 
         let result = search(&temp_dir, db_name, collection_name, "2")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload_2"));
 
         Ok(())
@@ -1078,9 +1078,9 @@ mod tests {
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload"))
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0").not())
+            .stdout(predicates::str::contains("1,2,3").not())
             .stdout(predicates::str::contains("should_not_appear").not());
 
         assert!(is_wal_consistent(
@@ -1099,7 +1099,6 @@ mod tests {
         let db_name = "test_db";
         let collection_name = "test_col";
         let inserted_data = "1.0,2.0,3.0;test_payload";
-        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data, None)?;
         let expected_record_id = "1";
 
         init_database(&temp_dir, db_name)?;
@@ -1112,8 +1111,8 @@ mod tests {
         //Assert
         let result = result.success();
         result
-            .stdout(predicates::str::contains(format!("{:?}", expected_vector)))
-            .stdout(predicates::str::contains(expected_payload));
+            .stdout(predicates::str::contains("1,2,3"))
+            .stdout(predicates::str::contains("test_payload"));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -1213,9 +1212,9 @@ mod tests {
         //Assert
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload2"));
         Ok(())
     }
@@ -1242,7 +1241,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("updated_payload"));
 
         assert!(is_wal_consistent(
@@ -1304,7 +1303,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("updated_payload"));
 
         assert!(is_wal_consistent(
@@ -1338,7 +1337,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(
@@ -1458,8 +1457,8 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let inserted_data = "1.0,2.0,3.0;payload";
-        let update_arg = "1;4.0,5.0;updated_payload";
+        let inserted_data = "1,2,3;payload";
+        let update_arg = "1;4,5;updated_payload";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1482,8 +1481,8 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let data_to_exist = "1.0,2.0,3.0;payload";
-        let data_to_change = "1;4.0,5.0,6.0;updated_payload";
+        let data_to_exist = "1,2,3;payload";
+        let data_to_change = "1;4,5,6;updated_payload";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1498,12 +1497,12 @@ mod tests {
         //Assert
         let post_update_result = post_update_result.success();
         post_update_result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("updated_payload"));
 
         let post_rollback_result = post_rollback_result.success();
         post_rollback_result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(
@@ -1630,9 +1629,9 @@ mod tests {
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload2"));
 
         assert!(is_wal_consistent(
@@ -1666,9 +1665,9 @@ mod tests {
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0").not())
+            .stdout(predicates::str::contains("4,5,6").not())
             .stdout(predicates::str::contains("payload2").not());
 
         Ok(())
@@ -1695,7 +1694,7 @@ mod tests {
         post_rollback_result
             .success()
             .stdout(predicates::str::contains("No backup files"))
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
