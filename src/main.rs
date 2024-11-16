@@ -233,18 +233,16 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use cq::parsing_ops::{
-        parse_vec_n_payload, CANNOT_PARSE_FLOAT_ERR_M, 
+        CANNOT_PARSE_FLOAT_ERR_M, 
         EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, 
         NO_RECORD_ID_PROVIDED_ERR_M
     };
     use cq::types::{
-        BULK_INSERT_C_STR, CREATE_C_STR, DELETE_C_STR, 
-        DROP_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, 
-        REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, 
-        UPDATE_C_STR,
+        BULK_INSERT_C_STR, CREATE_C_STR, CREATE_VECTOR_INDEX_C_STR, DELETE_C_STR, DROP_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, UPDATE_C_STR
     };
+    use hnsw::types::{HNSW_GRAPH_FILE, HNSW_INDEX_CONFIG_FILE, HNSW_LINKS_FILE};
     use predicates::prelude::PredicateBooleanExt;
-    use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
+    use types::{HNSW_DIR_NAME, INDEX_FILE, STORAGE_FILE, WAL_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
 
@@ -511,6 +509,26 @@ mod tests {
         }
 
         Ok(result.assert())
+    }
+
+    fn create_vector_index(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        distance: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg(CREATE_VECTOR_INDEX_C_STR)
+            .arg("--command-arg")
+            .arg(distance)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
     }
 
     #[test]
@@ -1755,6 +1773,34 @@ mod tests {
             db_name,
             Some(collection_name)
         )?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_vector_index_should_create_associated_files() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let distance = "EUCLID";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        
+        //Act
+        let result = create_vector_index(&temp_dir, db_name, collection_name, distance)?;
+
+        //Assert
+        result.success();
+
+        let collection_path = temp_dir.path().join(db_name).join(collection_name);
+        let index_path = collection_path.join(format!("{HNSW_DIR_NAME}_euclid"));
+
+        assert!(index_path.exists());
+        assert!(index_path.join(HNSW_INDEX_CONFIG_FILE).exists());
+        assert!(index_path.join(HNSW_GRAPH_FILE).exists());
+        assert!(index_path.join(HNSW_LINKS_FILE).exists());
 
         Ok(())
     }
