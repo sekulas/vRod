@@ -2,8 +2,6 @@ use crate::{database::DbConfig, types::DB_CONFIG};
 
 use super::CQTarget;
 
-//Has to be used directly in Command Queries
-
 pub struct CQValidator;
 
 pub trait Validator {

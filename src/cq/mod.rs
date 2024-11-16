@@ -10,4 +10,5 @@ mod executor;
 pub mod parsing_ops;
 mod queries;
 pub mod types;
+pub mod utils;
 mod validator;

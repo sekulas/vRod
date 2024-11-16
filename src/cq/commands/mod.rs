@@ -19,3 +19,5 @@ mod delete;
 pub(super) use delete::*;
 mod reindex;
 pub(super) use reindex::*;
+mod create_vector_index;
+pub(super) use create_vector_index::*;
