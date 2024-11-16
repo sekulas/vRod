@@ -1,17 +1,20 @@
 use std::path::PathBuf;
 
 use super::commands::*;
+use super::parsing_ops::parse_distance;
 use super::parsing_ops::parse_distance_and_vecs;
 use super::parsing_ops::parse_id_and_optional_vec_payload;
 use super::parsing_ops::parse_vec_n_payload;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
 use super::queries::*;
+use super::types::CREATE_VECTOR_INDEX_C_STR;
 use super::CQTarget;
 use super::CQType;
 use crate::cq::parsing_ops::parse_vecs_and_payloads_from_file;
 use crate::cq::types::{
-    BULK_INSERT_C_STR, CREATE_C_STR, DELETE_C_STR, DROP_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, REINDEX_C_STR,
-    SEARCH_ALL_Q_STR, SEARCH_Q_STR, SEARCH_SIMILAR_Q_STR, TRUNCATE_WAL_C_STR, UPDATE_C_STR,
+    BULK_INSERT_C_STR, CREATE_C_STR, DELETE_C_STR, DROP_C_STR, INSERT_C_STR,
+    LIST_COLLECTIONS_Q_STR, REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, SEARCH_SIMILAR_Q_STR,
+    TRUNCATE_WAL_C_STR, UPDATE_C_STR,
 };
 use crate::cq::{Error, Result};
 pub struct CQBuilder;
@@ -47,7 +50,7 @@ impl Builder for CQBuilder {
             BULK_INSERT_C_STR => build_bulk_insert_command(target, arg, file_path),
             REINDEX_C_STR => build_reindex_command(target),
             SEARCH_SIMILAR_Q_STR => build_search_simmilar_query(target, arg), //TODO: ### What if last command was ROLLBACK and it's uncommited? Readonly State?
-            // CREATE_VECTOR_INDEX_C_STR => build_create_vector_index_command(target),
+            CREATE_VECTOR_INDEX_C_STR => build_create_vector_index_command(target, arg),
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
     }
@@ -193,6 +196,25 @@ fn build_search_simmilar_query(collection: CQTarget, args: Option<String>) -> Re
         }
         None => Err(Error::MissingArgument {
             description: "SEARCHSIMILAR command requires to pass query vector.".to_string(),
+        }),
+    }
+}
+
+fn build_create_vector_index_command(
+    collection: CQTarget,
+    distance: Option<String>,
+) -> Result<CQType> {
+    match distance {
+        Some(distance) =>  {
+            let distance = parse_distance(&distance)?;
+            Ok(CQType::Command(Box::new(CreateVectorIndexCommand::new(
+                collection, distance,
+            ))))
+        }
+        None => Err(Error::MissingArgument {
+            description: format!(
+                "{CREATE_VECTOR_INDEX_C_STR} command requires to pass the distance for index creation.",
+            ),
         }),
     }
 }

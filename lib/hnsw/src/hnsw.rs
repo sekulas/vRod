@@ -1,13 +1,7 @@
 use super::{Error, Result};
 use atomic_refcell::AtomicRefCell;
 use rand::thread_rng;
-use std::{
-    fs::create_dir_all,
-    ops::Deref,
-    path::{Path, PathBuf},
-    sync::Arc,
-    thread,
-};
+use std::{fs::create_dir_all, ops::Deref, path::Path, sync::Arc, thread};
 
 use crate::{
     config::{HnswConfig, HnswGraphConfig},
@@ -16,7 +10,7 @@ use crate::{
     id_tracker::IdTrackerSS,
     scorer::{new_raw_scorer, FilteredScorer},
     types::{Distance, QueryVector, ScoredPoint, ScoredPointOffset},
-    vector_storage::{VectorStorage, VectorStorageSS},
+    vector_storage::VectorStorageSS,
     visited_pool::POOL_KEEP_LIMIT,
 };
 
@@ -33,11 +27,16 @@ pub struct HnswIndex {
     id_tracker: Arc<AtomicRefCell<IdTrackerSS>>,
     vector_storage: Arc<AtomicRefCell<VectorStorageSS>>,
     config: HnswGraphConfig,
-    path: PathBuf,
     graph: GraphLayers,
 }
 
-pub struct HnswIndexOpenArgs<'a> {
+pub struct HnswIndexLoadArgs<'a> {
+    pub path: &'a Path,
+    pub id_tracker: Arc<AtomicRefCell<IdTrackerSS>>,
+    pub vector_storage: Arc<AtomicRefCell<VectorStorageSS>>,
+}
+
+pub struct HnswIndexCreateArgs<'a> {
     pub path: &'a Path,
     pub id_tracker: Arc<AtomicRefCell<IdTrackerSS>>,
     pub vector_storage: Arc<AtomicRefCell<VectorStorageSS>>,
@@ -46,8 +45,8 @@ pub struct HnswIndexOpenArgs<'a> {
 }
 
 impl HnswIndex {
-    pub fn open(args: HnswIndexOpenArgs<'_>) -> Result<Self> {
-        let HnswIndexOpenArgs {
+    pub fn create(args: HnswIndexCreateArgs<'_>) -> Result<Self> {
+        let HnswIndexCreateArgs {
             path,
             id_tracker,
             vector_storage,
@@ -57,38 +56,9 @@ impl HnswIndex {
 
         create_dir_all(path)?;
 
-        let config_path = HnswGraphConfig::get_config_path(path, &distance);
-        let graph_path = GraphLayers::get_path(path, &distance);
-        let graph_links_path = GraphLayers::get_links_path(path, &distance);
-        let (config, graph) = if graph_path.exists() {
-            let config = if config_path.exists() {
-                HnswGraphConfig::load(&config_path)?
-            } else {
-                let vector_storage = vector_storage.borrow();
-                let vector_count = vector_storage.total_vector_count();
-                // let full_scan_threshold = vector_storage
-                //     .available_size_in_bytes()
-                //     .checked_div(available_vectors)
-                //     .and_then(|avg_vector_size| {
-                //         hnsw_config
-                //             .full_scan_threshold
-                //             .saturating_mul(BYTES_IN_KB)
-                //             .checked_div(avg_vector_size)
-                //     })
-                //     .unwrap_or(1);
+        let config_path = HnswGraphConfig::get_config_path(path);
+        let graph_path = GraphLayers::get_path(path);
 
-                HnswGraphConfig::new(
-                    hnsw_config.m,
-                    hnsw_config.ef_construct,
-                    //full_scan_threshold,
-                    hnsw_config.max_indexing_threads,
-                    vector_count,
-                    distance,
-                )
-            };
-
-            (config, GraphLayers::load(&graph_path, &graph_links_path)?)
-        } else {
             let (config, graph) = Self::build_index(
                 path,
                 hnsw_config,
@@ -100,7 +70,34 @@ impl HnswIndex {
             config.save(&config_path)?;
             graph.save(&graph_path)?;
 
-            (config, graph)
+        Ok(HnswIndex {
+            id_tracker,
+            vector_storage,
+            config,
+            graph,
+        })
+    }
+
+    pub fn load(args: HnswIndexLoadArgs<'_>) -> Result<Self> {
+        let HnswIndexLoadArgs {
+            path,
+            id_tracker,
+            vector_storage,
+        } = args;
+
+        let config_path = HnswGraphConfig::get_config_path(path);
+        let graph_path = GraphLayers::get_path(path);
+        let graph_links_path = GraphLayers::get_links_path(path);
+        let (config, graph) = if graph_path.exists() {
+            let config = if config_path.exists() {
+                HnswGraphConfig::load(&config_path)?
+            } else {
+                return Err(Error::ConfigFileHasNotBeenFound { path: config_path });
+            };
+
+            (config, GraphLayers::load(&graph_path, &graph_links_path)?)
+        } else {
+            return Err(Error::GraphFileHasNotBeenFound { path: graph_path });
         };
 
         Ok(HnswIndex {
@@ -116,7 +113,7 @@ impl HnswIndex {
         path: &Path,
         hnsw_config: HnswConfig,
         id_tracker: &IdTrackerSS,
-        vector_storage: &dyn VectorStorage,
+        vector_storage: &VectorStorageSS,
         distance: Distance,
     ) -> Result<(HnswGraphConfig, GraphLayers)> {
         let total_vector_count = vector_storage.total_vector_count();
@@ -161,17 +158,7 @@ impl HnswIndex {
                 if let Some(stack_size) = thread.stack_size() {
                     b = b.stack_size(stack_size);
                 }
-                b.spawn(|| {
-                    // // On Linux, use lower thread priority so we interfere less with serving traffic
-                    // #[cfg(target_os = "linux")]
-                    // if let Err(err) = linux_low_thread_priority() {
-                    //     log::debug!(
-                    //         "Failed to set low thread priority for HNSW building, ignoring: {err}"
-                    //     );
-                    // }
-
-                    thread.run()
-                })?;
+                b.spawn(|| thread.run())?;
                 Ok(())
             })
             .build()?;
@@ -212,7 +199,7 @@ impl HnswIndex {
 
         config.indexed_vector_count.replace(indexed_vectors);
 
-        let graph_links_path = GraphLayers::get_links_path(path, &distance);
+        let graph_links_path = GraphLayers::get_links_path(path);
         let graph: GraphLayers = graph_layers_builder.into_graph_layers(&graph_links_path)?;
 
         Ok((config, graph))
@@ -303,7 +290,7 @@ mod tests {
         id_tracker::{IdTracker, IdTrackerImpl, IdTrackerSS},
         types::{Distance, PointIdType, QueryVector, VectorElementType},
         vector_storage::{VectorStorageImpl, VectorStorageSS},
-        HnswIndex, HnswIndexOpenArgs, VectorIndex,
+        HnswIndex, HnswIndexCreateArgs, VectorIndex,
     };
     use std::sync::Arc;
 
@@ -341,7 +328,7 @@ mod tests {
             max_indexing_threads: 4,
         };
 
-        let hnsw_index = HnswIndex::open(HnswIndexOpenArgs {
+        let hnsw_index = HnswIndex::create(HnswIndexCreateArgs {
             path,
             id_tracker,
             vector_storage,

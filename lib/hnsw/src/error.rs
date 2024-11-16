@@ -1,7 +1,15 @@
+use std::path::PathBuf;
+
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("HNSW graph file has not been found in path: {path}")]
+    GraphFileHasNotBeenFound { path: PathBuf },
+
+    #[error("HNSW config file has not been found in path: {path}")]
+    ConfigFileHasNotBeenFound { path: PathBuf },
+
     #[error("file storage error: {message}")]
     FileStorageError { message: String },
 
