@@ -14,14 +14,11 @@ use crate::{
     io_ops::{read_bin, save_bin},
     scorer::FilteredScorer,
     search_context::SearchContext,
-    types::{Distance, PointIdType, ScoredPointOffset},
+    types::{PointIdType, ScoredPointOffset, HNSW_GRAPH_FILE, HNSW_LINKS_FILE},
     visited_pool::{VisitedListHandle, VisitedPool},
 };
 
 pub type LinkContainer = Vec<PointIdType>;
-
-pub const HNSW_GRAPH_FILE: &str = "graph.bin";
-pub const HNSW_LINKS_FILE: &str = "links.bin";
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GraphLayers {
@@ -181,12 +178,12 @@ impl GraphLayers {
         nearest.into_iter().take(top).collect()
     }
 
-    pub fn get_path(path: &Path, distance: &Distance) -> PathBuf {
-        path.join(format!("{distance}_{HNSW_GRAPH_FILE}"))
+    pub fn get_path(path: &Path) -> PathBuf {
+        path.join(HNSW_GRAPH_FILE)
     }
 
-    pub fn get_links_path(path: &Path, distance: &Distance) -> PathBuf {
-        path.join(format!("{distance}_{HNSW_LINKS_FILE}"))
+    pub fn get_links_path(path: &Path) -> PathBuf {
+        path.join(HNSW_LINKS_FILE)
     }
 }
 

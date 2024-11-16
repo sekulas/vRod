@@ -6,10 +6,8 @@ use validator::Validate;
 
 use crate::{
     io_ops::{read_json, save_json},
-    types::Distance,
+    types::{Distance, HNSW_INDEX_CONFIG_FILE},
 };
-
-pub const HNSW_INDEX_CONFIG_FILE: &str = "hnsw_config.json";
 
 #[derive(Debug, Deserialize, Serialize, Validate, Clone, PartialEq, Eq)]
 pub struct HnswConfig {
@@ -58,8 +56,8 @@ impl HnswGraphConfig {
         }
     }
 
-    pub fn get_config_path(path: &Path, distance: &Distance) -> PathBuf {
-        path.join(format!("{distance}_{HNSW_INDEX_CONFIG_FILE}"))
+    pub fn get_config_path(path: &Path) -> PathBuf {
+        path.join(HNSW_INDEX_CONFIG_FILE)
     }
 
     pub fn load(path: &Path) -> Result<Self> {

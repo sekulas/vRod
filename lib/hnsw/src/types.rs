@@ -10,6 +10,10 @@ use crate::metrics::{
     CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, MetricPostProcessing,
 };
 
+pub const HNSW_INDEX_CONFIG_FILE: &str = "hnsw_config.json";
+pub const HNSW_GRAPH_FILE: &str = "graph.bin";
+pub const HNSW_LINKS_FILE: &str = "links.bin";
+
 pub type PointIdType = u32; //RecordId;
 pub type ScoreType = f32; //Vector element type;
 
