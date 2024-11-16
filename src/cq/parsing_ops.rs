@@ -209,6 +209,18 @@ pub fn parse_id_and_optional_vec_payload(
     Ok((record_id, vector, payload))
 }
 
+pub fn parse_distance(data: &str) -> Result<Distance> {
+    match data.to_uppercase().as_str() {
+        "EUCLID" => Ok(Distance::Euclid),
+        "MANHATTAN" => Ok(Distance::Manhattan),
+        "DOT" => Ok(Distance::Dot),
+        "COSINE" => Ok(Distance::Cosine),
+        _ => Err(Error::InvalidDataFormat {
+            description: INVALID_DISTANCE_METRIC_ERR_M.to_owned(),
+        }),
+    }
+}
+
 pub fn parse_distance_and_vecs(data: &str) -> Result<(Distance, Vec<Vec<Dim>>)> {
     let splitted_data = data.split(ENTRIES_SEPARATOR).collect::<Vec<&str>>();
 
@@ -218,17 +230,7 @@ pub fn parse_distance_and_vecs(data: &str) -> Result<(Distance, Vec<Vec<Dim>>)> 
         });
     }
 
-    let distance = match splitted_data[0].to_uppercase().as_str() {
-        "EUCLID" => Distance::Euclid,
-        "MANHATTAN" => Distance::Manhattan,
-        "DOT" => Distance::Dot,
-        "COSINE" => Distance::Cosine,
-        _ => {
-            return Err(Error::InvalidDataFormat {
-                description: INVALID_DISTANCE_METRIC_ERR_M.to_owned(),
-            })
-        }
-    };
+    let distance = parse_distance(splitted_data[0])?;
 
     let vectors = splitted_data[1..]
         .iter()
