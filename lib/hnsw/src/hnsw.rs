@@ -104,7 +104,6 @@ impl HnswIndex {
             id_tracker,
             vector_storage,
             config,
-            path: path.to_owned(),
             graph,
         })
     }
