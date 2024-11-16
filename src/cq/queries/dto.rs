@@ -1,17 +1,11 @@
-use std::fmt;
-use std::fmt::Display;
-use crate::types::Dim;
 use crate::{components::collection::Record, types::RecordId};
+use std::fmt;
 
 pub struct RecordDTO<'a>(pub &'a RecordId, pub &'a Record);
 
 impl<'a> fmt::Display for RecordDTO<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{{\n   id: {},\n   embedding: [",
-            self.0
-        )?;
+        write!(f, "{{\n   id: {},\n   embedding: [", self.0)?;
 
         for (index, dim) in self.1.vector.iter().enumerate() {
             write!(f, "{}", dim)?;
@@ -20,7 +14,7 @@ impl<'a> fmt::Display for RecordDTO<'a> {
             }
         }
 
-        write!(f,"],\n   payload: {}\n}}", self.1.payload)
+        write!(f, "],\n   payload: {}\n}}", self.1.payload)
     }
 }
 
