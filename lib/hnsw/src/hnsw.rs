@@ -1,6 +1,7 @@
 use super::{Error, Result};
 use atomic_refcell::AtomicRefCell;
 use rand::thread_rng;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{fs::create_dir_all, ops::Deref, path::Path, sync::Arc, thread};
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     graph_layers_builder::GraphLayersBuilder,
     id_tracker::IdTrackerSS,
     scorer::{new_raw_scorer, FilteredScorer},
-    types::{Distance, QueryVector, ScoredPoint, ScoredPointOffset},
+    types::{Distance, PointIdType, QueryVector, ScoredPoint, ScoredPointOffset},
     vector_storage::VectorStorageSS,
     visited_pool::POOL_KEEP_LIMIT,
 };
@@ -18,9 +19,9 @@ const HNSW_USE_HEURISTIC: bool = true;
 
 /// disconnected components in the graph.
 #[cfg(debug_assertions)]
-const SINGLE_THREADED_HNSW_BUILD_THRESHOLD: usize = 32;
+const SINGLE_THREADED_BUILD_THRESHOLD: usize = 32;
 #[cfg(not(debug_assertions))]
-const SINGLE_THREADED_HNSW_BUILD_THRESHOLD: usize = 256;
+const SINGLE_THREADED_BUILD_THRESHOLD: usize = 256;
 
 #[derive(Debug)]
 pub struct HnswIndex {
@@ -30,13 +31,13 @@ pub struct HnswIndex {
     graph: GraphLayers,
 }
 
-pub struct HnswIndexLoadArgs<'a> {
+pub struct LoadArgs<'a> {
     pub path: &'a Path,
     pub id_tracker: Arc<AtomicRefCell<IdTrackerSS>>,
     pub vector_storage: Arc<AtomicRefCell<VectorStorageSS>>,
 }
 
-pub struct HnswIndexCreateArgs<'a> {
+pub struct CreateArgs<'a> {
     pub path: &'a Path,
     pub id_tracker: Arc<AtomicRefCell<IdTrackerSS>>,
     pub vector_storage: Arc<AtomicRefCell<VectorStorageSS>>,
@@ -45,64 +46,49 @@ pub struct HnswIndexCreateArgs<'a> {
 }
 
 impl HnswIndex {
-    pub fn create(args: HnswIndexCreateArgs<'_>) -> Result<Self> {
-        let HnswIndexCreateArgs {
-            path,
-            id_tracker,
-            vector_storage,
-            hnsw_config,
-            distance,
-        } = args;
+    pub fn create(args: CreateArgs<'_>) -> Result<Self> {
+        create_dir_all(args.path)?;
 
-        create_dir_all(path)?;
+        let config_path = HnswGraphConfig::get_config_path(args.path);
+        let graph_path = GraphLayers::get_path(args.path);
 
-        let config_path = HnswGraphConfig::get_config_path(path);
-        let graph_path = GraphLayers::get_path(path);
+        let (config, graph) = Self::build_index(
+            args.path,
+            args.hnsw_config,
+            args.id_tracker.borrow().deref(),
+            args.vector_storage.borrow().deref(),
+            args.distance,
+        )?;
 
-            let (config, graph) = Self::build_index(
-                path,
-                hnsw_config,
-                id_tracker.borrow().deref(),
-                vector_storage.borrow().deref(),
-                distance,
-            )?;
-
-            config.save(&config_path)?;
-            graph.save(&graph_path)?;
+        config.save(&config_path)?;
+        graph.save(&graph_path)?;
 
         Ok(HnswIndex {
-            id_tracker,
-            vector_storage,
+            id_tracker: args.id_tracker,
+            vector_storage: args.vector_storage,
             config,
             graph,
         })
     }
 
-    pub fn load(args: HnswIndexLoadArgs<'_>) -> Result<Self> {
-        let HnswIndexLoadArgs {
-            path,
-            id_tracker,
-            vector_storage,
-        } = args;
+    pub fn load(args: LoadArgs<'_>) -> Result<Self> {
+        let config_path = HnswGraphConfig::get_config_path(args.path);
+        let graph_path = GraphLayers::get_path(args.path);
+        let graph_links_path = GraphLayers::get_links_path(args.path);
 
-        let config_path = HnswGraphConfig::get_config_path(path);
-        let graph_path = GraphLayers::get_path(path);
-        let graph_links_path = GraphLayers::get_links_path(path);
-        let (config, graph) = if graph_path.exists() {
-            let config = if config_path.exists() {
-                HnswGraphConfig::load(&config_path)?
-            } else {
-                return Err(Error::ConfigFileHasNotBeenFound { path: config_path });
-            };
-
-            (config, GraphLayers::load(&graph_path, &graph_links_path)?)
-        } else {
-            return Err(Error::GraphFileHasNotBeenFound { path: graph_path });
+        let (config, graph) = match (config_path.exists(), graph_path.exists()) {
+            (true, true) => {
+                let config = HnswGraphConfig::load(&config_path)?;
+                let graph = GraphLayers::load(&graph_path, &graph_links_path)?;
+                (config, graph)
+            }
+            (false, _) => return Err(Error::ConfigFileHasNotBeenFound { path: config_path }),
+            (_, false) => return Err(Error::GraphFileHasNotBeenFound { path: graph_path }),
         };
 
         Ok(HnswIndex {
-            id_tracker,
-            vector_storage,
+            id_tracker: args.id_tracker,
+            vector_storage: args.vector_storage,
             config,
             graph,
         })
@@ -117,112 +103,125 @@ impl HnswIndex {
     ) -> Result<(HnswGraphConfig, GraphLayers)> {
         let total_vector_count = vector_storage.total_vector_count();
 
-        // let full_scan_threshold = vector_storage
-        //     .available_size_in_bytes()
-        //     .checked_div(total_vector_count)
-        //     .and_then(|avg_vector_size| {
-        //         hnsw_config
-        //             .full_scan_threshold
-        //             .saturating_mul(BYTES_IN_KB)
-        //             .checked_div(avg_vector_size)
-        //     })
-        //     .unwrap_or(1);
-
-        let mut config = HnswGraphConfig::new(
+        let config = HnswGraphConfig::new(
             hnsw_config.m,
             hnsw_config.ef_construct,
             hnsw_config.max_indexing_threads,
             total_vector_count,
-            distance, //TODO:: ?? SURELY ??
+            distance,
         );
 
-        let mut rng = thread_rng();
+        let thread_pool = Self::create_thread_pool()?;
+        let mut graph_builder = Self::initialize_graph_builder(total_vector_count, &config);
 
-        let mut graph_layers_builder = GraphLayersBuilder::new(
+        Self::assign_random_layers(&mut graph_builder, id_tracker);
+        Self::build_graph_structure(
+            &thread_pool,
+            &mut graph_builder,
+            id_tracker,
+            vector_storage,
+            distance,
+        )?;
+
+        let graph = Self::finalize_graph(path, graph_builder)?;
+
+        Ok((config, graph))
+    }
+
+    fn create_thread_pool() -> Result<rayon::ThreadPool> {
+        rayon::ThreadPoolBuilder::new()
+            .thread_name(|idx| format!("hnsw-build-{idx}"))
+            .num_threads(*POOL_KEEP_LIMIT)
+            .spawn_handler(|thread| {
+                let mut builder = thread::Builder::new();
+                if let Some(name) = thread.name() {
+                    builder = builder.name(name.to_owned());
+                }
+                if let Some(stack_size) = thread.stack_size() {
+                    builder = builder.stack_size(stack_size);
+                }
+                builder.spawn(|| thread.run())?;
+                Ok(())
+            })
+            .build()
+            .map_err(Error::from)
+    }
+
+    fn initialize_graph_builder(
+        total_vector_count: usize,
+        config: &HnswGraphConfig,
+    ) -> GraphLayersBuilder {
+        GraphLayersBuilder::new(
             total_vector_count,
             config.m,
             config.m0,
             config.ef_construct,
             HNSW_USE_HEURISTIC,
-        );
+        )
+    }
 
-        let pool = rayon::ThreadPoolBuilder::new()
-            .thread_name(|idx| format!("hnsw-build-{idx}"))
-            .num_threads(*POOL_KEEP_LIMIT) //TODO: To check
-            .spawn_handler(|thread| {
-                let mut b = thread::Builder::new();
-                if let Some(name) = thread.name() {
-                    b = b.name(name.to_owned());
-                }
-                if let Some(stack_size) = thread.stack_size() {
-                    b = b.stack_size(stack_size);
-                }
-                b.spawn(|| thread.run())?;
-                Ok(())
-            })
-            .build()?;
-
+    fn assign_random_layers(graph_builder: &mut GraphLayersBuilder, id_tracker: &IdTrackerSS) {
+        let mut rng = thread_rng();
         for vector_id in id_tracker.iter_internal_ids() {
-            let level = graph_layers_builder.get_random_layer(&mut rng);
-            graph_layers_builder.set_levels(vector_id, level);
+            let level = graph_builder.get_random_layer(&mut rng);
+            graph_builder.set_levels(vector_id, level);
         }
+    }
 
-        let mut ids_iterator = id_tracker.iter_internal_ids();
-
-        let first_few_ids: Vec<_> = ids_iterator
+    fn build_graph_structure(
+        thread_pool: &rayon::ThreadPool,
+        graph_builder: &mut GraphLayersBuilder,
+        id_tracker: &IdTrackerSS,
+        vector_storage: &VectorStorageSS,
+        distance: Distance,
+    ) -> Result<()> {
+        let mut ids_iter = id_tracker.iter_internal_ids();
+        let initial_ids: Vec<_> = ids_iter
             .by_ref()
-            .take(SINGLE_THREADED_HNSW_BUILD_THRESHOLD)
+            .take(SINGLE_THREADED_BUILD_THRESHOLD)
             .collect();
-        let ids: Vec<_> = ids_iterator.collect();
-
-        let indexed_vectors = ids.len() + first_few_ids.len();
+        let remaining_ids: Vec<_> = ids_iter.collect();
 
         let insert_point = |vector_id| {
             let vector = vector_storage.get_vector(vector_id);
             let vector = vector.as_ref().into();
-            let raw_scorer = new_raw_scorer(vector, vector_storage, distance)?; //TODO: Distance Type Selction
+            let raw_scorer = new_raw_scorer(vector, vector_storage, distance)?;
             let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
 
-            graph_layers_builder.link_new_point(vector_id, points_scorer);
+            graph_builder.link_new_point(vector_id, points_scorer);
             Ok::<_, Error>(())
         };
 
-        for vector_id in first_few_ids {
+        for vector_id in initial_ids {
             insert_point(vector_id)?;
         }
 
-        if !ids.is_empty() {
-            ids.into_iter().try_for_each(insert_point)?;
-            //pool.install(|| ids.into_par_iter().try_for_each(insert_point))?; //TODO: Parallalize!!!
+        if !remaining_ids.is_empty() {
+            thread_pool.install(|| remaining_ids.into_par_iter().try_for_each(insert_point))?;
         }
 
-        config.indexed_vector_count.replace(indexed_vectors);
-
-        let graph_links_path = GraphLayers::get_links_path(path);
-        let graph: GraphLayers = graph_layers_builder.into_graph_layers(&graph_links_path)?;
-
-        Ok((config, graph))
+        Ok(())
     }
 
-    fn search_vectors_with_graph(
+    fn finalize_graph(path: &Path, graph_builder: GraphLayersBuilder) -> Result<GraphLayers> {
+        let graph_links_path = GraphLayers::get_links_path(path);
+        graph_builder.print_levels_and_point_count(); //TODO: TO REMOVE
+        graph_builder.into_graph_layers(&graph_links_path)
+    }
+
+    fn search_vectors(
         &self,
         vectors: &[&QueryVector],
         top: usize,
     ) -> Result<Vec<Vec<ScoredPoint>>> {
         vectors
             .iter()
-            .map(|&vector| self.search_with_graph(vector, top))
+            .map(|&vector| self.search_single(vector, top))
             .collect()
     }
 
-    fn search_with_graph(&self, vector: &QueryVector, top: usize) -> Result<Vec<ScoredPoint>> {
-        // let ef = params
-        // TODO: make EF be selectable ??
-        //     .and_then(|params| params.hnsw_ef)
-        //     .unwrap_or(self.config.ef);
-
+    fn search_single(&self, vector: &QueryVector, top: usize) -> Result<Vec<ScoredPoint>> {
         let vector_storage = self.vector_storage.borrow();
-
         let raw_scorer = new_raw_scorer(
             vector.to_owned(),
             vector_storage.deref(),
@@ -230,29 +229,20 @@ impl HnswIndex {
         )?;
 
         let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
-
         let search_result = self.graph.search(top, self.config.ef, points_scorer);
-        let postprocessed_points = self.postprocess_points(search_result);
 
-        Ok(postprocessed_points)
+        Ok(self.postprocess_points(search_result))
     }
 
     fn postprocess_points(&self, points: Vec<ScoredPointOffset>) -> Vec<ScoredPoint> {
-        let distance = self.config.distance;
         let id_tracker = self.id_tracker.borrow();
-
-        let postprocessed_points: Vec<ScoredPoint> = points
+        points
             .into_iter()
-            .map(|scored_point| {
-                let external_id = id_tracker.get_external_id(scored_point.idx);
-                ScoredPoint {
-                    id: external_id,
-                    score: distance.postprocess_score(scored_point.score),
-                }
+            .map(|point| ScoredPoint {
+                id: id_tracker.get_external_id(point.idx),
+                score: self.config.distance.postprocess_score(point.score),
             })
-            .collect();
-
-        postprocessed_points
+            .collect()
     }
 }
 pub trait VectorIndex {
@@ -261,23 +251,9 @@ pub trait VectorIndex {
 
 impl VectorIndex for HnswIndex {
     fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPoint>>> {
-        self.search_vectors_with_graph(vectors, top)
+        self.search_vectors(vectors, top)
     }
 }
-
-// Plain search
-// vectors
-// .iter()
-// .map(|&vector| {
-// new_stoppable_raw_scorer(
-// vector.to_owned(),
-// &vector_storage,
-// deleted_points,
-// &is_stopped,
-// )
-// .map(|scorer| scorer.peek_top_all(top))
-// })
-// .collect()
 
 #[cfg(test)]
 mod tests {
@@ -289,7 +265,7 @@ mod tests {
         id_tracker::{IdTracker, IdTrackerImpl, IdTrackerSS},
         types::{Distance, PointIdType, QueryVector, VectorElementType},
         vector_storage::{VectorStorageImpl, VectorStorageSS},
-        HnswIndex, HnswIndexCreateArgs, VectorIndex,
+        CreateArgs, HnswIndex, VectorIndex,
     };
     use std::sync::Arc;
 
@@ -327,7 +303,7 @@ mod tests {
             max_indexing_threads: 4,
         };
 
-        let hnsw_index = HnswIndex::create(HnswIndexCreateArgs {
+        let hnsw_index = HnswIndex::create(CreateArgs {
             path,
             id_tracker,
             vector_storage,

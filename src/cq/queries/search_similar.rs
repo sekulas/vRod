@@ -8,7 +8,7 @@ use atomic_refcell::AtomicRefCell;
 use hnsw::id_tracker::{IdTracker, IdTrackerImpl};
 use hnsw::types::Distance;
 use hnsw::vector_storage::VectorStorageImpl;
-use hnsw::{HnswIndex, HnswIndexLoadArgs, VectorIndex};
+use hnsw::{HnswIndex, LoadArgs as HnswIndexLoadArgs, VectorIndex};
 
 use crate::{
     components::collection::Collection,
@@ -60,12 +60,10 @@ impl Query for SearchSimilarQuery {
             vector_storage: Arc::new(AtomicRefCell::new(vector_storage)),
         };
 
-        // TODO: Should rebuild be specified?
-
         println!("Loading HNSW Index...");
         let time = std::time::Instant::now();
         let index = HnswIndex::load(args)?;
-        println!("HNSW Index loaded in {}s.", time.elapsed().as_secs_f32()); //TODO: Time to remove?
+        println!("HNSW Index loaded in {}s.", time.elapsed().as_secs_f32());
 
         let query_vectors_ref: Vec<&Vec<Dim>> = self.query_vectors.iter().collect();
 

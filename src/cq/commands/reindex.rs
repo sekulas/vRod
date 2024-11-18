@@ -3,7 +3,7 @@ use std::fs;
 use super::Result;
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::REINDEX_C_STR},
+    cq::{types::REINDEX_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     types::{INDEX_FILE, STORAGE_FILE},
 };
 

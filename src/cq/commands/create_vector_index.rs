@@ -11,7 +11,7 @@ use hnsw::config::HnswConfig;
 use hnsw::id_tracker::{IdTracker, IdTrackerImpl};
 use hnsw::types::Distance;
 use hnsw::vector_storage::VectorStorageImpl;
-use hnsw::{HnswIndex, HnswIndexCreateArgs};
+use hnsw::{CreateArgs as HnswIndexCreateArgs, HnswIndex};
 
 use crate::{
     components::collection::Collection,
