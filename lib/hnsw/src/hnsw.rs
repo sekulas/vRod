@@ -106,7 +106,6 @@ impl HnswIndex {
         let config = HnswGraphConfig::new(
             hnsw_config.m,
             hnsw_config.ef_construct,
-            hnsw_config.max_indexing_threads,
             total_vector_count,
             distance,
         );
@@ -300,7 +299,6 @@ mod tests {
         let hnsw_config = HnswConfig {
             m: 6,
             ef_construct: 12,
-            max_indexing_threads: 4,
         };
 
         let hnsw_index = HnswIndex::create(CreateArgs {
