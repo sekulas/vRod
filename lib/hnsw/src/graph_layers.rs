@@ -43,8 +43,7 @@ pub trait GraphLayersBase {
 
     fn get_layer_max_links(&self, level: usize) -> usize;
 
-    /// Greedy search for closest points within a single graph layer
-    fn _search_on_level(
+    fn explore_layer(
         &self,
         searcher: &mut SearchContext,
         level: usize,
@@ -85,12 +84,10 @@ pub trait GraphLayersBase {
         visited_list.check_and_update_visited(level_entry.idx);
         let mut search_context = SearchContext::new(level_entry, ef);
 
-        self._search_on_level(&mut search_context, level, &mut visited_list, points_scorer);
+        self.explore_layer(&mut search_context, level, &mut visited_list, points_scorer);
         search_context.nearest
     }
 
-    /// Greedy searches for entry point of level `target_level`.
-    /// Beam size is 1.
     fn search_entry(
         &self,
         entry_point: PointIdType,
@@ -99,34 +96,58 @@ pub trait GraphLayersBase {
         points_scorer: &mut FilteredScorer,
     ) -> ScoredPointOffset {
         let mut links: Vec<PointIdType> = Vec::with_capacity(2 * self.get_layer_max_links(0));
+        let mut current_point = self.initialize_entry_point(entry_point, points_scorer);
 
-        let mut current_point = ScoredPointOffset {
+        for level in reverse_range(top_level, target_level) {
+            current_point =
+                self.refine_entry_point(&mut links, current_point, level, points_scorer);
+        }
+
+        current_point
+    }
+
+    fn initialize_entry_point(
+        &self,
+        entry_point: PointIdType,
+        points_scorer: &mut FilteredScorer,
+    ) -> ScoredPointOffset {
+        ScoredPointOffset {
             idx: entry_point,
             score: points_scorer.score_point(entry_point),
-        };
-        for level in rev_range(top_level, target_level) {
-            //TODO: Maybe can be done differently
-            let limit = self.get_layer_max_links(level);
-
-            let mut changed = true;
-            while changed {
-                changed = false;
-
-                links.clear();
-                self.links_map(current_point.idx, level, |link| {
-                    links.push(link);
-                });
-
-                let scores = points_scorer.score_points(&mut links, limit);
-                scores.iter().copied().for_each(|score_point| {
-                    if score_point.score > current_point.score {
-                        changed = true;
-                        current_point = score_point;
-                    }
-                });
-            }
         }
-        current_point
+    }
+
+    fn refine_entry_point(
+        &self,
+        links: &mut Vec<PointIdType>,
+        mut current_point: ScoredPointOffset,
+        level: usize,
+        points_scorer: &mut FilteredScorer,
+    ) -> ScoredPointOffset {
+        let limit = self.get_layer_max_links(level);
+        let mut best_point = current_point;
+        let mut changed = true;
+
+        while changed {
+            changed = false;
+            links.clear();
+
+            self.links_map(current_point.idx, level, |link| {
+                links.push(link);
+            });
+
+            let scores = points_scorer.score_points(links, limit);
+            for score_point in scores.iter().copied() {
+                if score_point.score > best_point.score {
+                    changed = true;
+                    best_point = score_point;
+                }
+            }
+
+            current_point = best_point;
+        }
+
+        best_point
     }
 }
 
@@ -174,7 +195,9 @@ impl GraphLayers {
             0,
             &mut points_scorer,
         );
+
         let nearest = self.search_on_level(zero_level_entry, 0, max(top, ef), &mut points_scorer);
+
         nearest.into_iter().take(top).collect()
     }
 
@@ -207,6 +230,6 @@ impl GraphLayers {
     }
 }
 
-fn rev_range(a: usize, b: usize) -> impl Iterator<Item = usize> {
+fn reverse_range(a: usize, b: usize) -> impl Iterator<Item = usize> {
     (b + 1..=a).rev()
 }

@@ -29,33 +29,11 @@ pub struct GraphLinksConverter {
 impl GraphLinksConverter {
     pub fn new(edges: Vec<Vec<Vec<PointIdType>>>) -> Self {
         if edges.is_empty() {
-            return Self {
-                edges,
-                reindex: Vec::new(),
-                back_index: Vec::new(),
-                total_links_len: 0,
-                total_offsets_len: 1,
-                path: None,
-            };
+            return Self::default();
         }
 
-        let mut back_index: Vec<usize> = (0..edges.len()).collect();
-        back_index.sort_unstable_by_key(|&i| edges[i].len());
-        back_index.reverse();
-
-        let mut reindex = vec![0; back_index.len()];
-        for point_idx in 0..back_index.len() {
-            reindex[back_index[point_idx]] = point_idx as PointIdType;
-        }
-
-        let mut total_links_len = 0;
-        let mut total_offsets_len = 1;
-        for point in edges.iter() {
-            for layer in point.iter() {
-                total_links_len += layer.len();
-                total_offsets_len += 1;
-            }
-        }
+        let (reindex, back_index) = Self::compute_reindexing(&edges);
+        let (total_links_len, total_offsets_len) = Self::compute_lengths(&edges);
 
         Self {
             edges,
@@ -65,6 +43,33 @@ impl GraphLinksConverter {
             total_offsets_len,
             path: None,
         }
+    }
+
+    fn compute_reindexing(edges: &[Vec<Vec<PointIdType>>]) -> (Vec<PointIdType>, Vec<usize>) {
+        let mut back_index: Vec<usize> = (0..edges.len()).collect();
+        back_index.sort_unstable_by_key(|&i| edges[i].len());
+        back_index.reverse();
+
+        let mut reindex = vec![0; back_index.len()];
+        for (point_idx, &back_idx) in back_index.iter().enumerate() {
+            reindex[back_idx] = point_idx as PointIdType;
+        }
+
+        (reindex, back_index)
+    }
+
+    fn compute_lengths(edges: &[Vec<Vec<PointIdType>>]) -> (usize, usize) {
+        let mut total_links_len = 0;
+        let mut total_offsets_len = 1;
+
+        for point in edges.iter() {
+            for layer in point.iter() {
+                total_links_len += layer.len();
+                total_offsets_len += 1;
+            }
+        }
+
+        (total_links_len, total_offsets_len)
     }
 
     fn get_file_data(&self) -> GraphLinksFileData {
@@ -131,6 +136,19 @@ impl GraphLinksConverter {
     }
 }
 
+impl Default for GraphLinksConverter {
+    fn default() -> Self {
+        Self {
+            edges: Vec::new(),
+            reindex: Vec::new(),
+            back_index: Vec::new(),
+            total_links_len: 0,
+            total_offsets_len: 1,
+            path: None,
+        }
+    }
+}
+
 pub trait GraphLinks: Default {
     fn load_from_file(path: &Path) -> Result<Self>;
 
@@ -147,14 +165,17 @@ pub trait GraphLinks: Default {
     fn num_points(&self) -> usize;
 
     fn links(&self, point_id: PointIdType, level: usize) -> &[PointIdType] {
-        if level == 0 {
-            let links_range = self.get_links_range(point_id as usize);
-            self.get_links(links_range)
-        } else {
-            let reindexed_point_id = self.reindex(point_id) as usize;
-            let layer_offsets_start = self.get_level_offset(level);
-            let links_range = self.get_links_range(layer_offsets_start + reindexed_point_id);
-            self.get_links(links_range)
+        match level {
+            0 => {
+                let links_range = self.get_links_range(point_id as usize);
+                self.get_links(links_range)
+            }
+            _ => {
+                let reindexed_point_id = self.reindex(point_id) as usize;
+                let layer_offsets_start = self.get_level_offset(level);
+                let links_range = self.get_links_range(layer_offsets_start + reindexed_point_id);
+                self.get_links(links_range)
+            }
         }
     }
 }

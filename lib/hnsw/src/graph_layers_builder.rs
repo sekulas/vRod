@@ -298,7 +298,7 @@ impl GraphLayersBuilder {
 
         let mut search_context = SearchContext::new(level_entry, self.ef_construct);
 
-        self._search_on_level(&mut search_context, level, &mut visited_list, points_scorer);
+        self.explore_layer(&mut search_context, level, &mut visited_list, points_scorer);
 
         Self::make_nearest_point_level_entry(&search_context, &mut level_entry);
 
