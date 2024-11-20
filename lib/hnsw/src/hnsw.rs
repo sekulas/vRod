@@ -10,7 +10,7 @@ use crate::{
     graph_layers_builder::GraphLayersBuilder,
     id_tracker::IdTrackerSS,
     scorer::{new_raw_scorer, FilteredScorer},
-    types::{Distance, PointIdType, QueryVector, ScoredPoint, ScoredPointOffset},
+    types::{Distance, QueryVector, ScoredPoint, ScoredPointOffset},
     vector_storage::VectorStorageSS,
     visited_pool::POOL_KEEP_LIMIT,
 };
@@ -205,7 +205,7 @@ impl HnswIndex {
 
     fn finalize_graph(path: &Path, graph_builder: GraphLayersBuilder) -> Result<GraphLayers> {
         let graph_links_path = GraphLayers::get_links_path(path);
-        graph_builder.print_levels_and_point_count(); //TODO: TO REMOVE
+        graph_builder.print_layer_diagnostics(); //TODO: TO REMOVE
         graph_builder.into_graph_layers(&graph_links_path)
     }
 

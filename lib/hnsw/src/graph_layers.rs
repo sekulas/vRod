@@ -41,7 +41,7 @@ pub trait GraphLayersBase {
     where
         F: FnMut(PointIdType);
 
-    fn get_m(&self, level: usize) -> usize;
+    fn get_layer_max_links(&self, level: usize) -> usize;
 
     /// Greedy search for closest points within a single graph layer
     fn _search_on_level(
@@ -51,7 +51,7 @@ pub trait GraphLayersBase {
         visited_list: &mut VisitedListHandle,
         points_scorer: &mut FilteredScorer,
     ) {
-        let limit = self.get_m(level);
+        let limit = self.get_layer_max_links(level);
         let mut points_ids: Vec<PointIdType> = Vec::with_capacity(2 * limit);
 
         while let Some(candidate) = searcher.candidates.pop() {
@@ -98,7 +98,7 @@ pub trait GraphLayersBase {
         target_level: usize,
         points_scorer: &mut FilteredScorer,
     ) -> ScoredPointOffset {
-        let mut links: Vec<PointIdType> = Vec::with_capacity(2 * self.get_m(0));
+        let mut links: Vec<PointIdType> = Vec::with_capacity(2 * self.get_layer_max_links(0));
 
         let mut current_point = ScoredPointOffset {
             idx: entry_point,
@@ -106,7 +106,7 @@ pub trait GraphLayersBase {
         };
         for level in rev_range(top_level, target_level) {
             //TODO: Maybe can be done differently
-            let limit = self.get_m(level);
+            let limit = self.get_layer_max_links(level);
 
             let mut changed = true;
             while changed {
@@ -144,7 +144,7 @@ impl GraphLayersBase for GraphLayers {
         }
     }
 
-    fn get_m(&self, level: usize) -> usize {
+    fn get_layer_max_links(&self, level: usize) -> usize {
         if level == 0 {
             self.m0
         } else {
