@@ -60,9 +60,8 @@ impl Command for CreateVectorIndexCommand {
             id_tracker: Arc::new(AtomicRefCell::new(id_tracker)).clone(),
             vector_storage: Arc::new(AtomicRefCell::new(vector_storage)),
             hnsw_config: HnswConfig {
-                m: 3, //TODO: M, EF changeable?
-                ef_construct: 6,
-                max_indexing_threads: 10, //TODO: To Verify
+                m: 16, //TODO: M, EF changeable?
+                ef_construct: 64,
             },
             distance: self.distance,
         };
