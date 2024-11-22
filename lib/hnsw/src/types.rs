@@ -76,14 +76,6 @@ impl Display for Distance {
     }
 }
 
-pub trait QueryScorer {
-    fn score_stored(&self, idx: PointIdType) -> ScoreType;
-
-    fn score(&self, v2: &Vector) -> ScoreType;
-
-    fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType;
-}
-
 pub struct ScoredPoint {
     pub id: PointIdType,
     pub score: ScoreType,

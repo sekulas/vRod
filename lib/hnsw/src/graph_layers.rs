@@ -12,7 +12,7 @@ use crate::{
     fixed_length_priority_queue::FixedLengthPriorityQueue,
     graph_links::{GraphLinks, GraphLinksImpl},
     io_ops::{read_bin, save_bin},
-    scorer::FilteredScorer,
+    scorer::Scorer,
     search_context::SearchContext,
     types::{PointIdType, ScoredPointOffset, HNSW_GRAPH_FILE, HNSW_LINKS_FILE},
     visited_pool::{VisitedListHandle, VisitedPool},
@@ -48,7 +48,7 @@ pub trait GraphLayersBase {
         searcher: &mut SearchContext,
         level: usize,
         visited_list: &mut VisitedListHandle,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
     ) {
         let limit = self.get_layer_max_links(level);
         let mut points_ids: Vec<PointIdType> = Vec::with_capacity(2 * limit);
@@ -65,7 +65,7 @@ pub trait GraphLayersBase {
                 }
             });
 
-            let scores = points_scorer.score_points(&mut points_ids, limit);
+            let scores = points_scorer.score_points(&points_ids, limit);
             scores.iter().copied().for_each(|score_point| {
                 searcher.process_candidate(score_point);
                 visited_list.check_and_update_visited(score_point.idx);
@@ -78,7 +78,7 @@ pub trait GraphLayersBase {
         level_entry: ScoredPointOffset,
         level: usize,
         ef: usize,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
     ) -> FixedLengthPriorityQueue<ScoredPointOffset> {
         let mut visited_list = self.get_visited_list_from_pool();
         visited_list.check_and_update_visited(level_entry.idx);
@@ -93,7 +93,7 @@ pub trait GraphLayersBase {
         entry_point: PointIdType,
         top_level: usize,
         target_level: usize,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
     ) -> ScoredPointOffset {
         let mut links: Vec<PointIdType> = Vec::with_capacity(2 * self.get_layer_max_links(0));
         let mut current_point = self.initialize_entry_point(entry_point, points_scorer);
@@ -109,7 +109,7 @@ pub trait GraphLayersBase {
     fn initialize_entry_point(
         &self,
         entry_point: PointIdType,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &Scorer,
     ) -> ScoredPointOffset {
         ScoredPointOffset {
             idx: entry_point,
@@ -122,7 +122,7 @@ pub trait GraphLayersBase {
         links: &mut Vec<PointIdType>,
         mut current_point: ScoredPointOffset,
         level: usize,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
     ) -> ScoredPointOffset {
         let limit = self.get_layer_max_links(level);
         let mut best_point = current_point;
@@ -183,7 +183,7 @@ impl GraphLayers {
         &self,
         top: usize,
         ef: usize,
-        mut points_scorer: FilteredScorer,
+        mut points_scorer: Scorer,
     ) -> Vec<ScoredPointOffset> {
         let Some(entry_point) = self.get_entry_point() else {
             return Vec::default();

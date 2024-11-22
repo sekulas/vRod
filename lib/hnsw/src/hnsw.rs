@@ -9,7 +9,7 @@ use crate::{
     graph_layers::GraphLayers,
     graph_layers_builder::GraphLayersBuilder,
     id_tracker::IdTrackerSS,
-    scorer::{new_raw_scorer, FilteredScorer},
+    scorer::{new_query_scorer, Scorer},
     types::{Distance, QueryVector, ScoredPoint, ScoredPointOffset},
     vector_storage::VectorStorageSS,
     visited_pool::POOL_KEEP_LIMIT,
@@ -184,8 +184,8 @@ impl HnswIndex {
         let insert_point = |vector_id| {
             let vector = vector_storage.get_vector(vector_id);
             let vector = vector.as_ref().into();
-            let raw_scorer = new_raw_scorer(vector, vector_storage, distance)?;
-            let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
+            let query_scorer = new_query_scorer(vector, vector_storage, distance)?;
+            let points_scorer = Scorer::new(query_scorer.as_ref());
 
             graph_builder.link_new_point(vector_id, points_scorer);
             Ok::<_, Error>(())
@@ -221,13 +221,13 @@ impl HnswIndex {
 
     fn search_single(&self, vector: &QueryVector, top: usize) -> Result<Vec<ScoredPoint>> {
         let vector_storage = self.vector_storage.borrow();
-        let raw_scorer = new_raw_scorer(
+        let query_scorer = new_query_scorer(
             vector.to_owned(),
             vector_storage.deref(),
             self.config.distance,
         )?;
 
-        let points_scorer = FilteredScorer::new(raw_scorer.as_ref());
+        let points_scorer = Scorer::new(query_scorer.as_ref());
         let search_result = self.graph.search(top, self.config.ef, points_scorer);
 
         Ok(self.postprocess_points(search_result))

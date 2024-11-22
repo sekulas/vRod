@@ -15,7 +15,7 @@ use crate::{
     fixed_length_priority_queue::FixedLengthPriorityQueue,
     graph_layers::{GraphLayers, GraphLayersBase, LinkContainer},
     graph_links::{GraphLinks, GraphLinksConverter},
-    scorer::FilteredScorer,
+    scorer::Scorer,
     search_context::SearchContext,
     types::{PointIdType, ScoreType, ScoredPointOffset},
     visited_pool::{VisitedListHandle, VisitedPool},
@@ -122,7 +122,7 @@ impl GraphLayersBuilder {
 
     pub fn get_random_layer<R: Rng>(&self, rng: &mut R) -> usize {
         let sample: f64 = rng.sample(Uniform::new(0.0, 1.0));
-        (-sample.ln() * self.level_factor).round() as usize
+        (-sample.ln() * self.level_factor).floor() as usize
     }
 
     fn get_point_level(&self, point_id: PointIdType) -> usize {
@@ -183,7 +183,7 @@ impl GraphLayersBuilder {
         Self::select_candidate_with_heuristic_from_sorted(closest_iter, m, score_internal)
     }
 
-    pub fn link_new_point(&self, point_id: PointIdType, mut scorer: FilteredScorer) {
+    pub fn link_new_point(&self, point_id: PointIdType, mut scorer: Scorer) {
         let level = self.get_point_level(point_id);
 
         if let Some(entry_point) = self.get_entry_point() {
@@ -203,7 +203,7 @@ impl GraphLayersBuilder {
         &self,
         entry_point: &EntryPoint,
         level: usize,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
         point_id: PointIdType,
     ) -> ScoredPointOffset {
         if entry_point.level > level {
@@ -289,7 +289,7 @@ impl GraphLayersBuilder {
         point_id: PointIdType,
         mut level_entry: ScoredPointOffset,
         level: usize,
-        points_scorer: &mut FilteredScorer,
+        points_scorer: &mut Scorer,
     ) {
         let level_m = self.get_layer_max_links(level);
         let mut visited_list = self.get_visited_list_from_pool();
