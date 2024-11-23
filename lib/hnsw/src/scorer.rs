@@ -4,7 +4,7 @@ use crate::{
     metrics::{
         CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, Metric, MetricQueryScorer,
     },
-    types::{Distance, PointIdType, QueryVector, ScoreType, ScoredPointOffset},
+    types::{Distance, PointOffsetType, QueryVector, ScoreType, ScoredPointOffset},
     vector_storage::VectorStorage,
 };
 
@@ -21,7 +21,11 @@ impl<'a> Scorer<'a> {
         }
     }
 
-    pub fn score_points(&mut self, points: &[PointIdType], limit: usize) -> &[ScoredPointOffset] {
+    pub fn score_points(
+        &mut self,
+        points: &[PointOffsetType],
+        limit: usize,
+    ) -> &[ScoredPointOffset] {
         if limit == 0 {
             self.points_buffer
                 .resize_with(points.len(), ScoredPointOffset::default);
@@ -43,14 +47,14 @@ impl<'a> Scorer<'a> {
             }
         }
 
-        &self.points_buffer[0..count] //TODO: count -> limit?
+        &self.points_buffer[0..count]
     }
 
-    pub fn score_point(&self, point: PointIdType) -> ScoreType {
+    pub fn score_point(&self, point: PointOffsetType) -> ScoreType {
         self.query_scorer.score_stored(point)
     }
 
-    pub fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType {
+    pub fn score_internal(&self, point_a: PointOffsetType, point_b: PointOffsetType) -> ScoreType {
         self.query_scorer.score_internal(point_a, point_b)
     }
 }
@@ -81,7 +85,7 @@ fn new_query_scorer_with_metric<'a, TMetric: Metric + 'a>(
 }
 
 pub trait QueryScorer {
-    fn score_stored(&self, idx: PointIdType) -> ScoreType;
+    fn score_stored(&self, idx: PointOffsetType) -> ScoreType;
 
-    fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType;
+    fn score_internal(&self, point_a: PointOffsetType, point_b: PointOffsetType) -> ScoreType;
 }

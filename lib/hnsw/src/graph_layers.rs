@@ -14,11 +14,11 @@ use crate::{
     io_ops::{read_bin, save_bin},
     scorer::Scorer,
     search_context::SearchContext,
-    types::{PointIdType, ScoredPointOffset, HNSW_GRAPH_FILE, HNSW_LINKS_FILE},
+    types::{PointOffsetType, ScoredPointOffset, HNSW_GRAPH_FILE, HNSW_LINKS_FILE},
     visited_pool::{VisitedListHandle, VisitedPool},
 };
 
-pub type LinkContainer = Vec<PointIdType>;
+pub type LinkContainer = Vec<PointOffsetType>;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GraphLayers {
@@ -37,9 +37,9 @@ pub struct GraphLayers {
 pub trait GraphLayersBase {
     fn get_visited_list_from_pool(&self) -> VisitedListHandle;
 
-    fn links_map<F>(&self, point_id: PointIdType, level: usize, f: F)
+    fn links_map<F>(&self, point_id: PointOffsetType, level: usize, f: F)
     where
-        F: FnMut(PointIdType);
+        F: FnMut(PointOffsetType);
 
     fn get_layer_max_links(&self, level: usize) -> usize;
 
@@ -51,7 +51,7 @@ pub trait GraphLayersBase {
         points_scorer: &mut Scorer,
     ) {
         let limit = self.get_layer_max_links(level);
-        let mut points_ids: Vec<PointIdType> = Vec::with_capacity(2 * limit);
+        let mut points_ids: Vec<PointOffsetType> = Vec::with_capacity(2 * limit);
 
         while let Some(candidate) = searcher.candidates.pop() {
             if candidate.score < searcher.lower_bound() {
@@ -90,12 +90,12 @@ pub trait GraphLayersBase {
 
     fn search_entry(
         &self,
-        entry_point: PointIdType,
+        entry_point: PointOffsetType,
         top_level: usize,
         target_level: usize,
         points_scorer: &mut Scorer,
     ) -> ScoredPointOffset {
-        let mut links: Vec<PointIdType> = Vec::with_capacity(2 * self.get_layer_max_links(0));
+        let mut links: Vec<PointOffsetType> = Vec::with_capacity(2 * self.get_layer_max_links(0));
         let mut current_point = self.initialize_entry_point(entry_point, points_scorer);
 
         for level in reverse_range(top_level, target_level) {
@@ -108,7 +108,7 @@ pub trait GraphLayersBase {
 
     fn initialize_entry_point(
         &self,
-        entry_point: PointIdType,
+        entry_point: PointOffsetType,
         points_scorer: &Scorer,
     ) -> ScoredPointOffset {
         ScoredPointOffset {
@@ -119,7 +119,7 @@ pub trait GraphLayersBase {
 
     fn refine_entry_point(
         &self,
-        links: &mut Vec<PointIdType>,
+        links: &mut Vec<PointOffsetType>,
         mut current_point: ScoredPointOffset,
         level: usize,
         points_scorer: &mut Scorer,
@@ -156,9 +156,9 @@ impl GraphLayersBase for GraphLayers {
         self.visited_pool.get(self.links.num_points())
     }
 
-    fn links_map<F>(&self, point_id: PointIdType, level: usize, mut f: F)
+    fn links_map<F>(&self, point_id: PointOffsetType, level: usize, mut f: F)
     where
-        F: FnMut(PointIdType),
+        F: FnMut(PointOffsetType),
     {
         for link in self.links.links(point_id, level) {
             f(*link);

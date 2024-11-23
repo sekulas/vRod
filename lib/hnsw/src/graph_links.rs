@@ -7,19 +7,19 @@ use super::Result;
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
 
-use crate::types::PointIdType;
+use crate::types::PointOffsetType;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct GraphLinksFileData {
-    links: Vec<PointIdType>,
+    links: Vec<PointOffsetType>,
     offsets: Vec<u64>,
     level_offsets: Vec<u64>,
-    reindex: Vec<PointIdType>,
+    reindex: Vec<PointOffsetType>,
 }
 
 pub struct GraphLinksConverter {
-    edges: Vec<Vec<Vec<PointIdType>>>,
-    reindex: Vec<PointIdType>,
+    edges: Vec<Vec<Vec<PointOffsetType>>>,
+    reindex: Vec<PointOffsetType>,
     back_index: Vec<usize>,
     total_links_len: usize,
     total_offsets_len: usize,
@@ -27,7 +27,7 @@ pub struct GraphLinksConverter {
 }
 
 impl GraphLinksConverter {
-    pub fn new(edges: Vec<Vec<Vec<PointIdType>>>) -> Self {
+    pub fn new(edges: Vec<Vec<Vec<PointOffsetType>>>) -> Self {
         if edges.is_empty() {
             return Self::default();
         }
@@ -45,20 +45,20 @@ impl GraphLinksConverter {
         }
     }
 
-    fn compute_reindexing(edges: &[Vec<Vec<PointIdType>>]) -> (Vec<PointIdType>, Vec<usize>) {
+    fn compute_reindexing(edges: &[Vec<Vec<PointOffsetType>>]) -> (Vec<PointOffsetType>, Vec<usize>) {
         let mut back_index: Vec<usize> = (0..edges.len()).collect();
         back_index.sort_unstable_by_key(|&i| edges[i].len());
         back_index.reverse();
 
         let mut reindex = vec![0; back_index.len()];
         for (point_idx, &back_idx) in back_index.iter().enumerate() {
-            reindex[back_idx] = point_idx as PointIdType;
+            reindex[back_idx] = point_idx as PointOffsetType;
         }
 
         (reindex, back_index)
     }
 
-    fn compute_lengths(edges: &[Vec<Vec<PointIdType>>]) -> (usize, usize) {
+    fn compute_lengths(edges: &[Vec<Vec<PointOffsetType>>]) -> (usize, usize) {
         let mut total_links_len = 0;
         let mut total_offsets_len = 1;
 
@@ -119,7 +119,7 @@ impl GraphLinksConverter {
 
     pub fn iterate_level_points<F>(&self, level: usize, mut f: F)
     where
-        F: FnMut(usize, &Vec<PointIdType>),
+        F: FnMut(usize, &Vec<PointOffsetType>),
     {
         let edges_len = self.edges.len();
         if level == 0 {
@@ -154,17 +154,17 @@ pub trait GraphLinks: Default {
 
     fn from_converter(converter: GraphLinksConverter) -> Result<Self>;
 
-    fn get_links(&self, range: Range<usize>) -> &[PointIdType];
+    fn get_links(&self, range: Range<usize>) -> &[PointOffsetType];
 
     fn get_links_range(&self, idx: usize) -> Range<usize>;
 
     fn get_level_offset(&self, level: usize) -> usize;
 
-    fn reindex(&self, point_id: PointIdType) -> PointIdType;
+    fn reindex(&self, point_id: PointOffsetType) -> PointOffsetType;
 
     fn num_points(&self) -> usize;
 
-    fn links(&self, point_id: PointIdType, level: usize) -> &[PointIdType] {
+    fn links(&self, point_id: PointOffsetType, level: usize) -> &[PointOffsetType] {
         match level {
             0 => {
                 let links_range = self.get_links_range(point_id as usize);
@@ -182,10 +182,10 @@ pub trait GraphLinks: Default {
 
 #[derive(Debug, Default)]
 pub struct GraphLinksImpl {
-    links: Vec<PointIdType>,
+    links: Vec<PointOffsetType>,
     offsets: Vec<u64>, // offsets[point_id] = start_offset, offsets[point_id + 1] = end_offset. Stored from lowest to highest layer.
     level_offsets: Vec<u64>,
-    reindex: Vec<PointIdType>, // reindex[point_id] = new_point_id (used for access to links in offsets especially for layers > 0)
+    reindex: Vec<PointOffsetType>, // reindex[point_id] = new_point_id (used for access to links in offsets especially for layers > 0)
 }
 
 impl GraphLinksImpl {
@@ -219,7 +219,7 @@ impl GraphLinks for GraphLinksImpl {
         })
     }
 
-    fn get_links(&self, range: Range<usize>) -> &[PointIdType] {
+    fn get_links(&self, range: Range<usize>) -> &[PointOffsetType] {
         &self.links[range]
     }
 
@@ -233,7 +233,7 @@ impl GraphLinks for GraphLinksImpl {
         self.level_offsets[level] as usize
     }
 
-    fn reindex(&self, point_id: PointIdType) -> PointIdType {
+    fn reindex(&self, point_id: PointOffsetType) -> PointOffsetType {
         self.reindex[point_id as usize]
     }
 

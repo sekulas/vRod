@@ -2,11 +2,11 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::PointIdType;
+use crate::types::PointOffsetType;
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct EntryPoint {
-    pub point_id: PointIdType,
+    pub point_id: PointOffsetType,
     pub level: usize,
 }
 
@@ -36,7 +36,7 @@ impl EntryPointContainer {
         self.entry_point.clone()
     }
 
-    pub fn set_if_higher(&mut self, new_point: PointIdType, level: usize) {
+    pub fn set_if_higher(&mut self, new_point: PointOffsetType, level: usize) {
         match &self.entry_point {
             Some(current_highest) if current_highest.level >= level => (),
             _ => {

@@ -1,16 +1,16 @@
 use core::fmt;
 use std::borrow::Cow;
 
-use crate::types::{PointIdType, VectorElementType};
+use crate::types::{PointOffsetType, VectorElementType};
 
 pub type VectorStorageSS = dyn VectorStorage + Send + Sync;
 
 pub trait VectorStorage: fmt::Debug {
     fn total_vector_count(&self) -> usize;
-    fn get(&self, key: PointIdType) -> &[VectorElementType];
-    fn get_opt(&self, key: PointIdType) -> Option<&[VectorElementType]>;
-    fn get_vector(&self, point_id: PointIdType) -> Cow<[VectorElementType]>;
-    fn get_vector_opt(&self, point_id: PointIdType) -> Option<Cow<[VectorElementType]>>;
+    fn get(&self, key: PointOffsetType) -> &[VectorElementType];
+    fn get_opt(&self, key: PointOffsetType) -> Option<&[VectorElementType]>;
+    fn get_vector(&self, point_id: PointOffsetType) -> Cow<[VectorElementType]>;
+    fn get_vector_opt(&self, point_id: PointOffsetType) -> Option<Cow<[VectorElementType]>>;
 }
 
 #[derive(Debug, Default)]
@@ -35,19 +35,19 @@ impl VectorStorage for VectorStorageImpl {
         self.vectors.len()
     }
 
-    fn get(&self, key: PointIdType) -> &[VectorElementType] {
+    fn get(&self, key: PointOffsetType) -> &[VectorElementType] {
         self.get_opt(key).expect("vector not found")
     }
 
-    fn get_opt(&self, key: PointIdType) -> Option<&[VectorElementType]> {
+    fn get_opt(&self, key: PointOffsetType) -> Option<&[VectorElementType]> {
         self.vectors.get(key as usize).map(|v| v.as_slice())
     }
 
-    fn get_vector(&self, key: PointIdType) -> Cow<[VectorElementType]> {
+    fn get_vector(&self, key: PointOffsetType) -> Cow<[VectorElementType]> {
         self.get_vector_opt(key).expect("vector not found")
     }
 
-    fn get_vector_opt(&self, key: PointIdType) -> Option<Cow<[VectorElementType]>> {
+    fn get_vector_opt(&self, key: PointOffsetType) -> Option<Cow<[VectorElementType]>> {
         self.vectors
             .get(key as usize)
             .map(|slice| Cow::Borrowed(slice.as_slice())) // TODO: CHECK THIS

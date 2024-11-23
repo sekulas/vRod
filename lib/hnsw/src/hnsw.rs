@@ -262,7 +262,7 @@ mod tests {
     use crate::{
         config::HnswConfig,
         id_tracker::{IdTracker, IdTrackerImpl, IdTrackerSS},
-        types::{Distance, PointIdType, QueryVector, VectorElementType},
+        types::{Distance, PointIdType, PointOffsetType, QueryVector, VectorElementType},
         vector_storage::{VectorStorageImpl, VectorStorageSS},
         CreateArgs, HnswIndex, VectorIndex,
     };

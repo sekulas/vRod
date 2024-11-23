@@ -2,7 +2,7 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use crate::{
     scorer::QueryScorer,
-    types::{PointIdType, QueryVector, ScoreType, Vector, VectorElementType},
+    types::{PointOffsetType, QueryVector, ScoreType, Vector, VectorElementType},
     vector_storage::VectorStorage,
 };
 
@@ -157,11 +157,11 @@ impl<'a, TMetric: Metric> MetricQueryScorer<'a, TMetric> {
 
 impl<'a, TMetric: Metric> QueryScorer for MetricQueryScorer<'a, TMetric> {
     #[inline]
-    fn score_stored(&self, idx: PointIdType) -> ScoreType {
+    fn score_stored(&self, idx: PointOffsetType) -> ScoreType {
         TMetric::similarity(&self.query, self.vector_storage.get(idx))
     }
 
-    fn score_internal(&self, point_a: PointIdType, point_b: PointIdType) -> ScoreType {
+    fn score_internal(&self, point_a: PointOffsetType, point_b: PointOffsetType) -> ScoreType {
         let v1 = self.vector_storage.get(point_a);
         let v2 = self.vector_storage.get(point_b);
         TMetric::similarity(v1, v2)

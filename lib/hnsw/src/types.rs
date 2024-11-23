@@ -14,8 +14,9 @@ pub const HNSW_INDEX_CONFIG_FILE: &str = "hnsw_config.json";
 pub const HNSW_GRAPH_FILE: &str = "graph.bin";
 pub const HNSW_LINKS_FILE: &str = "links.bin";
 
-pub type PointIdType = u32; //RecordId;
-pub type ScoreType = f32; //Vector element type;
+pub type PointIdType = u32; //RecordId
+pub type PointOffsetType = u32; //Internal (from id_tracker) RecordId
+pub type ScoreType = f32;
 
 pub type VectorElementType = f32;
 pub type QueryVector = Vec<VectorElementType>;
@@ -23,7 +24,7 @@ pub type Vector = Vec<VectorElementType>;
 
 #[derive(Copy, Clone, PartialEq, Debug, Default)]
 pub struct ScoredPointOffset {
-    pub idx: PointIdType,
+    pub idx: PointOffsetType,
     pub score: ScoreType,
 }
 

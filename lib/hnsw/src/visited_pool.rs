@@ -1,4 +1,4 @@
-use crate::types::PointIdType;
+use crate::types::PointOffsetType;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 
@@ -102,7 +102,7 @@ impl<'a> VisitedListHandle<'a> {
     }
 
     /// Return `true` if visited
-    pub fn check(&self, point_id: PointIdType) -> bool {
+    pub fn check(&self, point_id: PointOffsetType) -> bool {
         self.visited_list
             .visit_counters
             .get(point_id as usize)
@@ -111,7 +111,7 @@ impl<'a> VisitedListHandle<'a> {
 
     /// Updates visited list
     /// return `true` if point was visited before
-    pub fn check_and_update_visited(&mut self, point_id: PointIdType) -> bool {
+    pub fn check_and_update_visited(&mut self, point_id: PointOffsetType) -> bool {
         let idx = point_id as usize;
         if idx >= self.visited_list.visit_counters.len() {
             self.visited_list.visit_counters.resize(idx + 1, 0);

@@ -17,7 +17,7 @@ use crate::{
     graph_links::{GraphLinks, GraphLinksConverter},
     scorer::Scorer,
     search_context::SearchContext,
-    types::{PointIdType, ScoreType, ScoredPointOffset},
+    types::{PointOffsetType, ScoreType, ScoredPointOffset},
     visited_pool::{VisitedListHandle, VisitedPool},
 };
 
@@ -42,9 +42,9 @@ impl GraphLayersBase for GraphLayersBuilder {
         self.visited_pool.get(self.num_points())
     }
 
-    fn links_map<F>(&self, point_id: PointIdType, level: usize, mut f: F)
+    fn links_map<F>(&self, point_id: PointOffsetType, level: usize, mut f: F)
     where
-        F: FnMut(PointIdType),
+        F: FnMut(PointOffsetType),
     {
         let links = self.links_layers[point_id as usize][level].read();
         let ready_list = self.ready_list.read();
@@ -89,7 +89,7 @@ impl GraphLayersBuilder {
     fn initialize_links_layers(
         num_vectors: usize,
         initial_capacity: usize,
-    ) -> Vec<Vec<RwLock<Vec<PointIdType>>>> {
+    ) -> Vec<Vec<RwLock<Vec<PointOffsetType>>>> {
         (0..num_vectors)
             .map(|_| vec![RwLock::new(Vec::with_capacity(initial_capacity))])
             .collect()
@@ -125,11 +125,11 @@ impl GraphLayersBuilder {
         (-sample.ln() * self.level_factor).floor() as usize
     }
 
-    fn get_point_level(&self, point_id: PointIdType) -> usize {
+    fn get_point_level(&self, point_id: PointOffsetType) -> usize {
         self.links_layers[point_id as usize].len() - 1
     }
 
-    pub fn set_levels(&mut self, point_id: PointIdType, level: usize) {
+    pub fn set_levels(&mut self, point_id: PointOffsetType, level: usize) {
         if self.links_layers.len() <= point_id as usize {
             while self.links_layers.len() <= point_id as usize {
                 self.links_layers.push(vec![]);
@@ -148,9 +148,9 @@ impl GraphLayersBuilder {
         candidates: impl Iterator<Item = ScoredPointOffset>,
         m: usize,
         mut score_internal: F,
-    ) -> Vec<PointIdType>
+    ) -> Vec<PointOffsetType>
     where
-        F: FnMut(PointIdType, PointIdType) -> ScoreType,
+        F: FnMut(PointOffsetType, PointOffsetType) -> ScoreType,
     {
         let mut result_list = Vec::with_capacity(m);
         for current_closest in candidates {
@@ -175,15 +175,15 @@ impl GraphLayersBuilder {
         candidates: FixedLengthPriorityQueue<ScoredPointOffset>,
         m: usize,
         score_internal: F,
-    ) -> Vec<PointIdType>
+    ) -> Vec<PointOffsetType>
     where
-        F: FnMut(PointIdType, PointIdType) -> ScoreType,
+        F: FnMut(PointOffsetType, PointOffsetType) -> ScoreType,
     {
         let closest_iter = candidates.into_iter();
         Self::select_candidate_with_heuristic_from_sorted(closest_iter, m, score_internal)
     }
 
-    pub fn link_new_point(&self, point_id: PointIdType, mut scorer: Scorer) {
+    pub fn link_new_point(&self, point_id: PointOffsetType, mut scorer: Scorer) {
         let level = self.get_point_level(point_id);
 
         if let Some(entry_point) = self.get_entry_point() {
@@ -204,7 +204,7 @@ impl GraphLayersBuilder {
         entry_point: &EntryPoint,
         level: usize,
         points_scorer: &mut Scorer,
-        point_id: PointIdType,
+        point_id: PointOffsetType,
     ) -> ScoredPointOffset {
         if entry_point.level > level {
             self.search_entry(
@@ -236,7 +236,7 @@ impl GraphLayersBuilder {
 
     fn get_links_for_point_on_level(
         &self,
-        point_id: PointIdType,
+        point_id: PointOffsetType,
         level: usize,
     ) -> lock_api::RwLockWriteGuard<'_, parking_lot::RawRwLock, LinkContainer> {
         self.links_layers[point_id as usize][level].write()
@@ -244,13 +244,13 @@ impl GraphLayersBuilder {
 
     fn reconsider_links_with_new_point<F>(
         &self,
-        point: PointIdType,
+        point: PointOffsetType,
         level_m: usize,
         mut links: lock_api::RwLockWriteGuard<'_, parking_lot::RawRwLock, LinkContainer>,
-        new_point: PointIdType,
+        new_point: PointOffsetType,
         scorer: F,
     ) where
-        F: Fn(PointIdType, PointIdType) -> ScoreType,
+        F: Fn(PointOffsetType, PointOffsetType) -> ScoreType,
     {
         if links.len() < level_m {
             links.push(new_point);
@@ -286,7 +286,7 @@ impl GraphLayersBuilder {
 
     fn link_point_at_level(
         &self,
-        point_id: PointIdType,
+        point_id: PointOffsetType,
         mut level_entry: ScoredPointOffset,
         level: usize,
         points_scorer: &mut Scorer,
@@ -330,11 +330,11 @@ impl GraphLayersBuilder {
         }
     }
 
-    fn mark_point_ready(&self, point_id: PointIdType) {
+    fn mark_point_ready(&self, point_id: PointOffsetType) {
         self.ready_list.write().set(point_id as usize, true);
     }
 
-    fn update_entry_point(&self, point_id: PointIdType, level: usize) {
+    fn update_entry_point(&self, point_id: PointOffsetType, level: usize) {
         self.entry_point.lock().set_if_higher(point_id, level);
     }
 
