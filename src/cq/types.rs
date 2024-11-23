@@ -2,6 +2,8 @@ use super::commands::Result as CommandResult;
 use super::queries::Result as QueryResult;
 use crate::components::wal::Wal;
 use std::path::PathBuf;
+pub const ROLLBACK_C_STR: &str = "ROLLBACK";
+pub const HANDLE_FAILED_ROLLBACK_C_STR: &str = "HANDLE_FAILED_ROLLBACK";
 
 pub const CREATE_C_STR: &str = "CREATE";
 pub const DROP_C_STR: &str = "DROP";

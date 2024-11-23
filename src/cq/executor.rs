@@ -17,7 +17,6 @@ impl Executor for CQExecutor {
         let target_path = target.get_target_path();
         let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
 
-        //TODO: ### How to proceed with the rollback? Perform it and make the user run the command once more?
         match wal_type {
             WalType::Consistent(wal) => {
                 CQExecutor::execute_cq(cq, wal)?;
@@ -29,7 +28,6 @@ impl Executor for CQExecutor {
                 arg,
             } => {
                 CQExecutor::rollback_last_cq(target, &mut wal, uncommited_command, arg, None)?;
-                CQExecutor::execute_cq(cq, wal)?;
                 Ok(())
             }
         }
@@ -66,7 +64,8 @@ impl CQExecutor {
 
             last_command.rollback(wal)?;
 
-            println!("Rollback completed.");
+            println!("Rollback completed - No changes from last command were made.");
+            println!("Please re-run the last command to try again or proceed with a new command.");
         }
         Ok(())
     }

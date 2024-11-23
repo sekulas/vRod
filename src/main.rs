@@ -669,7 +669,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
-        let collection_to_exist = "test_col";
+        let potential_another_col = "test_col";
         let rolledback_collection = "rol_col";
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, rolledback_collection)?;
@@ -678,13 +678,12 @@ mod tests {
         uncommit_wal(&temp_dir, db_name, None)?;
         assert!(!is_wal_consistent(&temp_dir, db_name, None)?);
 
-        create_collection(&temp_dir, db_name, collection_to_exist)?;
+        create_collection(&temp_dir, db_name, potential_another_col)?;
 
         //Assert
         let db_path = temp_dir.path().join(db_name);
         let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
 
-        assert!(db_options.collection_exists(collection_to_exist));
         assert!(!db_options.collection_exists(rolledback_collection));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
@@ -772,7 +771,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
-        let collection_to_exist = "test_col";
+        let potential_another_collection = "test_col";
         let dropped_collection = "dropped_col";
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, dropped_collection)?;
@@ -780,16 +779,15 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, None)?;
-        let post_rollback_result = create_collection(&temp_dir, db_name, collection_to_exist)?;
+        let rollback_result = create_collection(&temp_dir, db_name, potential_another_collection)?;
 
         //Assert
         let db_path = temp_dir.path().join(db_name);
         let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
 
-        assert!(db_options.collection_exists(collection_to_exist));
         assert!(!db_options.collection_exists(dropped_collection));
 
-        post_rollback_result
+        rollback_result
             .success()
             .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
@@ -941,13 +939,76 @@ mod tests {
     }
 
     #[test]
+    fn handle_failed_rollback_should_mark_database_as_readonly() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, None)?;
+        let rollback_result = create_collection(&temp_dir, db_name, collection_name)?;
+        uncommit_wal(&temp_dir, db_name, None)?;
+        let handle_failed_rollback_result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        rollback_result.success();
+
+        handle_failed_rollback_result.success()
+            .stdout(predicates::str::contains("Target marked as readonly."));
+
+        let db_path = temp_dir.path().join(db_name);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
+
+        assert!(db_options.db_readonly);
+
+        Ok(())
+    }
+
+    #[test]
+    fn handle_failed_rollback_should_mark_collection_as_readonly() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let insert_data = "1.0,2.0,3.0;test_payload";
+        
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, insert_data)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let rollback_result = insert(&temp_dir, db_name, collection_name, insert_data)?;
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let handle_failed_rollback_result = insert(&temp_dir, db_name, collection_name, insert_data)?;
+
+        //Assert
+        rollback_result.success();
+
+        handle_failed_rollback_result.success()
+            .stdout(predicates::str::contains("Target marked as readonly."));
+
+        let db_path = temp_dir.path().join(db_name);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
+
+        assert!(db_options.is_collection_readonly(collection_name));
+
+        Ok(())
+    }
+
+    #[test]
     fn rollback_insert_should_leave_col_in_state_like_vec_never_existed() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
         let rolled_back_data = "1.0,2.0,3.0;test_payload";
-        let new_entry = "4.0,5.0,6.0;test_payload_2";
+        let potential_new_entry = "4.0,5.0,6.0;test_payload_2";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -955,7 +1016,7 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = insert(&temp_dir, db_name, collection_name, new_entry)?;
+        let post_rollback_result = insert(&temp_dir, db_name, collection_name, potential_new_entry)?;
 
         //Assert
         post_rollback_result.success();
@@ -963,8 +1024,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4,5,6"))
-            .stdout(predicates::str::contains("test_payload_2"));
+            .stdout(predicates::str::contains("not found"));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -1096,10 +1156,12 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
+        let rollback_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
+        let post_rollback_bulk_insert_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
 
         //Assert
-        post_rollback_result.success();
+        rollback_result.success();
+        post_rollback_bulk_insert_result.success();
 
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
@@ -1514,20 +1576,22 @@ mod tests {
         create_collection(&temp_dir, db_name, collection_name)?;
         insert(&temp_dir, db_name, collection_name, data_to_exist)?;
         update(&temp_dir, db_name, collection_name, data_to_change)?;
-        let post_update_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let update_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let post_rollback_update_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Assert
-        let post_update_result = post_update_result.success();
-        post_update_result
+        rollback_result
+            .success();
+
+        update_result
             .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("updated_payload"));
 
-        let post_rollback_result = post_rollback_result.success();
-        post_rollback_result
+        post_rollback_update_result
             .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 
@@ -1615,13 +1679,12 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Assert
-        post_rollback_result
+        rollback_result
             .success()
-            .stdout(predicates::str::contains("No ROLLBACK".to_string()))
-            .stdout(predicates::str::contains("not found"));
+            .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -1714,12 +1777,16 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "4")?; //TODO: ### Reindex new ID is being put - okay? - OK
-                                                                                      //TODO: ### Is it okay that it does not ID consistency? 1->4, 2->3? - OK
-                                                                                      //Assert
-        post_rollback_result
+        let rollback_result = search(&temp_dir, db_name, collection_name, "4")?;
+        let post_rollback_search_result = search(&temp_dir, db_name, collection_name, "4")?;
+
+        //Assert
+        rollback_result
             .success()
-            .stdout(predicates::str::contains("No backup files"))
+            .stdout(predicates::str::contains("No backup files"));
+
+        post_rollback_search_result
+            .success()
             .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 

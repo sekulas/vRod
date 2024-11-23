@@ -53,6 +53,7 @@ impl DbConfig {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&file_path)?;
 
         serde_json::to_writer(file, &DbConfig::new(file_path))?;

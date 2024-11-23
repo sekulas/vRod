@@ -8,6 +8,8 @@ use super::parsing_ops::parse_vec_n_payload;
 use super::parsing_ops::parse_vecs_and_payloads_from_string;
 use super::queries::*;
 use super::types::CREATE_VECTOR_INDEX_C_STR;
+use super::types::HANDLE_FAILED_ROLLBACK_C_STR;
+use super::types::ROLLBACK_C_STR;
 use super::CQTarget;
 use super::CQType;
 use crate::cq::parsing_ops::parse_vecs_and_payloads_from_file;
@@ -49,7 +51,9 @@ impl Builder for CQBuilder {
             DELETE_C_STR => build_delete_command(target, arg),
             BULK_INSERT_C_STR => build_bulk_insert_command(target, arg, file_path),
             REINDEX_C_STR => build_reindex_command(target),
-            SEARCH_SIMILAR_Q_STR => build_search_simmilar_query(target, arg), //TODO: ### What if last command was ROLLBACK and it's uncommited? Readonly State?
+            ROLLBACK_C_STR => build_handle_failed_rollback_command(target),
+            HANDLE_FAILED_ROLLBACK_C_STR => build_handle_failed_rollback_command(target),
+            SEARCH_SIMILAR_Q_STR => build_search_simmilar_query(target, arg),
             CREATE_VECTOR_INDEX_C_STR => build_create_vector_index_command(target, arg),
             _ => Err(Error::UnrecognizedCommandOrQuery(cq_action.to_string())),
         }
@@ -125,7 +129,7 @@ fn build_bulk_insert_command(
                 let vecs_and_payloads = parse_vecs_and_payloads_from_string(&arg)?;
                 let bulk_insert_command = BulkInsertCommand::new(collection, vecs_and_payloads);
                 Ok(CQType::Command(Box::new(bulk_insert_command)))
-            } // None => Err(Error::MissingArgument {
+            } // TODO None => Err(Error::MissingArgument {
             //     description:
             //         "BULKINSERT command requires to pass either file path or vectors and payloads."
             //             .to_string(),
@@ -217,4 +221,10 @@ fn build_create_vector_index_command(
             ),
         }),
     }
+}
+
+fn build_handle_failed_rollback_command(target: CQTarget) -> Result<CQType> {
+    Ok(CQType::Command(Box::new(HandleFailedRollbackCommand::new(
+        target,
+    ))))
 }
