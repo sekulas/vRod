@@ -18,31 +18,44 @@ use utils::embeddings::process_embeddings;
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
 struct Args {
+    /// Specifies the path where a new database should be initialized. 
+    /// This is useful when creating a new database instance.
     #[arg(short, long, value_name = "PATH")]
     init_database: Option<PathBuf>,
 
+    /// Sets the name for the new database being initialized. This option must be used alongside --init-database.
     #[arg(short = 'n', long, value_name = "NAME")]
     init_database_name: Option<String>,
 
+    /// Indicates the path to an existing database that should be used for operations.
     #[arg(short, long, value_name = "PATH")]
     database: Option<PathBuf>,
 
+    /// Selects a specific collection within the database to operate on.
     #[arg(short, long, value_name = "COLLECTION_NAME")]
     collection: Option<String>,
 
+    /// Executes a specified command on the database.
+    /// For list commands, refer to the user guide or documentation.
     #[arg(short, long, value_name = "COMMAND")]
     execute: Option<String>,
 
+    /// Provides an argument for the command specified by the --execute option.
     #[arg(short = 'a', long, value_name = "COMMAND_ARG")]
     command_arg: Option<String>,
 
+    /// Specifies the path to a file, which can be used for various operations, such as importing or exporting data.
     #[arg(short = 'f', long, value_name = "PATH")]
     file_path: Option<PathBuf>,
 
-    //TODO To remove / for developmnet only
+    /// (Primarily for testing purposes) 
+    /// Generates a specified number of embeddings based on the specified file in --file-path option.
+    /// Results are written to the embeddings.txt file.
     #[arg(short, long, value_name = "AMOUNT")]
     generate_embeddings: Option<usize>,
 
+    /// (Primarily for testing purposes) Converts the specified WAL file to a human-readable text format.
+    /// If the --execute option is set to "UNCOMMIT", the WAL file is uncommitted.
     #[arg(short, long, value_name = "PATH")]
     wal_path: Option<PathBuf>,
 }
