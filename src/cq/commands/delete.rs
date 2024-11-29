@@ -4,7 +4,7 @@ use crate::{
         collection::{types::CollectionDeleteResult, Collection},
         wal::Wal,
     },
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::DELETE_C_STR},
+    cq::{types::DELETE_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     types::RecordId,
 };
 
@@ -23,7 +23,7 @@ impl DeleteCommand {
 }
 
 impl Command for DeleteCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -44,7 +44,7 @@ impl Command for DeleteCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 

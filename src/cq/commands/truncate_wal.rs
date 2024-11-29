@@ -2,7 +2,7 @@ use super::Result;
 
 use crate::{
     components::wal::Wal,
-    cq::{CQAction, Command, types::TRUNCATE_WAL_C_STR},
+    cq::{types::TRUNCATE_WAL_C_STR, CQAction, Command},
 };
 
 pub struct TruncateWalCommand {}
@@ -14,7 +14,7 @@ impl TruncateWalCommand {
 }
 
 impl Command for TruncateWalCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         let lsn = wal.append(self.to_string())?;
         wal.truncate(lsn)?;
         wal.commit()?;
@@ -23,7 +23,7 @@ impl Command for TruncateWalCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
         println!("No ROLLBACK for TRUNCATEWAL command provided. Commiting."); //TODO: ### Is the rollback necessary here?

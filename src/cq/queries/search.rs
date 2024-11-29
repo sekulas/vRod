@@ -1,7 +1,10 @@
 use super::Result;
 use crate::{
     components::collection::{types::CollectionSearchResult, Collection},
-    cq::{queries::dto::RecordDTO, CQAction, CQTarget, CQValidator, Query, Validator, types::SEARCH_Q_STR},
+    cq::{
+        queries::dto::RecordDTO, types::SEARCH_Q_STR, CQAction, CQTarget, CQValidator, Query,
+        Validator,
+    },
     types::RecordId,
 };
 
@@ -20,7 +23,7 @@ impl SearchQuery {
 }
 
 impl Query for SearchQuery {
-    fn execute(&mut self) -> Result<()> {
+    fn execute(&self) -> Result<()> {
         CQValidator::target_exists(&self.collection);
 
         let path = self.collection.get_target_path();

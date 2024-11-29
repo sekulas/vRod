@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::BULK_INSERT_C_STR},
+    cq::{types::BULK_INSERT_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     types::Dim,
 };
 
@@ -20,7 +20,7 @@ impl BulkInsertCommand {
 }
 
 impl Command for BulkInsertCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -48,7 +48,7 @@ impl Command for BulkInsertCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?; //TODO: ### Not having inserted records in WAL? For rollback no need i see.
 

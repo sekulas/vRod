@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator, types::CREATE_C_STR},
+    cq::{types::CREATE_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -22,7 +22,7 @@ impl CreateCollectionCommand {
 }
 
 impl Command for CreateCollectionCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
 
         let path = self.database.get_target_path();
@@ -49,7 +49,7 @@ impl Command for CreateCollectionCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 

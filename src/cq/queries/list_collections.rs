@@ -1,9 +1,9 @@
 use super::Result;
 
 use crate::{
-    cq::{CQAction, CQTarget, CQValidator, Query, Validator, types::LIST_COLLECTIONS_Q_STR},
+    cq::{types::LIST_COLLECTIONS_Q_STR, CQAction, CQTarget, CQValidator, Query, Validator},
     database::DbConfig,
-    types::{DB_CONFIG},
+    types::DB_CONFIG,
 };
 
 pub struct ListCollectionsQuery {
@@ -17,7 +17,7 @@ impl ListCollectionsQuery {
 }
 
 impl Query for ListCollectionsQuery {
-    fn execute(&mut self) -> Result<()> {
+    fn execute(&self) -> Result<()> {
         CQValidator::target_exists(&self.database);
         let path = self.database.get_target_path();
 

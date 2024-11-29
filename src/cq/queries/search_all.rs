@@ -1,7 +1,10 @@
 use super::Result;
 use crate::{
     components::collection::Collection,
-    cq::{queries::dto::RecordDTOList, CQAction, CQTarget, CQValidator, Query, Validator, types::SEARCH_ALL_Q_STR},
+    cq::{
+        queries::dto::RecordDTOList, types::SEARCH_ALL_Q_STR, CQAction, CQTarget, CQValidator,
+        Query, Validator,
+    },
 };
 pub struct SearchAllQuery {
     collection: CQTarget,
@@ -14,7 +17,7 @@ impl SearchAllQuery {
 }
 
 impl Query for SearchAllQuery {
-    fn execute(&mut self) -> Result<()> {
+    fn execute(&self) -> Result<()> {
         CQValidator::target_exists(&self.collection);
 
         let path = self.collection.get_target_path();

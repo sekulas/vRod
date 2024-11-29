@@ -35,7 +35,7 @@ impl CreateVectorIndexCommand {
 }
 
 impl Command for CreateVectorIndexCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
 
         let path: std::path::PathBuf = self.collection.get_target_path();
@@ -79,7 +79,7 @@ impl Command for CreateVectorIndexCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let path: std::path::PathBuf = self.collection.get_target_path();
 

@@ -25,7 +25,7 @@ impl HandleFailedRollbackCommand {
 }
 
 impl Command for HandleFailedRollbackCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.target);
 
         wal.append(self.to_string())?;
@@ -39,7 +39,7 @@ impl Command for HandleFailedRollbackCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.target);
         self.execute(wal)
     }

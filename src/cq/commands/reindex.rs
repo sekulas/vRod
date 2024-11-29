@@ -18,7 +18,7 @@ impl ReindexCommand {
 }
 
 impl Command for ReindexCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -32,7 +32,7 @@ impl Command for ReindexCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
         //TODO: ### Is this rollback fine? Should it contain Rollback entry in old file?

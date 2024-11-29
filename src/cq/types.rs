@@ -52,10 +52,10 @@ pub trait CQAction {
 }
 
 pub trait Command: CQAction {
-    fn execute(&mut self, wal: &mut Wal) -> CommandResult<()>;
-    fn rollback(&mut self, wal: &mut Wal) -> CommandResult<()>;
+    fn execute(&self, wal: &mut Wal) -> CommandResult<()>;
+    fn rollback(&self, wal: &mut Wal) -> CommandResult<()>;
 }
 
 pub trait Query: CQAction {
-    fn execute(&mut self) -> QueryResult<()>;
+    fn execute(&self) -> QueryResult<()>;
 }

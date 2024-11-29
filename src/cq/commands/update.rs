@@ -5,9 +5,8 @@ use crate::{
         wal::Wal,
     },
     cq::{
-        parsing_ops::parse_string_from_vector_option, CQAction, CQTarget, CQValidator, Command,
-        Validator,
-        types::UPDATE_C_STR,
+        parsing_ops::parse_string_from_vector_option, types::UPDATE_C_STR, CQAction, CQTarget,
+        CQValidator, Command, Validator,
     },
     types::{Dim, RecordId},
 };
@@ -35,7 +34,7 @@ impl UpdateCommand {
     }
 }
 impl Command for UpdateCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -63,7 +62,7 @@ impl Command for UpdateCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
