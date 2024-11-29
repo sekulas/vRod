@@ -4,7 +4,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use crate::types::{Dim, RecordId};
 
 use super::{Error, Result};
-use memchr;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -111,17 +110,18 @@ pub fn parse_vec_n_payload(
 fn parse_vector(vector_str: &str, vector_len: Option<NonZeroUsize>) -> Result<Vec<Dim>> {
     let mut start = 0;
     let bytes = vector_str.as_bytes();
+    let mut buffer = match vector_len {
+        Some(len) => Vec::with_capacity(usize::from(len)),
+        None => Vec::new(),
+    };
 
-    let mut buffer;
-    if let Some(vector_len) = vector_len {
-        buffer = Vec::with_capacity(usize::from(vector_len));
-    } else {
-        buffer = Vec::new();
-    }
+    loop {
+        let end = bytes[start..]
+            .iter()
+            .position(|&b| b == VECTOR_DELIMITER as u8)
+            .map(|pos| start + pos)
+            .unwrap_or(bytes.len());
 
-    // Use SIMD-optimized memchr for delimiter search
-    while let Some(pos) = memchr::memchr(VECTOR_DELIMITER as u8, &bytes[start..]) {
-        let end = start + pos;
         if end > start {
             let num_str = std::str::from_utf8(&bytes[start..end])?;
             match num_str.parse() {
@@ -133,19 +133,12 @@ fn parse_vector(vector_str: &str, vector_len: Option<NonZeroUsize>) -> Result<Ve
                 }
             }
         }
-        start = end + 1;
-    }
 
-    if start < bytes.len() {
-        let num_str = std::str::from_utf8(&bytes[start..])?;
-        match num_str.parse() {
-            Ok(num) => buffer.push(num),
-            Err(_) => {
-                return Err(Error::InvalidDataFormat {
-                    description: CANNOT_PARSE_FLOAT_ERR_M.to_owned(),
-                })
-            }
+        if end == bytes.len() {
+            break;
         }
+
+        start = end + 1;
     }
 
     Ok(buffer)
