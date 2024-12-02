@@ -159,7 +159,7 @@ impl Node {
             checksum: 0,
             is_leaf,
             keys: vec![EMPTY_KEY_SLOT; (branching_factor - 1) as usize],
-            values: vec![EMPTY_CHILD_SLOT; branching_factor as usize], //TODO: ### Is it good to have it like this? [EMPTY, VAL] instead of [VAL, EMPTY].
+            values: vec![EMPTY_CHILD_SLOT; branching_factor as usize],
             next_leaf_offset: NONE,
             recently_taken_key_slot: branching_factor - 1,
         };
@@ -176,10 +176,7 @@ impl Node {
     }
 
     pub fn is_full(&self) -> bool {
-        match self.is_leaf {
-            true => self.recently_taken_key_slot == 0,
-            false => self.recently_taken_key_slot == 0,
-        }
+        self.recently_taken_key_slot == (HIGHEST_KEY_SLOT as u16)
     }
 
     pub fn insert(&mut self, key: RecordId, value: Offset) -> Option<Offset> {
@@ -1352,8 +1349,10 @@ mod tests {
 
         //Assert
         let root = tree.file.read_node(&tree.header.root_offset)?;
-
         assert_eq!(root.values, vec![4, 1, 0]);
+
+        let old_root = tree.file.read_node(&tree.header.last_root_offset)?;
+        assert_eq!(old_root.values, vec![2, 1, 0]);
 
         Ok(())
     }
