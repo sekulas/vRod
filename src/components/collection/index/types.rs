@@ -4,7 +4,7 @@ use super::Result;
 use crate::types::{Lsn, Offset, RecordId};
 
 pub type NodeIdx = u16;
-pub const DEFAULT_BRANCHING_FACTOR: NodeIdx = 330;
+pub const DEFAULT_BRANCHING_FACTOR: NodeIdx = 338;
 pub const FIRST_VALUE_SLOT: NodeIdx = DEFAULT_BRANCHING_FACTOR - 1;
 pub const MAX_KEYS: NodeIdx = DEFAULT_BRANCHING_FACTOR - 1;
 pub const HIGHEST_KEY_SLOT: usize = 0;
