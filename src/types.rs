@@ -1,6 +1,6 @@
-pub const WAL_FILE: &str = "vr_wal";
-pub const INDEX_FILE: &str = "vr_index";
-pub const STORAGE_FILE: &str = "vr_storage";
+pub const WAL_FILE: &str = "vr_wal.bin";
+pub const INDEX_FILE: &str = "vr_index.bin";
+pub const STORAGE_FILE: &str = "vr_storage.bin";
 pub const DB_CONFIG: &str = "vr_config.json";
 pub const HNSW_DIR_NAME: &str = "vr_hnsw";
 
