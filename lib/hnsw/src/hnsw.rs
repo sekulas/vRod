@@ -212,14 +212,20 @@ impl HnswIndex {
         &self,
         vectors: &[&QueryVector],
         top: usize,
+        ef_search: usize,
     ) -> Result<Vec<Vec<ScoredPoint>>> {
         vectors
             .iter()
-            .map(|&vector| self.search_single(vector, top))
+            .map(|&vector| self.search_single(vector, top, ef_search))
             .collect()
     }
 
-    fn search_single(&self, vector: &QueryVector, top: usize) -> Result<Vec<ScoredPoint>> {
+    fn search_single(
+        &self,
+        vector: &QueryVector,
+        top: usize,
+        ef_search: usize,
+    ) -> Result<Vec<ScoredPoint>> {
         let vector_storage = self.vector_storage.borrow();
         let query_scorer = new_query_scorer(
             vector.to_owned(),
@@ -228,7 +234,7 @@ impl HnswIndex {
         )?;
 
         let points_scorer = Scorer::new(query_scorer.as_ref());
-        let search_result = self.graph.search(top, self.config.ef, points_scorer);
+        let search_result = self.graph.search(top, ef_search, points_scorer);
 
         Ok(self.postprocess_points(search_result))
     }
@@ -245,12 +251,22 @@ impl HnswIndex {
     }
 }
 pub trait VectorIndex {
-    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPoint>>>;
+    fn search(
+        &self,
+        vectors: &[&QueryVector],
+        top: usize,
+        ef_search: usize,
+    ) -> Result<Vec<Vec<ScoredPoint>>>;
 }
 
 impl VectorIndex for HnswIndex {
-    fn search(&self, vectors: &[&QueryVector], top: usize) -> Result<Vec<Vec<ScoredPoint>>> {
-        self.search_vectors(vectors, top)
+    fn search(
+        &self,
+        vectors: &[&QueryVector],
+        top: usize,
+        ef_search: usize,
+    ) -> Result<Vec<Vec<ScoredPoint>>> {
+        self.search_vectors(vectors, top, ef_search)
     }
 }
 
@@ -317,7 +333,7 @@ mod tests {
         let top = 2;
 
         //Act
-        let search_result = hnsw_index.search(&query_vectors_refs, top)?;
+        let search_result = hnsw_index.search(&query_vectors_refs, top, 12)?;
 
         //Assert
         assert_eq!(search_result.len(), query_vectors.len());

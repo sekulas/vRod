@@ -77,12 +77,12 @@ pub trait GraphLayersBase {
         &self,
         level_entry: ScoredPointOffset,
         level: usize,
-        ef: usize,
+        ef_search: usize,
         points_scorer: &mut Scorer,
     ) -> FixedLengthPriorityQueue<ScoredPointOffset> {
         let mut visited_list = self.get_visited_list_from_pool();
         visited_list.check_and_update_visited(level_entry.idx);
-        let mut search_context = SearchContext::new(level_entry, ef);
+        let mut search_context = SearchContext::new(level_entry, ef_search);
 
         self.explore_layer(&mut search_context, level, &mut visited_list, points_scorer);
         search_context.nearest
@@ -182,7 +182,7 @@ impl GraphLayers {
     pub fn search(
         &self,
         top: usize,
-        ef: usize,
+        ef_search: usize,
         mut points_scorer: Scorer,
     ) -> Vec<ScoredPointOffset> {
         let Some(entry_point) = self.get_entry_point() else {
@@ -196,7 +196,8 @@ impl GraphLayers {
             &mut points_scorer,
         );
 
-        let nearest = self.search_on_level(zero_level_entry, 0, max(top, ef), &mut points_scorer);
+        let nearest =
+            self.search_on_level(zero_level_entry, 0, max(top, ef_search), &mut points_scorer);
 
         nearest.into_iter().take(top).collect()
     }

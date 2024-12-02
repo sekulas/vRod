@@ -21,7 +21,6 @@ pub struct HnswGraphConfig {
     pub m: usize,
     pub m0: usize,
     pub ef_construct: usize,
-    pub ef: usize,
     pub distance: Distance,
     #[serde(default)]
     pub indexed_vector_count: Option<usize>,
@@ -38,7 +37,6 @@ impl HnswGraphConfig {
             m,
             m0: m * 2,
             ef_construct,
-            ef: ef_construct,
             indexed_vector_count: Some(indexed_vector_count),
             distance,
         }
