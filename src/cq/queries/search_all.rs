@@ -23,9 +23,14 @@ impl Query for SearchAllQuery {
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;
 
+        let time = std::time::Instant::now();
         let result = collection.search_all()?;
 
-        println!("Found {} records.", result.len());
+        println!(
+            "Found {} records in {}s.",
+            result.len(),
+            time.elapsed().as_secs_f32()
+        );
         println!("{}", RecordDTOList(result));
         Ok(())
     }
