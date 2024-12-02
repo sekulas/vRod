@@ -65,9 +65,14 @@ fn build_create_collection_command(
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
-            database, name,
-        )))),
+        Some(name) => {
+            if name.is_empty() {
+                return Err(Error::MissingCollectionName);
+            }
+            Ok(CQType::Command(Box::new(CreateCollectionCommand::new(
+                database, name,
+            ))))
+        }
         None => Err(Error::MissingCollectionName),
     }
 }
@@ -77,9 +82,15 @@ fn build_drop_collection_command(
     collection_name: Option<String>,
 ) -> Result<CQType> {
     match collection_name {
-        Some(name) => Ok(CQType::Command(Box::new(DropCollectionCommand::new(
-            database, name,
-        )))),
+        Some(name) => {
+            if name.is_empty() {
+                return Err(Error::MissingCollectionName);
+            }
+            Ok(CQType::Command(Box::new(DropCollectionCommand::new(
+                database, name,
+            ))))
+        }
+
         None => Err(Error::MissingCollectionName),
     }
 }
