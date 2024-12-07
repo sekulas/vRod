@@ -37,11 +37,11 @@ impl Executor for CQExecutor {
 impl CQExecutor {
     fn execute_cq(cq: CQType, mut wal: Wal) -> Result<()> {
         match cq {
-            CQType::Command(mut command) => {
+            CQType::Command(command) => {
                 println!("Executing command: {:?}", command.to_string());
                 command.execute(&mut wal)?
             }
-            CQType::Query(mut query) => {
+            CQType::Query(query) => {
                 println!("Executing query: {:?}", query.to_string());
                 query.execute()?
             }
@@ -56,9 +56,7 @@ impl CQExecutor {
         arg: Option<String>,
         file_path: Option<PathBuf>,
     ) -> Result<()> {
-        if let CQType::Command(mut last_command) =
-            CQBuilder::build(target, command, arg, file_path)?
-        {
+        if let CQType::Command(last_command) = CQBuilder::build(target, command, arg, file_path)? {
             let stringified_last_command = last_command.to_string();
             println!("Rollbacking last command: {:?}", stringified_last_command);
 
