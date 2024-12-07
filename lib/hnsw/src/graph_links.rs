@@ -45,7 +45,9 @@ impl GraphLinksConverter {
         }
     }
 
-    fn compute_reindexing(edges: &[Vec<Vec<PointOffsetType>>]) -> (Vec<PointOffsetType>, Vec<usize>) {
+    fn compute_reindexing(
+        edges: &[Vec<Vec<PointOffsetType>>],
+    ) -> (Vec<PointOffsetType>, Vec<usize>) {
         let mut back_index: Vec<usize> = (0..edges.len()).collect();
         back_index.sort_unstable_by_key(|&i| edges[i].len());
         back_index.reverse();
@@ -273,6 +275,46 @@ mod tests {
         let graph_links = GraphLinksImpl::load_from_file(&path.join(file_name))?;
 
         // Assert
+        assert_eq!(graph_links.num_points(), 5);
+        assert_eq!(graph_links.links(0, 0), [1, 2, 3, 4]);
+        assert_eq!(graph_links.links(1, 0), [0, 2, 3, 4]);
+        assert_eq!(graph_links.links(2, 0), [0, 1, 3, 4]);
+        assert_eq!(graph_links.links(3, 0), [0, 1, 2, 4]);
+        assert_eq!(graph_links.links(4, 0), [0, 1, 2, 3]);
+        assert_eq!(graph_links.links(1, 1), [4]);
+        assert_eq!(graph_links.links(3, 1), [4]);
+        assert_eq!(graph_links.links(4, 1), [1, 3]);
+        assert_eq!(graph_links.links(1, 2), &[] as &[u32]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn graph_links_load_from_file_should_not_change_graph_structure_2() -> Result<()> {
+        // Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.path();
+        let file_name = "graph_links.bin";
+
+        // lvl2: 1
+        // lvl1: 1, 4
+        // lvl0: 0, 1, 2, 3, 4
+        let edges = vec![
+            vec![vec![2, 4]],
+            vec![vec![2, 3], vec![4], vec![]],
+            vec![vec![1, 4]],
+            vec![vec![1, 2]],
+            vec![vec![0, 2], vec![1]],
+        ];
+
+        let mut converter = GraphLinksConverter::new(edges);
+        converter.save_as(&path.join(file_name))?;
+
+        // Act
+        let graph_links = GraphLinksImpl::load_from_file(&path.join(file_name))?;
+
+        // Assert
+        let x = graph_links.links(4, 1);
         assert_eq!(graph_links.num_points(), 5);
         assert_eq!(graph_links.links(0, 0), [1, 2, 3, 4]);
         assert_eq!(graph_links.links(1, 0), [0, 2, 3, 4]);
