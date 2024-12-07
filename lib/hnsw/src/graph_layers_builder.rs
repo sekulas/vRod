@@ -343,6 +343,7 @@ impl GraphLayersBuilder {
     }
 
     pub fn print_layer_diagnostics(&self) {
+        //TODO: TO DELETE
         let mut layer_counts: HashMap<usize, usize> = HashMap::new();
 
         for layer in &self.links_layers {

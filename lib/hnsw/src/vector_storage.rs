@@ -1,7 +1,7 @@
 use core::fmt;
 use std::borrow::Cow;
 
-use crate::types::{PointOffsetType, VectorElementType};
+use crate::types::{Distance, PointOffsetType, VectorElementType};
 
 pub type VectorStorageSS = dyn VectorStorage + Send + Sync;
 
@@ -13,20 +13,24 @@ pub trait VectorStorage: fmt::Debug {
     fn get_vector_opt(&self, point_id: PointOffsetType) -> Option<Cow<[VectorElementType]>>;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct VectorStorageImpl {
     vectors: Vec<Vec<VectorElementType>>,
+    distance: Distance,
 }
 
 impl VectorStorageImpl {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(distance: &Distance) -> Self {
+        Self {
+            vectors: Vec::new(),
+            distance: *distance,
+        }
     }
 }
 
 impl VectorStorageImpl {
     pub fn add_vector(&mut self, vector: Vec<VectorElementType>) {
-        self.vectors.push(vector);
+        self.vectors.push(self.distance.preprocess_vec(vector));
     }
 }
 

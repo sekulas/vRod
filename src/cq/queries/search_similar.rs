@@ -44,7 +44,7 @@ impl Query for SearchSimilarQuery {
         let mut collection = Collection::load(&path)?;
 
         let mut id_tracker = IdTrackerImpl::new();
-        let mut vector_storage = VectorStorageImpl::new();
+        let mut vector_storage = VectorStorageImpl::new(&self.distance);
 
         {
             let result = collection.search_all()?;

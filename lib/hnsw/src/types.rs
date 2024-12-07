@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::metrics::{
-    CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, MetricPostProcessing,
+    CosineMetric, DotProductMetric, EuclidMetric, ManhattanMetric, Metric, MetricPostProcessing,
 };
 
 pub const HNSW_INDEX_CONFIG_FILE: &str = "hnsw_config.json";
@@ -56,6 +56,15 @@ pub enum Distance {
 }
 
 impl Distance {
+    pub fn preprocess_vec(&self, vector: Vector) -> Vector {
+        match self {
+            Distance::Cosine => CosineMetric::preprocess(vector),
+            Distance::Euclid => EuclidMetric::preprocess(vector),
+            Distance::Dot => DotProductMetric::preprocess(vector),
+            Distance::Manhattan => ManhattanMetric::preprocess(vector),
+        }
+    }
+
     pub fn postprocess_score(&self, score: ScoreType) -> ScoreType {
         match self {
             Distance::Cosine => CosineMetric::postprocess(score),
