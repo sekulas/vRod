@@ -70,14 +70,15 @@ impl Query for SearchSimilarQuery {
         println!("Searching similar vectors...");
         let result = index.search(&query_vectors_ref, 10, 64)?; //TODO: Maybe more vectors for query?
                                                                 //TODO: Make top number modifiable?
+        println!("{0: <9} | {1: <12} | Payload", "ID", "Similarity");
+        println!("{0: <9} | {1: <12} | -------", "---------", "------------",);
         for query_result in result {
-            println!();
             for scored_point in query_result {
                 let search_result = collection.search(scored_point.id)?;
                 if let CollectionSearchResult::FoundRecord(record) = search_result {
                     println!(
-                        "Id: {}, Payload: {}, Distance: {:?}",
-                        scored_point.id, record.payload, scored_point.score
+                        "{0: <9} | {1: <12} | {2}",
+                        scored_point.id, scored_point.score, record.payload
                     );
                 }
             }
