@@ -46,7 +46,7 @@ impl Builder for CQBuilder {
             TRUNCATE_WAL_C_STR => build_truncate_wal_command(),
             INSERT_C_STR => build_insert_command(target, arg),
             SEARCH_Q_STR => build_search_query(target, arg),
-            SEARCH_ALL_Q_STR => build_search_all_query(target),
+            SEARCH_ALL_Q_STR => build_search_all_query(target, arg, file_path),
             UPDATE_C_STR => build_update_command(target, arg),
             DELETE_C_STR => build_delete_command(target, arg),
             BULK_INSERT_C_STR => build_bulk_insert_command(target, arg, file_path),
@@ -167,8 +167,14 @@ fn build_search_query(collection: CQTarget, record_id_str: Option<String>) -> Re
     }
 }
 
-fn build_search_all_query(collection: CQTarget) -> Result<CQType> {
-    Ok(CQType::Query(Box::new(SearchAllQuery::new(collection))))
+fn build_search_all_query(
+    collection: CQTarget,
+    arg: Option<String>,
+    file_path: Option<PathBuf>,
+) -> Result<CQType> {
+    Ok(CQType::Query(Box::new(SearchAllQuery::new(
+        collection, file_path, arg,
+    ))))
 }
 
 fn build_update_command(collection: CQTarget, id_vec_payload: Option<String>) -> Result<CQType> {

@@ -70,7 +70,7 @@ impl Query for SearchSimilarQuery {
         println!("Searching similar vectors...");
         let result = index.search(&query_vectors_ref, 10, 64)?; //TODO: Maybe more vectors for query?
                                                                 //TODO: Make top number modifiable?
-        println!("{0: <9} | {1: <12} | Payload", "ID", "Similarity");
+        println!("{0: <9} | {1: <12} | payload", "id", "similarity");
         println!("{0: <9} | {1: <12} | -------", "---------", "------------",);
         for query_result in result {
             for scored_point in query_result {
