@@ -292,11 +292,9 @@ impl BTreeFile {
         Ok(())
     }
 
-    //TODO: ### Leaves are not next to each other is that okay?
     pub fn write_nodes(&mut self, nodes: &HashMap<Offset, Node>) -> Result<()> {
         self.alloc_space_for_nodes()?;
 
-        //TODO: ### Good to iterate over in desc order when writing to disc? Or sort by offset?
         let mut offsets: Vec<&Offset> = nodes.keys().collect();
         offsets.sort();
 
@@ -493,7 +491,7 @@ impl BPTree {
         }
     }
 
-    //TODO: ### Implement bulk insert in a faster way?
+    //TODO: Implementation could be improved.
     fn bulk_insert(&mut self, values: &[Offset]) -> Result<()> {
         for value in values {
             self.insert(*value)?;

@@ -35,7 +35,7 @@ impl Command for InsertCommand {
 
         match collection.insert(&self.vector, &self.payload, lsn)? {
             CollectionInsertResult::Inserted => {
-                println!("Embedding inserted successfully");
+                println!("Embedding inserted successfully.");
             }
             CollectionInsertResult::NotInserted { description } => {
                 println!("Embedding not inserted: {}", description);

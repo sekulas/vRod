@@ -50,7 +50,7 @@ impl Command for BulkInsertCommand {
 
     fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
-        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?; //TODO: ### Not having inserted records in WAL? For rollback no need i see.
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;
@@ -64,7 +64,6 @@ impl Command for BulkInsertCommand {
 
 impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
-        //TODO: ### Should we print all of these? Performance Reasons.
         BULK_INSERT_C_STR.to_string()
     }
 }

@@ -326,7 +326,7 @@ impl GraphLayersBuilder {
                 );
             }
         } else {
-            panic!("TODO: Implement this part"); //TODO: Implement this part??
+            panic!("Currently only the heuristic version of HNSW is being supported.");
         }
     }
 

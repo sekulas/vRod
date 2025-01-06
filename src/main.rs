@@ -100,7 +100,7 @@ fn run() -> Result<()> {
         } else {
             wal_to_txt(&wal_path).unwrap_or_else(|error| {
                 eprintln!(
-                    "Error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
+                    "error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
                     wal_path, error
                 );
             });
@@ -121,8 +121,8 @@ fn run() -> Result<()> {
 
     let result: Result<()> = (|| {
         let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
-        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build - Not needed.
-                                                                                //TODO:: #### Maybe no need for readonly if cannot parse coll header?
+        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?;
+
         CQExecutor::execute(&target, cq_action)?;
         Ok(())
     })();
@@ -176,7 +176,6 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     }
 }
 
-//TODO: TO CHECK
 fn verify_if_command_not_run_on_readonly_target(
     cq_action: &CQType,
     is_readonly: bool,

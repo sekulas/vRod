@@ -5,11 +5,8 @@ use crate::{
     types::{ScoreType, ScoredPointOffset},
 };
 
-/// Structure that holds context of the search
 pub struct SearchContext {
-    /// Overall nearest points found so far
     pub nearest: FixedLengthPriorityQueue<ScoredPointOffset>,
-    /// Current candidates to process
     pub candidates: BinaryHeap<ScoredPointOffset>,
 }
 
@@ -25,13 +22,11 @@ impl SearchContext {
 
     pub fn lower_bound(&self) -> ScoreType {
         match self.nearest.top() {
-            None => ScoreType::MIN, //TODO: check - changed from min_value() to MIN
+            None => ScoreType::MIN,
             Some(worst_of_the_best) => worst_of_the_best.score,
         }
     }
 
-    /// Updates search context with new scored point.
-    /// If it is closer than existing - also add it to candidates for further search
     pub fn process_candidate(&mut self, score_point: ScoredPointOffset) {
         let was_added = match self.nearest.push(score_point) {
             None => true,

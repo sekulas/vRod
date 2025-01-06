@@ -54,6 +54,6 @@ impl VectorStorage for VectorStorageImpl {
     fn get_vector_opt(&self, key: PointOffsetType) -> Option<Cow<[VectorElementType]>> {
         self.vectors
             .get(key as usize)
-            .map(|slice| Cow::Borrowed(slice.as_slice())) // TODO: CHECK THIS
+            .map(|slice| Cow::Borrowed(slice.as_slice()))
     }
 }

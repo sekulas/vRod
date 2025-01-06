@@ -52,7 +52,7 @@ impl Command for CreateVectorIndexCommand {
             }
         }
 
-        CreateVectorIndexCommand::save_current_index_as_backup(&path, &self.distance)?; //TODO: When remove outdated graph dir? By default? Or by command?
+        CreateVectorIndexCommand::save_current_index_as_backup(&path, &self.distance)?;
         let hnsw_index_path = get_vector_index_path(&path, &self.distance);
 
         let args = HnswIndexCreateArgs {
@@ -74,7 +74,7 @@ impl Command for CreateVectorIndexCommand {
         let _ = HnswIndex::create(args)?;
         wal.commit()?;
 
-        println!("HNSW Index created in {}s.", time.elapsed().as_secs_f32()); //###TODO: Time to remove?
+        println!("HNSW Index created in {}s.", time.elapsed().as_secs_f32());
 
         Ok(())
     }
