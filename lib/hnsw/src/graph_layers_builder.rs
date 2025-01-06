@@ -3,7 +3,7 @@ use bitvec::vec::BitVec;
 use rand::{distributions::Uniform, Rng};
 use std::{
     cmp::min,
-    collections::{BinaryHeap, HashMap},
+    collections::{BTreeMap, BinaryHeap},
     path::Path,
     sync::atomic::AtomicUsize,
 };
@@ -343,17 +343,21 @@ impl GraphLayersBuilder {
     }
 
     pub fn print_layer_diagnostics(&self) {
-        //TODO: TO DELETE
-        let mut layer_counts: HashMap<usize, usize> = HashMap::new();
+        let mut layer_counts = BTreeMap::new();
 
-        for layer in &self.links_layers {
-            let max_level = layer.len();
-            *layer_counts.entry(max_level).or_insert(0) += 1;
+        for point in &self.links_layers {
+            let max_level_layer = point.len();
+
+            for level in 1..max_level_layer {
+                *layer_counts.entry(level).or_insert(0) += 1;
+            }
         }
 
-        for (level, count) in layer_counts {
+        for (level, count) in layer_counts.iter().rev() {
             println!("Level: {} - Points: {}", level, count);
         }
+
+        println!("Level: 0 - Points: {}", self.links_layers.len());
     }
 }
 
