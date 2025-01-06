@@ -9,10 +9,7 @@ pub fn process_embeddings(
     file: PathBuf,
     separator: Option<String>,
 ) -> Result<()> {
-    let options = InitOptions {
-        model_name: EmbeddingModel::AllMiniLML6V2,
-        ..Default::default()
-    };
+    let options = InitOptions::new(EmbeddingModel::AllMiniLML6V2);
     let model = TextEmbedding::try_new(options)?;
 
     let content = fs::read_to_string(file).expect("Something went wrong reading the file");
