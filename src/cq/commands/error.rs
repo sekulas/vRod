@@ -10,6 +10,9 @@ pub enum Error {
     #[error("collection '{collection_name}' does not exist.")]
     CollectionDoesNotExist { collection_name: String },
 
+    #[error("rollback failed for command: '{command}'")]
+    RollbackFailed { command: String },
+
     #[error(transparent)]
     Collection(#[from] collection::Error),
 

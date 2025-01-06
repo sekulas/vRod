@@ -38,12 +38,13 @@ impl Command for DropCollectionCommand {
 
         db_config.remove_collection(&self.collection_name)?;
 
-        // TODO: ##### Is that needed? If the collection was created, it will be removed in the execute method.
         let collection_path = path.join(&self.collection_name);
 
         if collection_path.exists() {
             fs::remove_dir_all(&collection_path)?;
         }
+
+        println!("Collection dropped succesfully.");
 
         wal.commit()?;
         Ok(())
@@ -53,11 +54,11 @@ impl Command for DropCollectionCommand {
         CQValidator::target_exists(&self.database);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for DROP command provided. Commiting."); //TODO: Maybe rollback?
-                                                                       //TODO: ### Should this be printed on stderr, and from small letter?
+        println!("No ROLLBACK for DROP command provided.");
 
-        wal.commit()?;
-        Ok(())
+        Err(Error::RollbackFailed {
+            command: self.to_string(),
+        })
     }
 }
 

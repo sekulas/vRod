@@ -1,4 +1,4 @@
-use super::Result;
+use super::{Error, Result};
 
 use crate::{
     components::wal::Wal,
@@ -26,10 +26,11 @@ impl Command for TruncateWalCommand {
     fn rollback(&self, wal: &mut Wal) -> Result<()> {
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for TRUNCATEWAL command provided. Commiting."); //TODO: ### Is the rollback necessary here?
+        println!("No ROLLBACK for TRUNCATEWAL command provided.");
 
-        wal.commit()?;
-        Ok(())
+        Err(Error::RollbackFailed {
+            command: self.to_string(),
+        })
     }
 }
 

@@ -1,6 +1,6 @@
 use std::fs;
 
-use super::Result;
+use super::{Error, Result};
 use crate::{
     components::{collection::Collection, wal::Wal},
     cq::{types::REINDEX_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
@@ -35,8 +35,6 @@ impl Command for ReindexCommand {
     fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
-        //TODO: ### Is this rollback fine? Should it contain Rollback entry in old file?
-        //TODO: ### Is this okay that we are not doing this in collection abstraction as cannot load it?
 
         let path = self.collection.get_target_path();
 
@@ -44,8 +42,10 @@ impl Command for ReindexCommand {
         let bak_idx_path = path.join(format!("{INDEX_FILE}.bak"));
 
         if (!bak_strg_path.exists()) || (!bak_idx_path.exists()) {
-            //TODO: ### Is this okay, readonly in this situation?
-            println!("No backup files found for ROLLBACK REINDEX.");
+            eprintln!("no backup files found for ROLLBACK {}.", REINDEX_C_STR);
+            return Err(Error::RollbackFailed {
+                command: self.to_string(),
+            });
         } else {
             let cur_strg_path = path.join(STORAGE_FILE);
             let cur_idx_path = path.join(INDEX_FILE);

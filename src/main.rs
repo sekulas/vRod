@@ -249,7 +249,7 @@ mod tests {
         NO_RECORD_ID_PROVIDED_ERR_M
     };
     use cq::types::{
-        BULK_INSERT_C_STR, CREATE_C_STR, CREATE_VECTOR_INDEX_C_STR, DELETE_C_STR, DROP_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, UPDATE_C_STR
+        BULK_INSERT_C_STR, CREATE_C_STR, CREATE_VECTOR_INDEX_C_STR, DELETE_C_STR, DROP_C_STR, HANDLE_FAILED_ROLLBACK_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, UPDATE_C_STR
     };
     use hnsw::types::{HNSW_GRAPH_FILE, HNSW_INDEX_CONFIG_FILE, HNSW_LINKS_FILE};
     use predicates::prelude::PredicateBooleanExt;
@@ -799,10 +799,10 @@ mod tests {
         assert!(!db_options.collection_exists(dropped_collection));
 
         rollback_result
-            .success()
+            .failure()
             .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
-        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+        assert!(!is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
     }
@@ -1694,10 +1694,10 @@ mod tests {
 
         //Assert
         rollback_result
-            .success()
+            .failure()
             .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
-        assert!(is_wal_consistent(
+        assert!(!is_wal_consistent(
             &temp_dir,
             db_name,
             Some(collection_name)
@@ -1789,12 +1789,17 @@ mod tests {
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
         let rollback_result = search(&temp_dir, db_name, collection_name, "4")?;
+        let handle_failed_rollback = search(&temp_dir, db_name, collection_name, "4")?;
         let post_rollback_search_result = search(&temp_dir, db_name, collection_name, "4")?;
 
         //Assert
         rollback_result
+            .failure()
+            .stderr(predicates::str::contains("no backup files"));
+
+        handle_failed_rollback
             .success()
-            .stdout(predicates::str::contains("No backup files"));
+            .stdout(predicates::str::contains(HANDLE_FAILED_ROLLBACK_C_STR));
 
         post_rollback_search_result
             .success()

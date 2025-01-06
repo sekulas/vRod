@@ -1,4 +1,4 @@
-use super::Result;
+use super::{Error, Result};
 use crate::{
     components::{
         collection::{types::CollectionDeleteResult, Collection},
@@ -48,10 +48,11 @@ impl Command for DeleteCommand {
         CQValidator::target_exists(&self.collection);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for DELETE command provided. Commiting."); //TODO: Maybe rollback?
+        println!("No ROLLBACK for DELETE command provided."); //TODO: Maybe rollback?
 
-        wal.commit()?;
-        Ok(())
+        Err(Error::RollbackFailed {
+            command: self.to_string(),
+        })
     }
 }
 
