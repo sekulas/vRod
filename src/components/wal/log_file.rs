@@ -129,6 +129,11 @@ impl WalEntry {
         self.hash(&mut hasher);
         hasher.finish()
     }
+
+    fn uncommit(&mut self) {
+        self.commited = false;
+        self.checksum = self.calculate_checksum();
+    }
 }
 
 impl Hash for WalEntry {
@@ -322,15 +327,6 @@ impl Wal {
     }
 }
 
-#[cfg(debug_assertions)]
-impl WalEntry {
-    fn uncommit(&mut self) {
-        self.commited = false;
-        self.checksum = self.calculate_checksum();
-    }
-}
-
-#[cfg(debug_assertions)]
 impl Wal {
     pub fn uncommit(&mut self) -> Result<()> {
         let mut entry = self.get_last_entry()?.expect("No last entry.");

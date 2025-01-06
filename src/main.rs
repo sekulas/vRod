@@ -73,10 +73,10 @@ fn main() {
 fn run() -> Result<()> {
     let args = Args::parse();
 
-    //TODO To remove / for developmnet only
+    //for developmnet
     if let Some(amount) = args.generate_embeddings {
         if let Some(file_path) = args.file_path {
-            process_embeddings(amount, file_path)?;
+            process_embeddings(amount, file_path, args.command_arg)?;
         } else {
             return Err(Error::MissingFilePathArgument { 
                 description: "for embedding generation you need to pass a file from which they will be genereated.".to_owned() 
@@ -85,8 +85,7 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    //TODO To remove / for developmnet only
-    //TODO: ### OR LEAVE THIS AS SUPPORT COMMANDS?
+    //for developmnet
     if let Some(wal_path) = args.wal_path {
         if *"UNCOMMIT" == args.execute.unwrap_or_default() {
             let wal_type = Wal::load(&wal_path)?;
