@@ -4,12 +4,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("[CODE:600] Checksum incorrect for 'Index' header.")]
+    #[error("[CODE:600] checksum incorrect for 'Index' header.")]
     IncorrectHeaderChecksum,
-    #[error("[CODE:601] Cannot deserialize file header for the 'Index'. {description}")]
+    #[error("[CODE:601] cannot deserialize file header for the 'Index'. {description}")]
     CannotDeserializeFileHeader { description: String },
 
-    #[error("Incorrect checksum for B+Tree node under given offset: '{offset}'")]
+    #[error("incorrect checksum for B+Tree node under given offset: '{offset}'")]
     IncorrectChecksum { offset: Offset },
 
     #[error(transparent)]
@@ -18,6 +18,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    #[error("Unexpected error: {0}")]
+    #[error("unexpected error: {0}")]
     Unexpected(&'static str),
 }
