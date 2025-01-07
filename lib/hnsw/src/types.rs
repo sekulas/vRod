@@ -43,7 +43,6 @@ impl PartialOrd for ScoredPointOffset {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
-/// Distance f
 pub enum Distance {
     // <https://en.wikipedia.org/wiki/Cosine_similarity>
     Cosine,
