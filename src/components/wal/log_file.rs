@@ -203,7 +203,7 @@ impl Wal {
 
         let path = path.to_owned();
         let parent_path = path.parent().ok_or(Error::Unexpected {
-            description: "Cannot get wal file parent's path.",
+            description: "cannot get wal file parent's path.",
         })?;
 
         let wal = Self {
@@ -240,7 +240,7 @@ impl Wal {
             }
             Ok(None) => {
                 return Err(Error::Unexpected {
-                    description: "No entries to commit.",
+                    description: "no entries to commit.",
                 })
             }
             Err(e) => return Err(e),
@@ -265,7 +265,7 @@ impl Wal {
             }
             Ok(_) => Ok(WalType::Consistent(self)),
             Err(_) => Err(Error::Unexpected {
-                description: "Cannot get last entry from WAL for specified target.",
+                description: "cannot get last entry from WAL for specified target.",
             }),
         }
     }
@@ -372,7 +372,9 @@ mod tests {
         wal.commit()?;
 
         //Assert
-        let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
+        let entry = wal
+            .get_last_entry()?
+            .ok_or("no last entry found in WAL to commit.")?;
 
         assert!(entry.commited);
 
@@ -431,7 +433,9 @@ mod tests {
         wal.append(data2.clone())?;
 
         //Assert
-        let entry = wal.get_last_entry()?.ok_or("No last entry.")?;
+        let entry = wal
+            .get_last_entry()?
+            .ok_or("no last entry found in WAL to commit.")?;
 
         assert_eq!(entry.data, data2);
         assert_eq!(entry.lsn, 2);

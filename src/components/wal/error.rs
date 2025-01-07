@@ -1,16 +1,16 @@
 use crate::types::Lsn;
-
+use crate::types::WAL_FILE;
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("[CODE:200] checksum incorrect for 'WAL' header.")]
+    #[error("checksum incorrect for '{WAL_FILE}' header.")]
     IncorrectHeaderChecksum,
 
-    #[error("[CODE:201] cannot deserialize file header for the 'WAL'. {description}")]
+    #[error("cannot deserialize file header for the '{WAL_FILE}'. {description}")]
     CannotDeserializeFileHeader { description: String },
 
-    #[error("[CODE:202] incorrect entry checksum for entry with LSN: {entry_lsn}. Entry: {entry}")]
+    #[error("incorrect entry checksum for entry with LSN: {entry_lsn}. Entry: {entry}")]
     IncorrectEntryChecksum { entry_lsn: Lsn, entry: String },
 
     #[error("error while parsing wal entry to command and arg: {0}")]
