@@ -1,13 +1,13 @@
+use crate::types::STORAGE_FILE;
 use crate::{components::wal, types::Dim};
-
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("[CODE:500] checksum incorrect for 'Storage' header.")]
+    #[error("checksum incorrect for '{STORAGE_FILE}' header.")]
     IncorrectHeaderChecksum,
 
-    #[error("[CODE:501] cannot deserialize file header for the 'Storage'. {description}")]
+    #[error("cannot deserialize file header for the '{STORAGE_FILE}'. {description}")]
     CannotDeserializeFileHeader { description: String },
 
     #[error("cannot deserialize record with the given offset: '{offset}'. Source: '{source}")]
@@ -18,7 +18,7 @@ pub enum Error {
     },
 
     #[error(
-        "Provided vector has different dimension. Expected: '{expected}', Actural: '{actual}'.\
+        "provided vector has different dimension. Expected: '{expected}', Actural: '{actual}'.\
     Vector: '{vector:?}'"
     )]
     InvalidVectorDim {
@@ -27,10 +27,10 @@ pub enum Error {
         vector: Vec<Dim>,
     },
 
-    #[error("Incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
+    #[error("incorrect checksum. Expected: '{expected}', Actual: '{actual}'")]
     IncorrectChecksum { expected: u64, actual: u64 },
 
-    #[error("Record not found for rollback. Offset: '{offset}'")]
+    #[error("record not found for rollback. Offset: '{offset}'")]
     RecordNotFoundForRollback { offset: u64 },
 
     #[error(transparent)]

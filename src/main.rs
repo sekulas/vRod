@@ -119,18 +119,12 @@ fn run() -> Result<()> {
     let command_text = args.execute.ok_or(Error::MissingCommand)?;
     let (target, is_readonly) = specify_target(args.database, args.collection)?;
 
-    let result: Result<()> = (|| {
-        let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
-        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?;
+    let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
+    verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?;
 
-        CQExecutor::execute(&target, cq_action)?;
-        Ok(())
-    })();
+    CQExecutor::execute(&target, cq_action)?;
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => handle_db_error(e, &target),
-    }
+    Ok(())
 }
 
 fn specify_target(
@@ -187,56 +181,6 @@ fn verify_if_command_not_run_on_readonly_target(
     }
 
     Ok(())
-}
-
-fn handle_db_error(e: Error, target: &CQTarget) -> Result<()> {
-    let err_str = e.to_string();
-
-    if let Some(error_code) = parse_error_code(&err_str) {
-        set_target_as_readonly_if_needed(error_code, target)?;
-    }
-
-    Err(e)
-}
-
-fn set_target_as_readonly_if_needed(error_code: u16, target: &CQTarget) -> Result<()> {
-    match target {
-        CQTarget::Collection {
-            database_path,
-            collection_name,
-        } => {
-            if [200, 201, 202, 500, 501, 600, 601].contains(&error_code) {
-                let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
-                db_config.set_collection_as_readonly(collection_name)?;
-                eprintln!(
-                    "Collection: '{}' set as readonly due to error.",
-                    collection_name
-                );
-            }
-            Ok(())
-        }
-
-        CQTarget::Database { database_path } => {
-            if [200, 201, 202].contains(&error_code) {
-                let mut db_config = DbConfig::load(&database_path.join(DB_CONFIG))?;
-                db_config.set_db_as_readonly()?;
-                eprintln!("Database set as readonly due to error.");
-            }
-            Ok(())
-        }
-    }
-}
-
-fn parse_error_code(err_str: &str) -> Option<u16> {
-    if let Some(code_part) = err_str.split("[CODE:").nth(1) {
-        if let Some(code_str) = code_part.split(']').next() {
-            if let Ok(code) = code_str.parse::<u16>() {
-                return Some(code);
-            }
-        }
-    }
-
-    None
 }
 
 #[cfg(test)]
