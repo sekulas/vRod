@@ -168,6 +168,7 @@ impl Wal {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(file_path)?;
 
         let mut wal = Self {
@@ -182,11 +183,7 @@ impl Wal {
     }
 
     pub fn load(path: &Path) -> Result<WalType> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
 
         let header = match deserialize_from::<_, WalHeader>(&mut BufReader::new(&file)) {
             Ok(header) => {
@@ -288,10 +285,6 @@ impl Wal {
         entry.validate_entry_checksum()?;
 
         Ok(Some(entry))
-    }
-
-    pub fn get_last_lsn(&self) -> Lsn {
-        self.header.current_max_lsn
     }
 
     pub fn truncate(&self, lsn: Lsn) -> Result<Self> {

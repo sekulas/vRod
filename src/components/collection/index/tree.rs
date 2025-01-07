@@ -16,7 +16,7 @@ use crate::{
 };
 
 use std::{
-    cmp::{Ordering, Reverse},
+    cmp::Ordering,
     collections::HashMap,
     fs::{File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
@@ -363,6 +363,7 @@ impl BPTree {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&file_path)?;
 
         let file_len = serialized_size(&header)?;

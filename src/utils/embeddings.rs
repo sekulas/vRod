@@ -19,7 +19,7 @@ pub fn process_embeddings(
     let words = extract_words(&content, number_of_embeddings, separator);
     let embeddings = generate_embeddings(&model, &words)?;
 
-    print_embeddings_info(&words, &embeddings);
+    print_embeddings_info(&embeddings);
     write_embeddings_to_file(&words, &embeddings)?;
 
     Ok(())
@@ -48,7 +48,7 @@ fn generate_embeddings(model: &TextEmbedding, words: &[&str]) -> Result<Vec<Vec<
         .map_err(Error::Embedding)
 }
 
-fn print_embeddings_info(words: &[&str], embeddings: &[Vec<f32>]) {
+fn print_embeddings_info(embeddings: &[Vec<f32>]) {
     println!("Embeddings length: {}", embeddings.len());
     println!("Embedding dimension: {}", embeddings[0].len());
 }

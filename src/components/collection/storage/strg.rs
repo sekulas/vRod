@@ -242,6 +242,7 @@ impl Storage {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(file_path)?;
 
         let mut storage = Self {
@@ -255,11 +256,7 @@ impl Storage {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
 
         let header = match deserialize_from::<_, StorageHeader>(&mut BufReader::new(&file)) {
             Ok(header) => {
