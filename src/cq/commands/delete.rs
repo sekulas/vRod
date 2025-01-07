@@ -1,10 +1,10 @@
-use super::Result;
+use super::{Error, Result};
 use crate::{
     components::{
         collection::{types::CollectionDeleteResult, Collection},
         wal::Wal,
     },
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{types::DELETE_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     types::RecordId,
 };
 
@@ -23,7 +23,7 @@ impl DeleteCommand {
 }
 
 impl Command for DeleteCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -44,19 +44,20 @@ impl Command for DeleteCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for DELETE command provided. Commiting."); //TODO: Maybe rollback?
+        println!("No ROLLBACK for DELETE command provided."); //TODO: Maybe rollback?
 
-        wal.commit()?;
-        Ok(())
+        Err(Error::RollbackFailed {
+            command: self.to_string(),
+        })
     }
 }
 
 impl CQAction for DeleteCommand {
     fn to_string(&self) -> String {
-        format!("DELETE {}", self.record_id)
+        format!("{} {}", DELETE_C_STR, self.record_id)
     }
 }

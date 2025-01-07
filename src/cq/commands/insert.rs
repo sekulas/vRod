@@ -2,7 +2,7 @@ use super::Result;
 use crate::components::collection::types::CollectionInsertResult;
 use crate::components::wal::Wal;
 use crate::cq::parsing_ops::parse_string_from_vector_option;
-use crate::cq::{CQTarget, CQValidator, Validator};
+use crate::cq::{types::INSERT_C_STR, CQTarget, CQValidator, Validator};
 use crate::types::Dim;
 use crate::{
     components::collection::Collection,
@@ -26,7 +26,7 @@ impl InsertCommand {
 }
 
 impl Command for InsertCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
@@ -35,7 +35,7 @@ impl Command for InsertCommand {
 
         match collection.insert(&self.vector, &self.payload, lsn)? {
             CollectionInsertResult::Inserted => {
-                println!("Embedding inserted successfully");
+                println!("Embedding inserted successfully.");
             }
             CollectionInsertResult::NotInserted { description } => {
                 println!("Embedding not inserted: {}", description);
@@ -46,7 +46,7 @@ impl Command for InsertCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
@@ -63,7 +63,8 @@ impl Command for InsertCommand {
 impl CQAction for InsertCommand {
     fn to_string(&self) -> String {
         format!(
-            "INSERT {};{}",
+            "{} {};{}",
+            INSERT_C_STR,
             parse_string_from_vector_option(Some(&self.vector)),
             self.payload
         )

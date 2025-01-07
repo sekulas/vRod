@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::{
     components::wal::Wal,
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{types::DROP_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -22,7 +22,7 @@ impl DropCollectionCommand {
 }
 
 impl Command for DropCollectionCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
 
         let path = self.database.get_target_path();
@@ -38,31 +38,32 @@ impl Command for DropCollectionCommand {
 
         db_config.remove_collection(&self.collection_name)?;
 
-        // TODO: ##### Is that needed? If the collection was created, it will be removed in the execute method.
         let collection_path = path.join(&self.collection_name);
 
         if collection_path.exists() {
             fs::remove_dir_all(&collection_path)?;
         }
 
+        println!("Collection dropped succesfully.");
+
         wal.commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
-        println!("No ROLLBACK for DROP command provided. Commiting."); //TODO: Maybe rollback?
-                                                                       //TODO: ### Should this be printed on stderr, and from small letter?
+        println!("No ROLLBACK for DROP command provided.");
 
-        wal.commit()?;
-        Ok(())
+        Err(Error::RollbackFailed {
+            command: self.to_string(),
+        })
     }
 }
 
 impl CQAction for DropCollectionCommand {
     fn to_string(&self) -> String {
-        format!("DROP {}", self.collection_name)
+        format!("{} {}", DROP_C_STR, self.collection_name)
     }
 }

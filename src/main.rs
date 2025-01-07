@@ -18,31 +18,44 @@ use utils::embeddings::process_embeddings;
 #[derive(Parser)]
 #[command(arg_required_else_help(true))]
 struct Args {
+    /// Specifies the path where a new database should be initialized. 
+    /// This is useful when creating a new database instance.
     #[arg(short, long, value_name = "PATH")]
     init_database: Option<PathBuf>,
 
+    /// Sets the name for the new database being initialized. This option must be used alongside --init-database.
     #[arg(short = 'n', long, value_name = "NAME")]
     init_database_name: Option<String>,
 
+    /// Indicates the path to an existing database that should be used for operations.
     #[arg(short, long, value_name = "PATH")]
     database: Option<PathBuf>,
 
+    /// Selects a specific collection within the database to operate on.
     #[arg(short, long, value_name = "COLLECTION_NAME")]
     collection: Option<String>,
 
+    /// Executes a specified command on the database.
+    /// For list commands, refer to the user guide or documentation.
     #[arg(short, long, value_name = "COMMAND")]
     execute: Option<String>,
 
+    /// Provides an argument for the command specified by the --execute option.
     #[arg(short = 'a', long, value_name = "COMMAND_ARG")]
     command_arg: Option<String>,
 
+    /// Specifies the path to a file, which can be used for various operations, such as importing or exporting data.
     #[arg(short = 'f', long, value_name = "PATH")]
     file_path: Option<PathBuf>,
 
-    //TODO To remove / for developmnet only
+    /// (Primarily for testing purposes) 
+    /// Generates a specified number of embeddings based on the specified file in --file-path option.
+    /// Results are written to the embeddings.txt file.
     #[arg(short, long, value_name = "AMOUNT")]
     generate_embeddings: Option<usize>,
 
+    /// (Primarily for testing purposes) Converts the specified WAL file to a human-readable text format.
+    /// If the --execute option is set to "UNCOMMIT", the WAL file is uncommitted.
     #[arg(short, long, value_name = "PATH")]
     wal_path: Option<PathBuf>,
 }
@@ -60,14 +73,19 @@ fn main() {
 fn run() -> Result<()> {
     let args = Args::parse();
 
-    //TODO To remove / for developmnet only
+    //for developmnet
     if let Some(amount) = args.generate_embeddings {
-        process_embeddings(amount)?;
+        if let Some(file_path) = args.file_path {
+            process_embeddings(amount, file_path, args.command_arg)?;
+        } else {
+            return Err(Error::MissingFilePathArgument { 
+                description: "for embedding generation you need to pass a file from which they will be genereated.".to_owned() 
+            });
+        }
         return Ok(());
     }
 
-    //TODO To remove / for developmnet only
-    //TODO: ### OR LEAVE THIS AS SUPPORT COMMANDS?
+    //for developmnet
     if let Some(wal_path) = args.wal_path {
         if *"UNCOMMIT" == args.execute.unwrap_or_default() {
             let wal_type = Wal::load(&wal_path)?;
@@ -82,7 +100,7 @@ fn run() -> Result<()> {
         } else {
             wal_to_txt(&wal_path).unwrap_or_else(|error| {
                 eprintln!(
-                    "Error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
+                    "error occurred while converting WAL to text.\nWAL Path: {:?}\n{:?}",
                     wal_path, error
                 );
             });
@@ -103,8 +121,8 @@ fn run() -> Result<()> {
 
     let result: Result<()> = (|| {
         let cq_action = CQBuilder::build(&target, command_text, args.command_arg, args.file_path)?;
-        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?; //TODO: ### Is that needed - deserialize header error during build
-                                                                                //TODO:: #### Maybe no need for readonly if cannot parse coll header?
+        verify_if_command_not_run_on_readonly_target(&cq_action, is_readonly)?;
+
         CQExecutor::execute(&target, cq_action)?;
         Ok(())
     })();
@@ -124,6 +142,10 @@ fn specify_target(
 
     let (target_path, is_readonly) = match collection_name {
         Some(collection_name) => {
+            if !db_config.collection_exists(&collection_name) {
+                return Err(Error::CollectionDoesNotExist(collection_name));
+            }
+
             let is_readonly = db_config.is_collection_readonly(&collection_name);
             (
                 CQTarget::Collection {
@@ -154,7 +176,6 @@ fn get_database_path(path: Option<PathBuf>) -> Result<PathBuf> {
     }
 }
 
-//TODO: TO CHECK
 fn verify_if_command_not_run_on_readonly_target(
     cq_action: &CQType,
     is_readonly: bool,
@@ -223,11 +244,16 @@ mod tests {
     use super::*;
     use assert_cmd::{assert::Assert, Command};
     use cq::parsing_ops::{
-        parse_vec_n_payload, EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M,
-        NO_RECORD_ID_PROVIDED_ERR_M,
+        CANNOT_PARSE_FLOAT_ERR_M, 
+        EXPECTED_2_ARG_FORMAT_ERR_M, EXPECTED_3_ARG_FORMAT_ERR_M, 
+        NO_RECORD_ID_PROVIDED_ERR_M
     };
+    use cq::types::{
+        BULK_INSERT_C_STR, CREATE_C_STR, CREATE_VECTOR_INDEX_C_STR, DELETE_C_STR, DROP_C_STR, HANDLE_FAILED_ROLLBACK_C_STR, INSERT_C_STR, LIST_COLLECTIONS_Q_STR, REINDEX_C_STR, SEARCH_ALL_Q_STR, SEARCH_Q_STR, TRUNCATE_WAL_C_STR, UPDATE_C_STR
+    };
+    use hnsw::types::{HNSW_GRAPH_FILE, HNSW_INDEX_CONFIG_FILE, HNSW_LINKS_FILE};
     use predicates::prelude::PredicateBooleanExt;
-    use types::{INDEX_FILE, STORAGE_FILE, WAL_FILE};
+    use types::{HNSW_DIR_NAME, INDEX_FILE, STORAGE_FILE, WAL_FILE};
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
     const BINARY: &str = "vrod";
 
@@ -286,7 +312,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("CREATE")
+            .arg(CREATE_C_STR)
             .arg("--command-arg")
             .arg(collection_name)
             .arg("--database")
@@ -303,7 +329,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("DROP")
+            .arg(DROP_C_STR)
             .arg("--command-arg")
             .arg(collection_name)
             .arg("--database")
@@ -316,7 +342,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("LISTCOLLECTIONS")
+            .arg(LIST_COLLECTIONS_Q_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .assert();
@@ -332,7 +358,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("INSERT")
+            .arg(INSERT_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -352,7 +378,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("BULKINSERT")
+            .arg(BULK_INSERT_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -372,7 +398,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("BULKINSERT")
+            .arg(BULK_INSERT_C_STR)
             .arg("--file-path")
             .arg(file_path)
             .arg("--database")
@@ -392,7 +418,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("SEARCH")
+            .arg(SEARCH_Q_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -411,7 +437,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("SEARCHALL")
+            .arg(SEARCH_ALL_Q_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")
@@ -429,7 +455,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("UPDATE")
+            .arg(UPDATE_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -449,7 +475,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("DELETE")
+            .arg(DELETE_C_STR)
             .arg("--command-arg")
             .arg(data)
             .arg("--database")
@@ -468,7 +494,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("REINDEX")
+            .arg(REINDEX_C_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name))
             .arg("--collection")
@@ -485,7 +511,7 @@ mod tests {
         let mut cmd = Command::cargo_bin(BINARY)?;
         let result = cmd
             .arg("--execute")
-            .arg("TRUNCATEWAL")
+            .arg(TRUNCATE_WAL_C_STR)
             .arg("--database")
             .arg(temp_dir.path().join(db_name));
 
@@ -494,6 +520,26 @@ mod tests {
         }
 
         Ok(result.assert())
+    }
+
+    fn create_vector_index(
+        temp_dir: &tempfile::TempDir,
+        db_name: &str,
+        collection_name: &str,
+        distance: &str,
+    ) -> Result<Assert> {
+        let mut cmd = Command::cargo_bin(BINARY)?;
+        let result = cmd
+            .arg("--execute")
+            .arg(CREATE_VECTOR_INDEX_C_STR)
+            .arg("--command-arg")
+            .arg(distance)
+            .arg("--database")
+            .arg(temp_dir.path().join(db_name))
+            .arg("--collection")
+            .arg(collection_name)
+            .assert();
+        Ok(result)
     }
 
     #[test]
@@ -634,7 +680,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
-        let collection_to_exist = "test_col";
+        let potential_another_col = "test_col";
         let rolledback_collection = "rol_col";
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, rolledback_collection)?;
@@ -643,13 +689,12 @@ mod tests {
         uncommit_wal(&temp_dir, db_name, None)?;
         assert!(!is_wal_consistent(&temp_dir, db_name, None)?);
 
-        create_collection(&temp_dir, db_name, collection_to_exist)?;
+        create_collection(&temp_dir, db_name, potential_another_col)?;
 
         //Assert
         let db_path = temp_dir.path().join(db_name);
         let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
 
-        assert!(db_options.collection_exists(collection_to_exist));
         assert!(!db_options.collection_exists(rolledback_collection));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
@@ -737,7 +782,7 @@ mod tests {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
-        let collection_to_exist = "test_col";
+        let potential_another_collection = "test_col";
         let dropped_collection = "dropped_col";
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, dropped_collection)?;
@@ -745,20 +790,19 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, None)?;
-        let post_rollback_result = create_collection(&temp_dir, db_name, collection_to_exist)?;
+        let rollback_result = create_collection(&temp_dir, db_name, potential_another_collection)?;
 
         //Assert
         let db_path = temp_dir.path().join(db_name);
         let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
 
-        assert!(db_options.collection_exists(collection_to_exist));
         assert!(!db_options.collection_exists(dropped_collection));
 
-        post_rollback_result
-            .success()
+        rollback_result
+            .failure()
             .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
-        assert!(is_wal_consistent(&temp_dir, db_name, None)?);
+        assert!(!is_wal_consistent(&temp_dir, db_name, None)?);
 
         Ok(())
     }
@@ -906,13 +950,76 @@ mod tests {
     }
 
     #[test]
+    fn handle_failed_rollback_should_mark_database_as_readonly() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, None)?;
+        let rollback_result = create_collection(&temp_dir, db_name, collection_name)?;
+        uncommit_wal(&temp_dir, db_name, None)?;
+        let handle_failed_rollback_result = create_collection(&temp_dir, db_name, collection_name)?;
+
+        //Assert
+        rollback_result.success();
+
+        handle_failed_rollback_result.success()
+            .stdout(predicates::str::contains("Target marked as readonly."));
+
+        let db_path = temp_dir.path().join(db_name);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
+
+        assert!(db_options.db_readonly);
+
+        Ok(())
+    }
+
+    #[test]
+    fn handle_failed_rollback_should_mark_collection_as_readonly() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let insert_data = "1.0,2.0,3.0;test_payload";
+        
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        insert(&temp_dir, db_name, collection_name, insert_data)?;
+
+        //Act
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let rollback_result = insert(&temp_dir, db_name, collection_name, insert_data)?;
+        uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
+        let handle_failed_rollback_result = insert(&temp_dir, db_name, collection_name, insert_data)?;
+
+        //Assert
+        rollback_result.success();
+
+        handle_failed_rollback_result.success()
+            .stdout(predicates::str::contains("Target marked as readonly."));
+
+        let db_path = temp_dir.path().join(db_name);
+        let db_options = DbConfig::load(&db_path.join(DB_CONFIG))?;
+
+        assert!(db_options.is_collection_readonly(collection_name));
+
+        Ok(())
+    }
+
+    #[test]
     fn rollback_insert_should_leave_col_in_state_like_vec_never_existed() -> Result<()> {
         //Arrange
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
         let rolled_back_data = "1.0,2.0,3.0;test_payload";
-        let new_entry = "4.0,5.0,6.0;test_payload_2";
+        let potential_new_entry = "4.0,5.0,6.0;test_payload_2";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -920,7 +1027,7 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = insert(&temp_dir, db_name, collection_name, new_entry)?;
+        let post_rollback_result = insert(&temp_dir, db_name, collection_name, potential_new_entry)?;
 
         //Assert
         post_rollback_result.success();
@@ -928,8 +1035,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
-            .stdout(predicates::str::contains("test_payload_2"));
+            .stdout(predicates::str::contains("not found"));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -949,7 +1055,7 @@ mod tests {
         let file_path = "test_data.txt";
         let inserted_data = "1.0,2.0,3.0;test_payload";
         let inserted_data_2 = "4.0,5.0,6.0;test_payload_2";
-        let file_content = format!("{}\n{}\n", inserted_data, inserted_data_2);
+        let file_content = format!("3\n{}\n{}\n", inserted_data, inserted_data_2);
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -972,13 +1078,13 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("test_payload"));
 
         let result = search(&temp_dir, db_name, collection_name, "2")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload_2"));
 
         Ok(())
@@ -1012,13 +1118,13 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("test_payload"));
 
         let result = search(&temp_dir, db_name, collection_name, "2")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload_2"));
 
         Ok(())
@@ -1030,7 +1136,7 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let incorrect_data = "1.0,2.0,3.0;test_payload;extra_data";
+        let incorrect_data = "1.0,2.0,3.0;test_payload extra_data";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1061,17 +1167,19 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
+        let rollback_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
+        let post_rollback_bulk_insert_result = bulk_insert_arg(&temp_dir, db_name, collection_name, new_entry)?;
 
         //Assert
-        post_rollback_result.success();
+        rollback_result.success();
+        post_rollback_bulk_insert_result.success();
 
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("test_payload"))
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0").not())
+            .stdout(predicates::str::contains("1,2,3").not())
             .stdout(predicates::str::contains("should_not_appear").not());
 
         assert!(is_wal_consistent(
@@ -1090,7 +1198,6 @@ mod tests {
         let db_name = "test_db";
         let collection_name = "test_col";
         let inserted_data = "1.0,2.0,3.0;test_payload";
-        let (expected_vector, expected_payload) = parse_vec_n_payload(inserted_data)?;
         let expected_record_id = "1";
 
         init_database(&temp_dir, db_name)?;
@@ -1103,8 +1210,8 @@ mod tests {
         //Assert
         let result = result.success();
         result
-            .stdout(predicates::str::contains(format!("{:?}", expected_vector)))
-            .stdout(predicates::str::contains(expected_payload));
+            .stdout(predicates::str::contains("1,2,3"))
+            .stdout(predicates::str::contains("test_payload"));
 
         assert!(is_wal_consistent(
             &temp_dir,
@@ -1204,9 +1311,9 @@ mod tests {
         //Assert
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload2"));
         Ok(())
     }
@@ -1233,7 +1340,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("updated_payload"));
 
         assert!(is_wal_consistent(
@@ -1295,7 +1402,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("updated_payload"));
 
         assert!(is_wal_consistent(
@@ -1329,7 +1436,7 @@ mod tests {
         let result = search(&temp_dir, db_name, collection_name, "1")?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(
@@ -1438,7 +1545,7 @@ mod tests {
         //Assert
         result
             .failure()
-            .stderr(predicates::str::contains("ParseFloatError"));
+            .stderr(predicates::str::contains(CANNOT_PARSE_FLOAT_ERR_M));
 
         Ok(())
     }
@@ -1449,8 +1556,8 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let inserted_data = "1.0,2.0,3.0;payload";
-        let update_arg = "1;4.0,5.0;updated_payload";
+        let inserted_data = "1,2,3;payload";
+        let update_arg = "1;4,5;updated_payload";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
@@ -1473,28 +1580,30 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let db_name = "test_db";
         let collection_name = "test_col";
-        let data_to_exist = "1.0,2.0,3.0;payload";
-        let data_to_change = "1;4.0,5.0,6.0;updated_payload";
+        let data_to_exist = "1,2,3;payload";
+        let data_to_change = "1;4,5,6;updated_payload";
 
         init_database(&temp_dir, db_name)?;
         create_collection(&temp_dir, db_name, collection_name)?;
         insert(&temp_dir, db_name, collection_name, data_to_exist)?;
         update(&temp_dir, db_name, collection_name, data_to_change)?;
-        let post_update_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let update_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let post_rollback_update_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Assert
-        let post_update_result = post_update_result.success();
-        post_update_result
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+        rollback_result
+            .success();
+
+        update_result
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("updated_payload"));
 
-        let post_rollback_result = post_rollback_result.success();
-        post_rollback_result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+        post_rollback_update_result
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(
@@ -1581,15 +1690,14 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
+        let rollback_result = search(&temp_dir, db_name, collection_name, "1")?;
 
         //Assert
-        post_rollback_result
-            .success()
-            .stdout(predicates::str::contains("No ROLLBACK".to_string()))
-            .stdout(predicates::str::contains("not found"));
+        rollback_result
+            .failure()
+            .stdout(predicates::str::contains("No ROLLBACK".to_string()));
 
-        assert!(is_wal_consistent(
+        assert!(!is_wal_consistent(
             &temp_dir,
             db_name,
             Some(collection_name)
@@ -1621,9 +1729,9 @@ mod tests {
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0"))
+            .stdout(predicates::str::contains("4,5,6"))
             .stdout(predicates::str::contains("payload2"));
 
         assert!(is_wal_consistent(
@@ -1657,9 +1765,9 @@ mod tests {
         let result = search_all(&temp_dir, db_name, collection_name)?;
         let result = result.success();
         result
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"))
-            .stdout(predicates::str::contains("4.0, 5.0, 6.0").not())
+            .stdout(predicates::str::contains("4,5,6").not())
             .stdout(predicates::str::contains("payload2").not());
 
         Ok(())
@@ -1680,13 +1788,22 @@ mod tests {
 
         //Act
         uncommit_wal(&temp_dir, db_name, Some(collection_name))?;
-        let post_rollback_result = search(&temp_dir, db_name, collection_name, "4")?; //TODO: ### Reindex new ID is being put - okay?
-                                                                                      //TODO: ### Is it okay that it does not ID consistency? 1->4, 2->3?
-                                                                                      //Assert
-        post_rollback_result
+        let rollback_result = search(&temp_dir, db_name, collection_name, "4")?;
+        let handle_failed_rollback = search(&temp_dir, db_name, collection_name, "4")?;
+        let post_rollback_search_result = search(&temp_dir, db_name, collection_name, "4")?;
+
+        //Assert
+        rollback_result
+            .failure()
+            .stderr(predicates::str::contains("no backup files"));
+
+        handle_failed_rollback
             .success()
-            .stdout(predicates::str::contains("No backup files"))
-            .stdout(predicates::str::contains("1.0, 2.0, 3.0"))
+            .stdout(predicates::str::contains(HANDLE_FAILED_ROLLBACK_C_STR));
+
+        post_rollback_search_result
+            .success()
+            .stdout(predicates::str::contains("1,2,3"))
             .stdout(predicates::str::contains("payload"));
 
         assert!(is_wal_consistent(&temp_dir, db_name, None)?);
@@ -1743,6 +1860,34 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn create_vector_index_should_create_associated_files() -> Result<()> {
+        //Arrange
+        let temp_dir = tempfile::tempdir()?;
+        let db_name = "test_db";
+        let collection_name = "test_col";
+        let distance = "EUCLID";
+
+        init_database(&temp_dir, db_name)?;
+        create_collection(&temp_dir, db_name, collection_name)?;
+        
+        //Act
+        let result = create_vector_index(&temp_dir, db_name, collection_name, distance)?;
+
+        //Assert
+        result.success();
+
+        let collection_path = temp_dir.path().join(db_name).join(collection_name);
+        let index_path = collection_path.join(format!("{HNSW_DIR_NAME}_euclid"));
+
+        assert!(index_path.exists());
+        assert!(index_path.join(HNSW_INDEX_CONFIG_FILE).exists());
+        assert!(index_path.join(HNSW_GRAPH_FILE).exists());
+        assert!(index_path.join(HNSW_LINKS_FILE).exists());
+
+        Ok(())
+    }
+
     //Load tests
 
     #[cfg(feature = "load_tests")]
@@ -1752,6 +1897,7 @@ mod tests {
         dimensions: usize,
     ) -> Result<PathBuf> {
         let mut file_content = String::new();
+        file_content.push_str(&format!("{}\n", dimensions));
         for i in 0..records_count {
             let data = format!(
                 "{};test_payload\n",

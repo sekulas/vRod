@@ -1,7 +1,7 @@
 use super::Result;
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{types::BULK_INSERT_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     types::Dim,
 };
 
@@ -20,28 +20,37 @@ impl BulkInsertCommand {
 }
 
 impl Command for BulkInsertCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
         let lsn = wal.append(self.to_string())?;
 
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;
 
+        println!("Collecting vectors and payloads...");
         let vectors_and_payloads_ref: Vec<(&[Dim], &str)> = self
             .vectors_and_payloads
             .iter()
             .map(|(vec, string)| (vec.as_slice(), string.as_str()))
             .collect();
+        println!("Vectors and payloads collected.");
 
+        println!("Inserting vectors and payloads...");
+
+        let time = std::time::Instant::now();
         collection.bulk_insert(&vectors_and_payloads_ref, lsn)?;
+        println!(
+            "Vectors and payloads inserted in {}s.",
+            time.elapsed().as_secs_f32()
+        );
 
         wal.commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.collection);
-        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?; //TODO: ### Not having inserted records in WAL? For rollback no need i see.
+        let lsn = wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
         let path = self.collection.get_target_path();
         let mut collection = Collection::load(&path)?;
@@ -55,23 +64,6 @@ impl Command for BulkInsertCommand {
 
 impl CQAction for BulkInsertCommand {
     fn to_string(&self) -> String {
-        format!(
-            "BULKINSERT {}",
-            self.vectors_and_payloads
-                .iter()
-                .map(|(vector, payload)| {
-                    format!(
-                        "{};{}",
-                        vector
-                            .iter()
-                            .map(|dim| dim.to_string())
-                            .collect::<Vec<String>>()
-                            .join(","),
-                        payload
-                    )
-                })
-                .collect::<Vec<String>>()
-                .join(" ")
-        )
+        BULK_INSERT_C_STR.to_string()
     }
 }

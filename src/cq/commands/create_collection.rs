@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::{
     components::{collection::Collection, wal::Wal},
-    cq::{CQAction, CQTarget, CQValidator, Command, Validator},
+    cq::{types::CREATE_C_STR, CQAction, CQTarget, CQValidator, Command, Validator},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -22,7 +22,7 @@ impl CreateCollectionCommand {
 }
 
 impl Command for CreateCollectionCommand {
-    fn execute(&mut self, wal: &mut Wal) -> Result<()> {
+    fn execute(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
 
         let path = self.database.get_target_path();
@@ -49,7 +49,7 @@ impl Command for CreateCollectionCommand {
         Ok(())
     }
 
-    fn rollback(&mut self, wal: &mut Wal) -> Result<()> {
+    fn rollback(&self, wal: &mut Wal) -> Result<()> {
         CQValidator::target_exists(&self.database);
         wal.append(format!("ROLLBACK {}", self.to_string()))?;
 
@@ -60,7 +60,6 @@ impl Command for CreateCollectionCommand {
             db_config.remove_collection(&self.collection_name)?;
         }
 
-        // TODO: ##### Is that needed? If the collection was created, it will be removed in the execute method.
         let collection_path = &path.join(&self.collection_name);
 
         if collection_path.exists() {
@@ -74,6 +73,6 @@ impl Command for CreateCollectionCommand {
 
 impl CQAction for CreateCollectionCommand {
     fn to_string(&self) -> String {
-        format!("CREATE {}", self.collection_name)
+        format!("{} {}", CREATE_C_STR, self.collection_name)
     }
 }

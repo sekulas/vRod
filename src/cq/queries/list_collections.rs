@@ -1,7 +1,7 @@
 use super::Result;
 
 use crate::{
-    cq::{CQAction, CQTarget, CQValidator, Query, Validator},
+    cq::{types::LIST_COLLECTIONS_Q_STR, CQAction, CQTarget, CQValidator, Query, Validator},
     database::DbConfig,
     types::DB_CONFIG,
 };
@@ -17,7 +17,7 @@ impl ListCollectionsQuery {
 }
 
 impl Query for ListCollectionsQuery {
-    fn execute(&mut self) -> Result<()> {
+    fn execute(&self) -> Result<()> {
         CQValidator::target_exists(&self.database);
         let path = self.database.get_target_path();
 
@@ -45,6 +45,6 @@ impl Query for ListCollectionsQuery {
 
 impl CQAction for ListCollectionsQuery {
     fn to_string(&self) -> String {
-        "LISTCOLLECTIONS".to_string()
+        LIST_COLLECTIONS_Q_STR.to_string()
     }
 }

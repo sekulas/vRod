@@ -654,7 +654,7 @@ mod tests {
         col.update(1, Some(&new_vector), Some(new_payload), 2)?;
 
         //Act
-        col.rollback_update_command(3)?; //TODO: Delete rollbacking needed? In this form.
+        col.rollback_update_command(3)?;
 
         //Assert
         let expected_record = Record::new(1, &vector, payload);

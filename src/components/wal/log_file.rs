@@ -129,6 +129,11 @@ impl WalEntry {
         self.hash(&mut hasher);
         hasher.finish()
     }
+
+    fn uncommit(&mut self) {
+        self.commited = false;
+        self.checksum = self.calculate_checksum();
+    }
 }
 
 impl Hash for WalEntry {
@@ -163,6 +168,7 @@ impl Wal {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(file_path)?;
 
         let mut wal = Self {
@@ -177,11 +183,7 @@ impl Wal {
     }
 
     pub fn load(path: &Path) -> Result<WalType> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
 
         let header = match deserialize_from::<_, WalHeader>(&mut BufReader::new(&file)) {
             Ok(header) => {
@@ -318,15 +320,6 @@ impl Wal {
     }
 }
 
-#[cfg(debug_assertions)]
-impl WalEntry {
-    fn uncommit(&mut self) {
-        self.commited = false;
-        self.checksum = self.calculate_checksum();
-    }
-}
-
-#[cfg(debug_assertions)]
 impl Wal {
     pub fn uncommit(&mut self) -> Result<()> {
         let mut entry = self.get_last_entry()?.expect("No last entry.");

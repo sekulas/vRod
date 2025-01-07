@@ -9,5 +9,6 @@ mod error;
 mod executor;
 pub mod parsing_ops;
 mod queries;
-mod types;
+pub mod types;
+pub mod utils;
 mod validator;

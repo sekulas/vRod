@@ -17,7 +17,6 @@ impl Executor for CQExecutor {
         let target_path = target.get_target_path();
         let wal_type = Wal::load(&target_path.join(WAL_FILE))?;
 
-        //TODO: ### How to proceed with the rollback? Perform it and make the user run the command once more?
         match wal_type {
             WalType::Consistent(wal) => {
                 CQExecutor::execute_cq(cq, wal)?;
@@ -29,7 +28,6 @@ impl Executor for CQExecutor {
                 arg,
             } => {
                 CQExecutor::rollback_last_cq(target, &mut wal, uncommited_command, arg, None)?;
-                CQExecutor::execute_cq(cq, wal)?;
                 Ok(())
             }
         }
@@ -39,11 +37,11 @@ impl Executor for CQExecutor {
 impl CQExecutor {
     fn execute_cq(cq: CQType, mut wal: Wal) -> Result<()> {
         match cq {
-            CQType::Command(mut command) => {
+            CQType::Command(command) => {
                 println!("Executing command: {:?}", command.to_string());
                 command.execute(&mut wal)?
             }
-            CQType::Query(mut query) => {
+            CQType::Query(query) => {
                 println!("Executing query: {:?}", query.to_string());
                 query.execute()?
             }
@@ -58,15 +56,14 @@ impl CQExecutor {
         arg: Option<String>,
         file_path: Option<PathBuf>,
     ) -> Result<()> {
-        if let CQType::Command(mut last_command) =
-            CQBuilder::build(target, command, arg, file_path)?
-        {
+        if let CQType::Command(last_command) = CQBuilder::build(target, command, arg, file_path)? {
             let stringified_last_command = last_command.to_string();
             println!("Rollbacking last command: {:?}", stringified_last_command);
 
             last_command.rollback(wal)?;
 
-            println!("Rollback completed.");
+            println!("Rollback completed - No changes from last command were made.");
+            println!("Please re-run the last command to try again or proceed with a new command.");
         }
         Ok(())
     }

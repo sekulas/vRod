@@ -8,6 +8,8 @@ pub(super) use drop_collection::*;
 
 mod truncate_wal;
 pub(super) use truncate_wal::*;
+mod handle_failed_rollback;
+pub(super) use handle_failed_rollback::*;
 
 mod insert;
 pub(super) use insert::*;
@@ -19,3 +21,5 @@ mod delete;
 pub(super) use delete::*;
 mod reindex;
 pub(super) use reindex::*;
+mod create_vector_index;
+pub(super) use create_vector_index::*;
