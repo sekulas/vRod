@@ -39,14 +39,17 @@ The system’s architecture follows the ”**Command**” and ”Command and Que
 ### HNSW - Vector Index
 
 <img src="https://github.com/user-attachments/assets/6d34cf89-f06c-46b0-9098-907cb06cbd05" width="40%">
-Visualization of selecting the next neighbor using the heuristic method.
-*Image source: Image source: Malkov, Y. A., and Yashunin, D. A.,
-"Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs,"
-IEEE Transactions on Pattern Analysis and Machine Intelligence,
-vol. 42, no. 4, pp. 824–836, Apr. 2020, ISSN: 0162-8828, 2160-9292, 1939-3539. doi: 10.1109/TPAMI.2018.2889473.
-Accessed Nov. 17, 2024. Available at: https://ieeexplore.ieee.org/document/8594636/. 
+
+Visualization of selecting the next neighbor using the heuristic method[^1].
 
 <img src="https://github.com/user-attachments/assets/5a4eb8b6-efe4-4e1b-bb88-41b5ad932cb1" width="40%">
 <img src="https://github.com/user-attachments/assets/48bb128e-63b9-4137-af0e-74a360741656" width="60%">
 <img src="https://github.com/user-attachments/assets/907a84b9-1554-4ec5-8810-53ef87b06090" width="40%">
-*Image source: https://www.pinecone.io/learn/series/faiss/hnsw (Accessed Dec. 14, 2024).*
+
+Visualization of the operation of searching for similar points in HNSW[^2].
+
+# Bibliography
+
+[^1]: Malkov, Y. A., and Yashunin, D. A.,"Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs," IEEE Transactions on Pattern Analysis and Machine Intelligence, vol. 42, no. 4, pp. 824–836, Apr. 2020, ISSN: 0162-8828, 2160-9292, 1939-3539. doi: 10.1109 TPAMI.2018.2889473. Accessed Nov. 17, 2024. Available at: https://ieeexplore.ieee.org/document/8594636/.
+
+[^2]: https://www.pinecone.io/learn/series/faiss/hnsw (Accessed Dec. 14, 2024).
