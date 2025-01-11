@@ -1,5 +1,5 @@
 # vRod: A Vector Database
-> This database was developed as part of my engineering thesis - Project & Implementation of Vector Database.
+> This database was developed as part of my engineering thesis - Design and Implementation of a Vector Database.
 
 The implementation was created using the **Rust** programming language and required implementing
 essential database system functionalities such as data storage, **B+tree** based indexing, query processing,
