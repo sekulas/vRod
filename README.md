@@ -1,3 +1,21 @@
+# Table of Contents
+
+1. [vRod: A Vector Database](#vrod-a-vector-database)
+2. [Use Cases](#use-cases)
+3. [Architecture](#architecture)
+   - [Main Components](#main-components)
+   - [Command & CQRS Design Patterns](#command--cqrs-design-patterns)
+   - [File System](#file-system)
+   - [Storage](#storage)
+   - [WAL - Transaction Management](#wal---transaction-management)
+   - [B+tree - Index](#btree---index)
+   - [HNSW - Vector Index](#hnsw---vector-index)
+4. [Examples](#examples)
+   - [1. Solution Architect for a Vector Database PoC](#1-solution-architect-for-a-vector-database-poc)
+   - [2. Large Language Model Developer Customizing Search Results](#2-large-language-model-developer-customizing-search-results)
+5. [Help and Documentation](#help-and-documentation)
+6. [Bibliography](#bibliography)
+
 # vRod: A Vector Database
 > This database was developed as part of my engineering thesis - Design and Implementation of a Vector Database.
 
@@ -15,6 +33,8 @@ The system’s architecture follows the ”**Command**” and ”Command and Que
 *Visualization showcasing the use cases of the vRod vector database.*
 
 # Architecture
+
+### Main Components
 
 <img src="https://github.com/user-attachments/assets/8bc3afb6-d72a-4990-839a-3584ff1eafe2" width="40%">
 
