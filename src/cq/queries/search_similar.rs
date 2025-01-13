@@ -82,6 +82,7 @@ impl Query for SearchSimilarQuery {
                     );
                 }
             }
+            println!();
         }
 
         Ok(())
