@@ -15,5 +15,7 @@ Cargo.lock
 
 ##Project files
 alice*
+embeddings.txt
 .fastembed_cache/
-.testdb/
+testdb/
+.vscode/

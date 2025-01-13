@@ -1,0 +1,51 @@
+use crate::components::wal;
+
+use super::commands::Error as CommandError;
+use super::queries::Error as QueryError;
+
+pub type Result<T> = core::result::Result<T, Error>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("unrecognized command or query '{0}'.")]
+    UnrecognizedCommandOrQuery(String),
+
+    #[error("no name for the collection has been provided.")]
+    MissingCollectionName,
+
+    #[error("missing argument for the given command. {description}")]
+    MissingArgument { description: String },
+
+    #[error("invalid data format: {description}")]
+    InvalidDataFormat { description: String },
+
+    #[error("no data in the source.")]
+    NoDataInSource,
+
+    #[error(transparent)]
+    ParseFloat(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    Command(#[from] CommandError),
+
+    #[error(transparent)]
+    Query(#[from] QueryError),
+
+    #[error(transparent)]
+    ParseInt(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
+
+    #[error(transparent)]
+    Regex(#[from] regex::Error),
+
+    #[error(transparent)]
+    Wal(#[from] wal::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Hnsw(#[from] hnsw::Error),
+}
