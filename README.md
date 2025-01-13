@@ -93,7 +93,7 @@ Executing command: "CREATE sift_1m_col"
 Collection created at: "sift_db/sift_1m_col"
 ```
 
-Data Insertion: Using the ANN_SIFT1M dataset (1 million 128-dimensional vectors).
+Data Insertion: Using the ANN_SIFT1M dataset[^3] (1 million 128-dimensional vectors).
 
 ```zsh
 vrod -e "BULK_INSERT" -f sift_dataset/sift1m_input.txt -d sift_db -c sift_1m_col
@@ -161,7 +161,7 @@ Executing command: "CREATE top_uni"
 Collection created at: "db/top_uni"
 ```
 
-Data Vectorization and Insertion: Using all-MiniLM-L6-v2 for embeddings.
+Data Vectorization and Insertion: Using all-MiniLM-L6-v2[^4] for embeddings.
 
 ```zsh
 vrod -g 20 -a $'\n' -f to_be_embedded.txt 
