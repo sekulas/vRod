@@ -1,3 +1,9 @@
+// Inspired by Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+// Modifications made by sekulas, 2024:
+// - made code cleaner.
+
 use std::{
     cmp::max,
     path::{Path, PathBuf},

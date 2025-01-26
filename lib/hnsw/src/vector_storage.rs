@@ -1,3 +1,10 @@
+// Inspired by Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+// Modifications made by sekulas, 2024:
+// - used existing trait methods for in memory vector_storage,
+// - made VectorStorageImpl.
+
 use core::fmt;
 use std::borrow::Cow;
 
