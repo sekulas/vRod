@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - used existing trait methods for in memory vector_storage,
-// - made VectorStorageImpl.
+// - simplified trait implementation, 
+// - created a VectorStorageImpl.  
 
 use core::fmt;
 use std::borrow::Cow;

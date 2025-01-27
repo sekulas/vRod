@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - extracted core scoring with metric functionality. 
+// - extracted core scoring and metric functionality.  
 
 use std::{borrow::Cow, marker::PhantomData};
 

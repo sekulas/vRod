@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - using files instead of using mmap.
+// - replaced memory-mapped files (mmap) with standard file operations.
 
 use std::fs::File;
 use std::io::{Read, Write};

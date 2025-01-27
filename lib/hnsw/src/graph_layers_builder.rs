@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - made code cleaner,
-// - supporting only heuristic connection creation.
+// - refactored code structure for improved clarity,
+// - added support for heuristic-based connection creation only.  
 
 use super::Result;
 use bitvec::vec::BitVec;

@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - simplified structs.
+// - simplified structs to meet project requirements. 
 
 use super::Result;
 use std::path::{Path, PathBuf};

@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - simplified trait,
-// - made IdTrackerImpl.
+// - simplified trait implementation,
+// - created a custom IdTrackerImpl.  
 
 use std::fmt;
 

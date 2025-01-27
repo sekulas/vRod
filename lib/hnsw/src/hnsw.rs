@@ -2,8 +2,9 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // See: http://www.apache.org/licenses/LICENSE-2.0
 // Modifications made by sekulas, 2024:
-// - made code cleaner to read.
-// - changed the way of interacting with the HNSW functionality.
+// - refactored code structure for improved clarity,
+// - simplified thread pool initialization,
+// - limited implementation to index creation and nearest neighbor search.  
 
 use super::{Error, Result};
 use atomic_refcell::AtomicRefCell;
