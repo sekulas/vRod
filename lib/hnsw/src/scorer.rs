@@ -1,3 +1,10 @@
+// Inspired by Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+// Modifications made by sekulas, 2024:
+// - extracted core scoring and metric functionality,
+// - list of points to score are not filtered anymore.
+
 use super::Result;
 
 use crate::{

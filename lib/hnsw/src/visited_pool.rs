@@ -1,3 +1,7 @@
+// Got from Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+
 use crate::types::PointOffsetType;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;

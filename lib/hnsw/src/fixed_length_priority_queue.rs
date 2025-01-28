@@ -1,3 +1,7 @@
+// Got from Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+
 use std::collections::binary_heap::Iter as BinaryHeapIter;
 use std::vec::IntoIter as VecIntoIter;
 use std::{cmp::Reverse, collections::BinaryHeap, iter::Rev, num::NonZeroUsize};
