@@ -1,3 +1,12 @@
+// Inspired by Project qdrant (https://github.com/qdrant/qdrant/tree/master)
+// Licensed under the Apache License, Version 2.0 (the "License");
+// See: http://www.apache.org/licenses/LICENSE-2.0
+// Modifications made by sekulas, 2024:
+// - refactored code structure for improved clarity,
+// - simplified thread pool initialization,
+// - limited implementation to index creation and nearest neighbor search.  
+
+
 use super::{Error, Result};
 use atomic_refcell::AtomicRefCell;
 use rand::thread_rng;
