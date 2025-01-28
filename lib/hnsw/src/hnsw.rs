@@ -6,6 +6,7 @@
 // - simplified thread pool initialization,
 // - limited implementation to index creation and nearest neighbor search.  
 
+
 use super::{Error, Result};
 use atomic_refcell::AtomicRefCell;
 use rand::thread_rng;
